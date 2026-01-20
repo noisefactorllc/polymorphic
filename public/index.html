@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="Polymorphic - Live shader coding environment">
+    <meta name="author" content="Noise Factor">
+    <title>Polymorphic</title>
+    
+    <!-- Preload fonts -->
+    <link rel="preload" href="https://fonts.noisedeck.app/fonts/nunito/Nunito[wght].woff2" as="font" type="font/woff2" crossorigin>
+    
+    <style>
+        @font-face {
+            font-family: 'Nunito';
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+            src: url('https://fonts.noisedeck.app/fonts/nunito/Nunito[wght].woff2') format('woff2');
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background: #0a0a0f;
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 500;
+        }
+        
+        /* Canvas */
+        #canvas { 
+            width: 100%; 
+            height: 100%; 
+            display: none;
+            transition: filter 0.3s ease, opacity 0.3s ease;
+        }
+        
+        #canvas.visible {
+            display: block;
+        }
+        
+        #canvas.paused {
+            filter: blur(8px);
+            opacity: 0.5;
+        }
+        
+        /* Loading */
+        #loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #888;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        #loading.visible {
+            display: block;
+        }
+        
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #222;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Error */
+        #error {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+            max-width: 80%;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #ff6b6b;
+            border-radius: 8px;
+        }
+        
+        /* Control Buttons Container */
+        .control-buttons {
+            position: fixed;
+            bottom: 0.75rem;
+            right: 0.75rem;
+            display: flex;
+            flex-direction: row-reverse;
+            gap: 0.5rem;
+            z-index: 200;
+        }
+        
+        /* Control Buttons */
+        .control-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+            text-decoration: none;
+        }
+        
+        .control-btn.visible {
+            display: flex;
+        }
+        
+        .control-btn:hover {
+            background: rgba(0, 0, 0, 0.75);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+        
+        #code-toggle.active {
+            opacity: 0.5;
+        }
+        
+        #doc-toggle.active {
+            opacity: 0.5;
+        }
+        
+        #reset-btn {
+            width: auto;
+            padding: 0 0.5rem;
+            font-size: 10px;
+        }
+        
+        /* Fullscreen Button (upper right) */
+        #fullscreen-btn {
+            position: fixed;
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 14px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+            z-index: 200;
+        }
+        
+        #fullscreen-btn.visible {
+            display: flex;
+        }
+        
+        #fullscreen-btn:hover {
+            background: rgba(0, 0, 0, 0.75);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+        
+        /* DSL Editor Overlay */
+        #dsl-overlay {
+            position: fixed;
+            top: 0.75rem;
+            bottom: calc(0.75rem + 32px + 0.75rem);
+            left: 0.75rem;
+            right: 0.75rem;
+            overflow: hidden;
+            z-index: 150;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            transition: right 0.2s ease;
+        }
+        
+        /* Reduce editor width when doc reader is open */
+        #dsl-overlay.doc-open {
+            right: calc(50% + 4em + 0.75rem);
+        }
+        
+        @keyframes blink-caret {
+            0%, 49% { caret-color: #fff; }
+            50%, 100% { caret-color: transparent; }
+        }
+        
+        /* The textarea is the editable layer */
+        #dsl-editor {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            resize: none;
+            font: inherit;
+            line-height: inherit;
+            letter-spacing: inherit;
+            word-spacing: inherit;
+            color: transparent;
+            caret-color: #fff;
+            animation: blink-caret 1s step-end infinite;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+            appearance: none;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            z-index: 2;
+        }
+        
+        #dsl-editor::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+            display: none;
+        }
+        
+        #dsl-editor::selection {
+            background: #667eea;
+            color: transparent;
+        }
+        
+        #dsl-editor::-moz-selection {
+            background: #667eea;
+            color: transparent;
+        }
+        
+        /* Display layer positioned behind textarea, tracks scroll via transform */
+        #dsl-display {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            pointer-events: none;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            font: inherit;
+            line-height: inherit;
+            letter-spacing: inherit;
+            word-spacing: inherit;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            will-change: transform;
+            z-index: 1;
+        }
+        
+        #dsl-display span {
+            display: inline;
+            background: rgba(0, 0, 0, 0.85);
+            color: #e3e3e3;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+            padding: 0 0.15em;
+        }
+        
+        /* Compiler Error Display */
+        #compiler-error {
+            position: fixed;
+            bottom: calc(0.75rem + 32px + 0.75rem);
+            left: 0.75rem;
+            right: 0.75rem;
+            padding: 0;
+            background: transparent;
+            color: #ff6b6b;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            z-index: 160;
+            display: none;
+            cursor: pointer;
+            user-select: text;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+        
+        #compiler-error.visible {
+            display: block;
+        }
+        
+        #compiler-error span {
+            display: inline;
+            background: rgba(0, 0, 0, 0.85);
+            color: #ff6b6b;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+            padding: 0 0.15em;
+        }
+        
+        #compiler-error span:hover {
+            background: rgba(0, 0, 0, 0.95);
+        }
+        
+        /* Doc Reader Panel */
+        #doc-reader-panel {
+            position: fixed;
+            top: 4em;
+            right: 4em;
+            bottom: 4em;
+            width: 50%;
+            max-width: calc(100% - 8em);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            z-index: 180;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #doc-reader-panel.visible {
+            display: flex;
+        }
+        
+        /* Doc Reader Header */
+        .doc-reader-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0;
+        }
+        
+        .doc-reader-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #e3e3e3;
+            margin: 0;
+        }
+        
+        .doc-reader-close {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: #aaa;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        
+        .doc-reader-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+        
+        /* Doc Reader Content */
+        #doc-reader-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            color: #e3e3e3;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+        }
+        
+        #doc-reader-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #doc-reader-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        #doc-reader-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        
+        #doc-reader-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* Doc Reader Markdown Styling */
+        #doc-reader-content h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin: 0 0 0.75rem;
+            color: #fff;
+        }
+        
+        #doc-reader-content h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 1rem 0 0.5rem;
+            color: #fff;
+        }
+        
+        #doc-reader-content h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin: 0.875rem 0 0.375rem;
+            color: #ddd;
+        }
+        
+        #doc-reader-content p {
+            margin: 0 0 0.75rem;
+        }
+        
+        #doc-reader-content a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        #doc-reader-content a:hover {
+            text-decoration: underline;
+        }
+        
+        #doc-reader-content code {
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 0.85em;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.1em 0.3em;
+            border-radius: 3px;
+        }
+        
+        #doc-reader-content pre {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin: 0 0 0.75rem;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        
+        #doc-reader-content pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            white-space: pre;
+        }
+        
+        #doc-reader-content ul,
+        #doc-reader-content ol {
+            margin: 0 0 0.75rem;
+            padding-left: 1.25rem;
+        }
+        
+        #doc-reader-content li {
+            margin: 0.125rem 0;
+        }
+        
+        #doc-reader-content hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 1rem 0;
+        }
+        
+        #doc-reader-content blockquote {
+            border-left: 2px solid #667eea;
+            margin: 0 0 0.75rem;
+            padding: 0.375rem 0 0.375rem 0.75rem;
+            color: #aaa;
+            font-size: 0.75rem;
+        }
+        
+        #doc-reader-content strong {
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        #doc-reader-content em {
+            font-style: italic;
+            color: #ccc;
+        }
+        
+        /* Tables for effect parameters */
+        #doc-reader-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 0.75rem;
+            font-size: 0.75rem;
+        }
+        
+        #doc-reader-content th,
+        #doc-reader-content td {
+            text-align: left;
+            padding: 0.375rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #doc-reader-content th {
+            color: #aaa;
+            font-weight: 600;
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        #doc-reader-content td {
+            color: #ccc;
+        }
+        
+        #doc-reader-content td:first-child {
+            color: #667eea;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+        }
+        
+        /* Apply to editor links */
+        .apply-to-editor-link {
+            display: block;
+            font-size: 0.6875rem;
+            color: #667eea;
+            text-decoration: none;
+            margin: -0.5rem 0 0.75rem;
+            opacity: 0.7;
+            transition: opacity 0.15s ease;
+        }
+        
+        .apply-to-editor-link:hover {
+            opacity: 1;
+            text-decoration: none;
+        }
+        
+        /* Share Modal */
+        .share-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        
+        .share-modal-content {
+            background: rgba(10, 10, 15, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            max-width: 360px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .share-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .share-modal-header h3 {
+            margin: 0;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .share-modal-close {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: transparent;
+            color: #aaa;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease;
+        }
+        
+        .share-modal-close:hover {
+            color: #fff;
+        }
+        
+        .share-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        
+        .share-preview {
+            margin-bottom: 0.75rem;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #share-preview-canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .share-field {
+            margin-bottom: 0.625rem;
+        }
+        
+        .share-field label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #e3e3e3;
+            margin-bottom: 0.25rem;
+        }
+        
+        .share-field .optional {
+            color: #888;
+            font-weight: 400;
+        }
+        
+        .share-field input,
+        .share-field textarea {
+            width: 100%;
+            padding: 0.375rem 0.5rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: #e3e3e3;
+            font-family: inherit;
+            font-size: 0.8125rem;
+            transition: border-color 0.15s ease;
+        }
+        
+        .share-field input:focus,
+        .share-field textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .share-field textarea {
+            resize: vertical;
+            min-height: 48px;
+        }
+        
+        .share-info {
+            display: flex;
+            gap: 0.375rem;
+            padding: 0.5rem;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            border-radius: 4px;
+            font-size: 0.6875rem;
+            color: #ccc;
+            margin-bottom: 0.75rem;
+        }
+        
+        .share-info svg {
+            flex-shrink: 0;
+            width: 12px;
+            height: 12px;
+            margin-top: 0.0625rem;
+        }
+        
+        .share-actions {
+            display: flex;
+            gap: 0.375rem;
+            justify-content: flex-end;
+        }
+        
+        .share-btn-primary {
+            padding: 0.375rem 1rem;
+            background: #667eea;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        
+        .share-btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .share-btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .share-result {
+            text-align: center;
+        }
+        
+        .share-success {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            font-size: 0.875rem;
+            color: #4ade80;
+            margin-bottom: 0.75rem;
+        }
+        
+        .share-success svg {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .share-url-field {
+            display: flex;
+            gap: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .share-url-field input {
+            flex: 1;
+            padding: 0.375rem 0.5rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: #e3e3e3;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+            font-size: 0.75rem;
+        }
+        
+        .share-copy-btn {
+            width: 28px;
+            height: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #aaa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        
+        .share-copy-btn:hover {
+            background: rgba(0, 0, 0, 0.75);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #fff;
+        }
+        
+        .share-copy-btn svg {
+            width: 12px;
+            height: 12px;
+        }
+        
+        .share-expires {
+            font-size: 0.6875rem;
+            color: #888;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading shader...</div>
+    </div>
+    
+    <!-- Canvas -->
+    <canvas id="canvas"></canvas>
+    
+    <!-- DSL Editor Overlay -->
+    <div id="dsl-overlay">
+        <textarea id="dsl-editor" spellcheck="false"></textarea>
+        <div id="dsl-display" aria-hidden="true"></div>
+    </div>
+    
+    <!-- Compiler Error Display -->
+    <div id="compiler-error"></div>
+    
+    <!-- Fullscreen Button (upper right) -->
+    <button id="fullscreen-btn" aria-label="Toggle fullscreen">⛶</button>
+    
+    <!-- Doc Reader Panel -->
+    <div id="doc-reader-panel">
+        <div class="doc-reader-header">
+            <h2 class="doc-reader-title">Documentation</h2>
+            <button class="doc-reader-close" aria-label="Close documentation">×</button>
+        </div>
+        <div id="doc-reader-content"></div>
+    </div>
+    
+    <!-- Control Buttons -->
+    <div class="control-buttons">
+        <button id="reset-btn" class="control-btn" aria-label="Reset to original">reset</button>
+        <button id="code-toggle" class="control-btn" aria-label="Toggle code view">#</button>
+        <button id="share-btn" class="control-btn" aria-label="Share program">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+        </button>
+        <button id="doc-toggle" class="control-btn" aria-label="Toggle documentation">?</button>
+    </div>
+    
+    <!-- Share Modal -->
+    <div id="share-modal" class="share-modal-overlay" style="display: none;">
+        <div class="share-modal-content">
+            <div class="share-modal-header">
+                <h3>Share Program</h3>
+                <button id="share-close-btn" class="share-modal-close" aria-label="Close">×</button>
+            </div>
+            <div class="share-modal-body">
+                <div id="share-form" class="share-form">
+                    <div class="share-preview">
+                        <canvas id="share-preview-canvas"></canvas>
+                    </div>
+                    <div class="share-field">
+                        <label for="share-title">Title</label>
+                        <input type="text" id="share-title" placeholder="My Polymorphic Program" maxlength="100">
+                    </div>
+                    <div class="share-field">
+                        <label for="share-description">Description <span class="optional">(optional)</span></label>
+                        <textarea id="share-description" rows="2" placeholder="Describe your program..." maxlength="500"></textarea>
+                    </div>
+                    <div class="share-info">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Your program will be shared to sharing.noisedeck.app and accessible for 90 days.</span>
+                    </div>
+                    <div class="share-actions">
+                        <button id="share-submit-btn" class="share-btn-primary">Share</button>
+                    </div>
+                </div>
+                <div id="share-result" class="share-result" style="display: none;">
+                    <div class="share-success">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9 12l2 2 4-4"></path>
+                        </svg>
+                        <span>Program shared!</span>
+                    </div>
+                    <div class="share-url-field">
+                        <input type="text" id="share-url" readonly>
+                        <button id="share-copy-btn" class="share-copy-btn" title="Copy URL">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="share-expires" class="share-expires"></div>
+                    <div class="share-actions">
+                        <button id="share-done-btn" class="share-btn-primary">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Error -->
+    <div id="error"></div>
+    
+    <!-- Marked.js for Markdown rendering -->
+    <script src="/js/lib/marked.min.js"></script>
+    
+    <script type="module" src="/js/embed.js"></script>
+</body>
+</html>

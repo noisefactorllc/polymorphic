@@ -1,0 +1,16 @@
+{
+  "name": "polymorphic",
+  "version": "0.1.0",
+  "description": "Polymorphic - Live shader coding environment using the Noisemaker DSL",
+  "private": true,
+  "scripts": {
+    "start": "npx serve public -l 3000",
+    "dev": "npx serve public -l 3000",
+    "pull-noisemaker": "python3 pull-noisemaker"
+  },
+  "author": "Noise Factor",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
