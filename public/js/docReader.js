@@ -289,13 +289,11 @@ export function renderDocContent(markdown) {
  * Show placeholder documentation content
  */
 export function showPlaceholderContent() {
-    const placeholder = `# Polymorphic
+    const placeholder = `# Welcome to Polymorphic
 
-Welcome to Polymorphic by [Noise Factor](https://noisefactor.io).
+## By [Noise Factor](https://noisefactor.io)
 
-Polymorphic is like a scripting language for shaders. We designed it for flexibility and expressiveness in experimental settings.
-
-Polymorphic is the language powering our [Noisemaker](https://noisemaker.readthedocs.io/en/latest/shaders.html) project's shader pipeline, and is at the core of our next-gen products like [Noisedeck](https://noisedeck.app/), a value-added interface which adds powerful controls and export options.
+Polymorphic is a composition langage for shader effects. We designed it for flexibility and expressiveness. It powers our open source [shader pipeline](https://noisemaker.readthedocs.io/en/latest/shaders.html), and is at the core of our next-gen products like the new version of [Noisedeck](https://noisedeck.app/).
 
 Be advised that syntax is still settling and may change in subtle ways as we work towards a stable release.
 
@@ -326,16 +324,22 @@ Effects are chained together with dots. The output of one effect flows into the 
 
 \`\`\`
 search synth, filter
-noise().blur().palette().write(o0)
+noise().palette().lighting().write(o0)
 \`\`\`
 
-### Surfaces
+### Surfaces and Mixers
 
 \`o0\` through \`o7\` are your canvases. Use \`.write()\` to draw to them:
 
 \`\`\`
-noise().write(o0)
-read(o0).blur().write(o1)
+search mixer, synth
+
+noise(ridges: true)
+  .write(o0)
+
+noise(seed: 2, ridges: true)
+  .blendMode(tex: read(o0), mode: mix)
+  .write(o1)
 \`\`\`
 
 Reading from a surface before writing creates a **feedback loop** — it shows the previous frame.

@@ -94,8 +94,8 @@
         /* Control Buttons Container */
         .control-buttons {
             position: fixed;
-            bottom: 0.75rem;
-            right: 0.75rem;
+            top: 1em;
+            right: 1em;
             display: flex;
             flex-direction: row-reverse;
             gap: 0.5rem;
@@ -139,151 +139,44 @@
             opacity: 0.5;
         }
         
-        #reset-btn {
-            width: auto;
-            padding: 0 0.5rem;
-            font-size: 10px;
-        }
-        
-        /* Fullscreen Button (upper right) */
         #fullscreen-btn {
-            position: fixed;
-            top: 0.75rem;
-            right: 0.75rem;
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #aaa;
-            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
             font-size: 14px;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-            z-index: 200;
         }
         
-        #fullscreen-btn.visible {
-            display: flex;
-        }
-        
-        #fullscreen-btn:hover {
-            background: rgba(0, 0, 0, 0.75);
-            border-color: rgba(255, 255, 255, 0.25);
-            color: #fff;
+        #play-pause-btn {
+            font-size: 14px;
+            line-height: 1;
         }
         
         /* DSL Editor Overlay */
         #dsl-overlay {
             position: fixed;
             top: 0.75rem;
-            bottom: calc(0.75rem + 32px + 0.75rem);
+            bottom: 0.75rem;
             left: 0.75rem;
             right: 0.75rem;
             overflow: hidden;
             z-index: 150;
-            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
-            font-size: 0.875rem;
-            line-height: 1.6;
             transition: right 0.2s ease;
         }
         
         /* Reduce editor width when doc reader is open */
         #dsl-overlay.doc-open {
-            right: calc(50% + 4em + 0.75rem);
+            right: calc(50% + 1em + 0.5em);
         }
         
-        @keyframes blink-caret {
-            0%, 49% { caret-color: #fff; }
-            50%, 100% { caret-color: transparent; }
-        }
-        
-        /* The textarea is the editable layer */
+        /* Code editor fills the overlay */
         #dsl-editor {
             position: absolute;
             inset: 0;
-            margin: 0;
-            padding: 0;
-            background: transparent;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            resize: none;
-            font: inherit;
-            line-height: inherit;
-            letter-spacing: inherit;
-            word-spacing: inherit;
-            color: transparent;
-            caret-color: #fff;
-            animation: blink-caret 1s step-end infinite;
-            white-space: pre-wrap;
-            overflow-wrap: break-word;
-            word-break: break-word;
-            box-sizing: border-box;
-            -webkit-appearance: none;
-            appearance: none;
-            overflow-y: auto;
-            overflow-x: hidden;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-            z-index: 2;
-        }
-        
-        #dsl-editor::-webkit-scrollbar {
-            width: 0;
-            height: 0;
-            display: none;
-        }
-        
-        #dsl-editor::selection {
-            background: #667eea;
-            color: transparent;
-        }
-        
-        #dsl-editor::-moz-selection {
-            background: #667eea;
-            color: transparent;
-        }
-        
-        /* Display layer positioned behind textarea, tracks scroll via transform */
-        #dsl-display {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            pointer-events: none;
-            white-space: pre-wrap;
-            overflow-wrap: break-word;
-            word-break: break-word;
-            font: inherit;
-            line-height: inherit;
-            letter-spacing: inherit;
-            word-spacing: inherit;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            will-change: transform;
-            z-index: 1;
-        }
-        
-        #dsl-display span {
-            display: inline;
-            background: rgba(0, 0, 0, 0.85);
-            color: #e3e3e3;
-            -webkit-box-decoration-break: clone;
-            box-decoration-break: clone;
-            padding: 0 0.15em;
         }
         
         /* Compiler Error Display */
         #compiler-error {
             position: fixed;
-            bottom: calc(0.75rem + 32px + 0.75rem);
-            left: 0.75rem;
-            right: 0.75rem;
+            bottom: 1em;
+            left: 1em;
+            right: 1em;
             padding: 0;
             background: transparent;
             color: #ff6b6b;
@@ -319,11 +212,11 @@
         /* Doc Reader Panel */
         #doc-reader-panel {
             position: fixed;
-            top: 4em;
-            right: 4em;
-            bottom: 4em;
+            top: calc(1em + 32px + 1em);
+            right: 1em;
+            bottom: 1em;
             width: 50%;
-            max-width: calc(100% - 8em);
+            max-width: calc(100% - 2em);
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -795,29 +688,14 @@
     
     <!-- DSL Editor Overlay -->
     <div id="dsl-overlay">
-        <textarea id="dsl-editor" spellcheck="false"></textarea>
-        <div id="dsl-display" aria-hidden="true"></div>
+        <code-editor id="dsl-editor"></code-editor>
     </div>
     
     <!-- Compiler Error Display -->
     <div id="compiler-error"></div>
     
-    <!-- Fullscreen Button (upper right) -->
-    <button id="fullscreen-btn" aria-label="Toggle fullscreen">⛶</button>
-    
-    <!-- Doc Reader Panel -->
-    <div id="doc-reader-panel">
-        <div class="doc-reader-header">
-            <h2 class="doc-reader-title">Documentation</h2>
-            <button class="doc-reader-close" aria-label="Close documentation">×</button>
-        </div>
-        <div id="doc-reader-content"></div>
-    </div>
-    
     <!-- Control Buttons -->
     <div class="control-buttons">
-        <button id="reset-btn" class="control-btn" aria-label="Reset to original">reset</button>
-        <button id="code-toggle" class="control-btn" aria-label="Toggle code view">#</button>
         <button id="share-btn" class="control-btn" aria-label="Share program">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="18" cy="5" r="3"></circle>
@@ -827,7 +705,24 @@
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
             </svg>
         </button>
+        <button id="fullscreen-btn" class="control-btn" aria-label="Toggle fullscreen">⛶</button>
+        <button id="play-pause-btn" class="control-btn" aria-label="Play/Pause">⏸</button>
+        <button id="reset-btn" class="control-btn" aria-label="Reset to original">
+            <svg width="16" height="16" viewBox="0 -960 960 960" fill="currentColor">
+                <path d="M480-80q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T120-440h80q0 117 81.5 198.5T480-160q117 0 198.5-81.5T760-440q0-117-81.5-198.5T480-720h-6l62 62-56 58-160-160 160-160 56 58-62 62h6q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-440q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-80Z"/>
+            </svg>
+        </button>
+        <button id="code-toggle" class="control-btn" aria-label="Toggle code view">#</button>
         <button id="doc-toggle" class="control-btn" aria-label="Toggle documentation">?</button>
+    </div>
+    
+    <!-- Doc Reader Panel -->
+    <div id="doc-reader-panel">
+        <div class="doc-reader-header">
+            <h2 class="doc-reader-title">Documentation</h2>
+            <button class="doc-reader-close" aria-label="Close documentation">×</button>
+        </div>
+        <div id="doc-reader-content"></div>
     </div>
     
     <!-- Share Modal -->

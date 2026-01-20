@@ -10,6 +10,7 @@ import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
 import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl } from './sharingLoader.js'
+import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
 const canvas = document.getElementById('canvas')
@@ -17,12 +18,12 @@ const loadingEl = document.getElementById('loading')
 const errorEl = document.getElementById('error')
 const dslOverlay = document.getElementById('dsl-overlay')
 const dslEditor = document.getElementById('dsl-editor')
-const dslDisplay = document.getElementById('dsl-display')
 const codeToggle = document.getElementById('code-toggle')
 const docToggle = document.getElementById('doc-toggle')
 const shareBtn = document.getElementById('share-btn')
 const resetBtn = document.getElementById('reset-btn')
 const fullscreenBtn = document.getElementById('fullscreen-btn')
+const playPauseBtn = document.getElementById('play-pause-btn')
 const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
@@ -62,6 +63,25 @@ function showCompilerError(errorText) {
 function hideCompilerError() {
     if (!compilerErrorEl) return
     compilerErrorEl.classList.remove('visible')
+}
+
+/**
+ * Toggle play/pause state
+ */
+function togglePlayPause() {
+    if (!renderer || !playPauseBtn) return
+    
+    isPlaying = !isPlaying
+    
+    if (isPlaying) {
+        renderer.start()
+        playPauseBtn.textContent = '⏸' // Pause symbol
+        canvas.classList.remove('paused')
+    } else {
+        renderer.stop()
+        playPauseBtn.textContent = '▶' // Play symbol
+        canvas.classList.add('paused')
+    }
 }
 
 /**
@@ -132,6 +152,11 @@ function showCanvas() {
         fullscreenBtn.classList.add('visible')
     }
     
+    // Show play/pause button
+    if (playPauseBtn) {
+        playPauseBtn.classList.add('visible')
+    }
+    
     // Show DSL editor by default
     if (codeToggle) {
         codeToggle.classList.add('active')
@@ -141,21 +166,6 @@ function showCanvas() {
     }
     
     isPlaying = true
-}
-
-/**
- * Sync the DSL display layer with the editor textarea content
- */
-function syncDslDisplay() {
-    if (!dslDisplay || !dslEditor) return
-    const lines = dslEditor.value.split('\n')
-    // Each line gets a span with the text plus a newline character inside
-    dslDisplay.innerHTML = lines.map(line => 
-        `<span>${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}\n</span>`
-    ).join('')
-    
-    // Update reset button visibility based on whether DSL has been modified
-    updateResetButtonVisibility()
 }
 
 /**
@@ -177,7 +187,8 @@ function updateResetButtonVisibility() {
 async function resetDsl() {
     if (!dslEditor) return
     dslEditor.value = originalDsl
-    syncDslDisplay()
+    // Update reset button visibility
+    updateResetButtonVisibility()
     // Recompile with original DSL
     const result = await recompileShader()
     if (!result.success) {
@@ -185,15 +196,6 @@ async function resetDsl() {
     } else {
         hideCompilerError()
     }
-}
-
-/**
- * Sync the display layer scroll position with the textarea
- */
-function syncDslScroll() {
-    if (!dslDisplay || !dslEditor) return
-    const scrollTop = dslEditor.scrollTop
-    dslDisplay.style.transform = `translateY(${-scrollTop}px)`
 }
 
 /**
@@ -280,35 +282,30 @@ async function recompileShader() {
 function setupDslEditor() {
     if (!dslEditor) return
     
-    // Sync display on scroll
-    dslEditor.addEventListener('scroll', syncDslScroll, { passive: true })
-    
     // Hot reload: recompile DSL 500ms after user stops typing
+    // The code-editor component dispatches 'input' events when content changes
     dslEditor.addEventListener('input', () => {
-        // Sync display immediately
-        syncDslDisplay()
-        requestAnimationFrame(syncDslScroll)
+        // Update reset button visibility
+        updateResetButtonVisibility()
         
         // Schedule hot reload
         scheduleHotReload()
     })
     
-    // Keyboard shortcut: Ctrl/Cmd+Enter for immediate recompile
-    dslEditor.addEventListener('keydown', async (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            e.preventDefault()
-            // Clear pending hot reload
-            if (hotReloadTimeout) {
-                clearTimeout(hotReloadTimeout)
-                hotReloadTimeout = null
-            }
-            const result = await recompileShader()
-            if (!result.success) {
-                console.warn('Manual compile failed:', result.error)
-                showCompilerError(result.error)
-            } else {
-                hideCompilerError()
-            }
+    // Handle force recompile event from Ctrl/Cmd+Enter
+    // The code-editor component dispatches 'forcerecompile' events
+    dslEditor.addEventListener('forcerecompile', async () => {
+        // Clear pending hot reload
+        if (hotReloadTimeout) {
+            clearTimeout(hotReloadTimeout)
+            hotReloadTimeout = null
+        }
+        const result = await recompileShader()
+        if (!result.success) {
+            console.warn('Manual compile failed:', result.error)
+            showCompilerError(result.error)
+        } else {
+            hideCompilerError()
         }
     })
 }
@@ -406,7 +403,6 @@ async function startShader() {
         originalDsl = dsl
         if (dslEditor) {
             dslEditor.value = dsl
-            syncDslDisplay()
         }
 
         // Handle resize
@@ -435,7 +431,7 @@ function init() {
     setApplyToEditorCallback((code) => {
         if (dslEditor) {
             dslEditor.value = code;
-            syncDslDisplay();
+            updateResetButtonVisibility();
             scheduleHotReload();
         }
     });
@@ -479,6 +475,11 @@ function init() {
     // Set up reset button
     if (resetBtn) {
         resetBtn.addEventListener('click', resetDsl)
+    }
+    
+    // Set up play/pause button
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', togglePlayPause)
     }
     
     // Set up fullscreen button
