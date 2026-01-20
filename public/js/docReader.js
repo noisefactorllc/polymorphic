@@ -98,11 +98,6 @@ async function loadEffectHelp(effectPath) {
             headerMarkdown += `**Tags:** ${effect.tags.map(t => `\`${t}\``).join(' ')}\n\n`;
         }
         
-        // Generate example
-        const searchLine = namespace ? `search ${namespace}\n` : '';
-        const exampleDsl = `${searchLine}${effect?.func || effectName}().write(o0)`;
-        headerMarkdown += `## Example\n\n\`\`\`\n${exampleDsl}\n\`\`\`\n\n`;
-        
         // Strip outer markdown code fence if present (bundle format uses this)
         let cleanHelp = helpContent;
         const fenceMatch = cleanHelp.match(/^````markdown\n([\s\S]*)\n````$/);
