@@ -42,9 +42,41 @@ let isPlaying = false
 /**
  * Default DSL program for new sessions
  */
-const DEFAULT_DSL = `search synth
+const DEFAULT_DSL = `search synth, filter, render
 
-noise().write(o0)`
+noise(
+  noiseType: linear,
+  octaves: 4,
+  xScale: 100,
+  yScale: 100,
+  seed: 3,
+  ridges: true,
+  loopScale: 1,
+  loopAmp: 100
+)
+  .palette(paletteIndex: palette.dealerHat)
+  .loopBegin(alpha: 94.895, intensity: 94.309)
+  .warp(
+    strength: 23.566,
+    scale: 0.83,
+    seed: 3,
+    speed: 1,
+    wrap: clamp,
+    rotation: 31.193
+  )
+  .loopEnd()
+  .lighting(
+    normalStrength: 5,
+    smoothing: 2.3,
+    specularIntensity: 1.04,
+    shininess: 88,
+    reflection: 31.3,
+    refraction: 20.1,
+    aberration: 22.8
+  )
+  .write(o0)
+
+render(o0)`
 
 /**
  * Show compiler error with line-level span wrapping

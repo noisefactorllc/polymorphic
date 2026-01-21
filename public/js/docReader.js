@@ -83,8 +83,20 @@ async function loadEffectHelp(effectPath) {
             return;
         }
         
+        // Strip outer markdown code fence if present (bundle format uses this)
+        let cleanHelp = helpContent;
+        const fenceMatch = cleanHelp.match(/^````markdown\n([\s\S]*)\n````$/);
+        if (fenceMatch) {
+            cleanHelp = fenceMatch[1];
+        }
+        
+        // Strip existing h1 header from help content if present (we'll add our own)
+        cleanHelp = cleanHelp.replace(/^#\s+[^\n]+\n+/, '');
+        
         // Build header with effect info
-        let headerMarkdown = `# ${effect?.name || effectName}\n\n`;
+        // Use module.effectName (exported by bundle) or fallback to effectName from path
+        // Do NOT use effect.name as it may be minified
+        let headerMarkdown = `# ${module.effectName || effectName}\n\n`;
         
         if (effect?.description) {
             headerMarkdown += `${effect.description}\n\n`;
@@ -96,13 +108,6 @@ async function loadEffectHelp(effectPath) {
         
         if (effect?.tags?.length > 0) {
             headerMarkdown += `**Tags:** ${effect.tags.map(t => `\`${t}\``).join(' ')}\n\n`;
-        }
-        
-        // Strip outer markdown code fence if present (bundle format uses this)
-        let cleanHelp = helpContent;
-        const fenceMatch = cleanHelp.match(/^````markdown\n([\s\S]*)\n````$/);
-        if (fenceMatch) {
-            cleanHelp = fenceMatch[1];
         }
         
         const backLink = '\n\n---\n\n[← Back to Reference](#back)';
