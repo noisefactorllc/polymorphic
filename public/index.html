@@ -28,10 +28,13 @@
             font-weight: 500;
         }
         
-        /* Canvas */
+        /* Canvas - fills viewport exactly */
         #canvas { 
-            width: 100%; 
-            height: 100%; 
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             display: none;
             transition: filter 0.3s ease, opacity 0.3s ease;
         }

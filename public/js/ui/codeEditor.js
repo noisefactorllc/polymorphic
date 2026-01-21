@@ -239,17 +239,17 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             text-align: right;
             padding-right: 0.5em;
             box-sizing: border-box;
-            color: var(--code-editor-line-number-color, #666);
-            background: var(--code-editor-gutter-bg, rgba(0, 0, 0, 0.1));
+            color: var(--code-editor-line-number-color, #aaa);
+            background: var(--code-editor-gutter-bg, rgba(0, 0, 0, 0.5));
             font: inherit;
             line-height: inherit;
             will-change: transform;
             z-index: 1;
+            opacity: 0.5;
         }
 
         code-editor .code-editor-gutter .line-number {
             display: block;
-            opacity: 0.5;
             box-sizing: border-box;
         }
 

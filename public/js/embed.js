@@ -231,26 +231,33 @@ function getDslFromUrl() {
 }
 
 /**
- * Resize canvas to fill viewport
- * Uses 50% pixel density for resolutions > 1920x1080 (either axis)
+ * Resize canvas buffer to match CSS-rendered viewport size.
+ * Uses 50% pixel density for high-resolution displays to maintain performance.
  */
 function resizeCanvas() {
     const baseDpr = window.devicePixelRatio || 1
-    const width = window.innerWidth
-    const height = window.innerHeight
     
-    // Check if rendered size would exceed HD (either axis > 1920x1080)
-    const renderedWidth = width * baseDpr
-    const renderedHeight = height * baseDpr
+    // Get the CSS-rendered size from the canvas element itself
+    // The canvas is 100vw x 100vh via CSS, so clientWidth/Height gives exact viewport
+    // When canvas is hidden (display:none), clientWidth/Height are 0, so use window dimensions
+    const cssWidth = canvas.clientWidth || window.innerWidth
+    const cssHeight = canvas.clientHeight || window.innerHeight
+    
+    // Check if rendered size would exceed HD threshold
+    const renderedWidth = cssWidth * baseDpr
+    const renderedHeight = cssHeight * baseDpr
     const isHighRes = renderedWidth > 1920 || renderedHeight > 1080
     const dpr = isHighRes ? baseDpr * 0.5 : baseDpr
     
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
-    canvas.width = Math.floor(width * dpr)
-    canvas.height = Math.floor(height * dpr)
+    // Calculate buffer size - matches viewport exactly
+    const bufferWidth = Math.max(1, Math.floor(cssWidth * dpr))
+    const bufferHeight = Math.max(1, Math.floor(cssHeight * dpr))
     
-    return { width: canvas.width, height: canvas.height }
+    // Always update to ensure correct size
+    canvas.width = bufferWidth
+    canvas.height = bufferHeight
+    
+    return { width: bufferWidth, height: bufferHeight }
 }
 
 /**
