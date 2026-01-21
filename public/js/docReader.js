@@ -499,8 +499,8 @@ noise().palette(paletteIndex: palette.vaporwave).write(o0)
 The \`text()\` effect supports web fonts. Use quoted strings for font names:
 
 \`\`\`
-search synth
-text(text: "Hello World", font: "Press Start 2P").write(o0)
+search synth, filter
+gradient().pixels().text(text: "GAME OVER", font: "Press Start 2P", color: #ff0000ff).write(o0)
 \`\`\`
 
 Fonts are loaded dynamically from our CDN. Names are matched flexibly (case-insensitive, spaces/dashes optional).
