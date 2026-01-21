@@ -479,6 +479,52 @@ noise()
 
 ---
 
+## Palettes
+
+Color palettes apply to many effects. Use the \`palette\` enum to reference them:
+
+\`\`\`
+search synth, filter
+noise().palette(paletteIndex: palette.vaporwave).write(o0)
+\`\`\`
+
+**Available palettes:**
+
+\`afterimage\` · \`barstow\` · \`bloob\` · \`blueSkies\` · \`brushedMetal\` · \`burningSky\` · \`california\` · \`columbia\` · \`cottonCandy\` · \`darkSatin\` · \`dealerHat\` · \`dreamy\` · \`eventHorizon\` · \`fiveG\` · \`ghostly\` · \`grayscale\` · \`hazySunset\` · \`heatmap\` · \`hypercolor\` · \`jester\` · \`justBlue\` · \`justCyan\` · \`justGreen\` · \`justPurple\` · \`justRed\` · \`justYellow\` · \`mars\` · \`modesto\` · \`moss\` · \`neptune\` · \`netOfGems\` · \`organic\` · \`papaya\` · \`radioactive\` · \`royal\` · \`santaCruz\` · \`seventiesShirt\` · \`sherbet\` · \`sherbetDouble\` · \`silvermane\` · \`skykissed\` · \`solaris\` · \`spooky\` · \`springtime\` · \`sproingtime\` · \`sulphur\` · \`summoning\` · \`superhero\` · \`toxic\` · \`tropicalia\` · \`tungsten\` · \`vaporwave\` · \`vibrant\` · \`vintage\` · \`vintagePhoto\`
+
+---
+
+## Fonts
+
+The \`text()\` effect supports web fonts. Use quoted strings for font names:
+
+\`\`\`
+search synth
+text(text: "Hello World", font: "Press Start 2P").write(o0)
+\`\`\`
+
+Fonts are loaded dynamically from our CDN. Names are matched flexibly (case-insensitive, spaces/dashes optional).
+
+**Sans-Serif:**
+\`Inter\` · \`Roboto\` · \`Roboto Condensed\` · \`Roboto Flex\` · \`Noto Sans\` · \`Noto Sans Display\` · \`Source Sans 3\` · \`IBM Plex Sans\` · \`Work Sans\` · \`Open Sans\` · \`PT Sans\` · \`Fira Sans\` · \`Cabin\` · \`Exo 2\` · \`Karla\` · \`Atkinson Hyperlegible\` · \`Space Grotesk\` · \`Outfit\` · \`Lato\` · \`Encode Sans\` · \`Red Hat Display\` · \`Barlow\` · \`Raleway\` · \`Lexend\` · \`Rubik\` · \`Signika\` · \`Poppins\` · \`Quicksand\` · \`Nunito\` · \`Comfortaa\` · \`Baloo 2\` · \`Asap\` · \`Jaldi\` · \`Josefin Sans\` · \`Jost\` · \`League Spartan\` · \`Chivo\` · \`Syne\`
+
+**Serif:**
+\`Noto Serif\` · \`Crimson Pro\` · \`Source Serif 4\` · \`Playfair Display\` · \`Merriweather\` · \`EB Garamond\` · \`Literata\` · \`Cardo\` · \`PT Serif\` · \`Lora\` · \`Fraunces\` · \`Cormorant\` · \`Cormorant Garamond\` · \`Cormorant SC\` · \`Cormorant Infant\` · \`Cormorant Upright\` · \`Bitter\` · \`Zilla Slab\` · \`Roboto Slab\` · \`Arvo\` · \`Newsreader\` · \`Alice\` · \`Radley\` · \`Fanwood Text\` · \`Alegreya\` · \`Alegreya SC\` · \`Playfair Display SC\`
+
+**Monospace:**
+\`JetBrains Mono\` · \`Fira Code\` · \`Cascadia Code\` · \`Source Code Pro\` · \`IBM Plex Mono\` · \`Noto Sans Mono\` · \`Victor Mono\` · \`Courier Prime\` · \`Hack\` · \`Inconsolata\` · \`Recursive\` · \`Monaspace\`
+
+**Display & Decorative:**
+\`Workbench\` · \`Bungee\` · \`Bungee Inline\` · \`Press Start 2P\` · \`Orbitron\` · \`Audiowide\` · \`Rama Gothic\` · \`Tomorrow\` · \`Varta\` · \`Yanone Kaffeesatz\`
+
+**Handwriting & Script:**
+\`Shadows Into Light\` · \`Caveat\` · \`Amatic SC\` · \`Dancing Script\` · \`Yellowtail\` · \`Pacifico\` · \`Sacramento\` · \`Satisfy\` · \`Indie Flower\` · \`Gloria Hallelujah\`
+
+**Symbols:**
+\`Noto Color Emoji\` · \`Noto Symbols\` · \`Noto Music\` · \`Noto Sans Math\`
+
+---
+
 ## 3D Volumes
 
 Generate and render 3D content:
