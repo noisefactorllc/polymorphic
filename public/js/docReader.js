@@ -247,6 +247,35 @@ export function renderDocContent(markdown) {
     if (typeof marked !== 'undefined') {
         docReaderContent.innerHTML = marked.parse(markdown);
         
+        // Add build info at the end
+        const addBuildInfo = (hash = 'LOCAL', dateStr = 'n/a') => {
+            // Remove any existing build info first
+            const existing = docReaderContent.querySelector('.doc-build-info');
+            if (existing) existing.remove();
+            
+            const buildInfo = document.createElement('div');
+            buildInfo.className = 'doc-build-info';
+            buildInfo.style.cssText = 'font-family: ui-monospace, \'Cascadia Mono\', \'Consolas\', monospace; font-size: 9px; color: #444; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1em; margin-top: 1em;';
+            buildInfo.textContent = `build: ${hash} / deployed: ${dateStr}`;
+            docReaderContent.appendChild(buildInfo);
+        };
+        
+        fetch('/deployment-meta.json')
+            .then(r => r.json())
+            .then(meta => {
+                const hash = meta.git_hash ? meta.git_hash.trim().slice(0, 8) : 'LOCAL';
+                let dateStr = 'n/a';
+                
+                if (meta.date) {
+                    const date = new Date(meta.date * 1000);
+                    const pad = (n) => String(n).padStart(2, '0');
+                    dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                }
+                
+                addBuildInfo(hash, dateStr);
+            })
+            .catch(() => addBuildInfo());
+        
         // Add "Apply to editor" links after code blocks that have a search directive
         const codeBlocks = docReaderContent.querySelectorAll('pre');
         codeBlocks.forEach((pre, index) => {
