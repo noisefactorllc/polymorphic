@@ -71,6 +71,15 @@ To use a specific commit:
 NOISEMAKER_SHA=abc123 ./pull-noisemaker
 ```
 
+## Portable Effects
+
+Polymorphic supports the Portable Effects Format for creating and sharing custom shader effects.
+
+See the **[Portable Effects Format](https://github.com/noisedeck/portable)** repository for:
+- Effect format specification
+- Parameter definitions
+- Example effects
+
 ## Credits
 
 Built on [Noisemaker](https://noisemaker.app) shader technology by [Noise Factor](https://noisefactor.io).
