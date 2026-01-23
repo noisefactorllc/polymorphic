@@ -34,7 +34,6 @@ const copyProgram = document.getElementById('copyProgram')
 const pasteProgram = document.getElementById('pasteProgram')
 const savePNG = document.getElementById('savePNG')
 const saveJPG = document.getElementById('saveJPG')
-const exportImage = document.getElementById('exportImage')
 const aboutMenuItem = document.getElementById('aboutMenuItem')
 const docsMenuItem = document.getElementById('docsMenuItem')
 
@@ -635,18 +634,6 @@ function setupMenuBar() {
                 const link = document.createElement('a')
                 link.download = 'polymorphic.jpg'
                 link.href = canvas.toDataURL('image/jpeg', 0.95)
-                link.click()
-            }
-        })
-    }
-    
-    if (exportImage) {
-        exportImage.addEventListener('click', () => {
-            // For now, same as quick save PNG
-            if (canvas) {
-                const link = document.createElement('a')
-                link.download = 'polymorphic-export.png'
-                link.href = canvas.toDataURL('image/png')
                 link.click()
             }
         })
