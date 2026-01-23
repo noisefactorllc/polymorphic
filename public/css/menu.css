@@ -37,11 +37,27 @@
     --effect-surface-opacity: 85%;
     --effect-surface-transparency: 15%;
     
+    /* Chrome gradient settings (matching noisedeck) */
+    --ui-chrome-highlight-blend: 86%;
+    --ui-chrome-highlight-tint: 14%;
+    --ui-chrome-shadow-blend: 72%;
+    --ui-chrome-shadow-shade: 28%;
+    
+    /* Noisedeck colors */
+    --color2: #101522;
+    --color6: #d9deeb;
+    --color7: #f6f8ff;
+    --accent3: #a5b8ff;
+    --accent4: #dce6ff;
+    
     /* Menu colors */
-    --menu-bg: rgba(10, 10, 15, 0.92);
-    --menu-text: #aaa;
-    --menu-text-hover: #fff;
-    --menu-accent: #667eea;
+    --menu-bg: rgba(16, 21, 34, 0.65);
+    --menu-text: #d9deeb;
+    --menu-text-hover: #f6f8ff;
+    --menu-accent: #a5b8ff;
+    --menu-accent-hover: #dce6ff;
+    --menu-border: rgba(255, 255, 255, 0.1);
+}
     --menu-accent-hover: #7c8ff0;
     --menu-border: rgba(255, 255, 255, 0.1);
 }
@@ -65,7 +81,18 @@
 #menuBackdrop {
     position: absolute;
     inset: 0;
+    --ui-titlebar-highlight: color-mix(in srgb,
+            var(--menu-bg) var(--ui-chrome-highlight-blend),
+            white var(--ui-chrome-highlight-tint));
+    --ui-titlebar-shadow: color-mix(in srgb,
+            var(--menu-bg) var(--ui-chrome-shadow-blend),
+            black var(--ui-chrome-shadow-shade));
+    --ui-titlebar-gradient: linear-gradient(180deg,
+            var(--ui-titlebar-highlight) 0%,
+            var(--menu-bg) 55%,
+            var(--ui-titlebar-shadow) 100%);
     background-color: var(--menu-bg);
+    background-image: var(--ui-titlebar-gradient);
     backdrop-filter: var(--glass-blur-strength);
     -webkit-backdrop-filter: var(--glass-blur-strength);
     pointer-events: none;
