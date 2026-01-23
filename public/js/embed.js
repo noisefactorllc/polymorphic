@@ -9,7 +9,9 @@ import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect } from './sharingLoader.js'
+import { initProgramModal, openProgramModal } from './programModal.js'
+import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -32,6 +34,9 @@ const resetMenuItem = document.getElementById('resetMenuItem')
 const shareProgram = document.getElementById('shareProgram')
 const copyProgram = document.getElementById('copyProgram')
 const pasteProgram = document.getElementById('pasteProgram')
+const saveProgram = document.getElementById('saveProgram')
+const loadProgram = document.getElementById('loadProgram')
+const deleteProgram = document.getElementById('deleteProgram')
 const savePNG = document.getElementById('savePNG')
 const saveJPG = document.getElementById('saveJPG')
 const aboutMenuItem = document.getElementById('aboutMenuItem')
@@ -48,6 +53,237 @@ let originalDsl = ''
 
 // Playback state
 let isPlaying = false
+
+// =========================================================================
+// Import from ZIP Dialog
+// =========================================================================
+
+const importEffectDialog = new ImportEffectDialog()
+
+// Set up the callback for when an effect is imported from ZIP
+importEffectDialog.onEffectImport(async ({ name, files }) => {
+    // Parse definition - handle both JSON and JS formats
+    const defContent = files['definition.json'] || files['definition.js']
+    if (!defContent) {
+        throw new Error('No definition file found in ZIP')
+    }
+
+    let definition
+    if (files['definition.json']) {
+        // JSON format - parse directly
+        try {
+            definition = JSON.parse(defContent)
+        } catch (e) {
+            throw new Error('Failed to parse definition.json: ' + e.message)
+        }
+    } else {
+        // JS format - extract properties via regex (like noisedeck does)
+        definition = parseDefinitionJs(defContent, name)
+    }
+
+    // Build shaders object
+    const shaders = {}
+    for (const [path, content] of Object.entries(files)) {
+        if (path.startsWith('glsl/') && path.endsWith('.glsl')) {
+            const programName = path.slice(5, -5) // Remove 'glsl/' and '.glsl'
+            if (!shaders[programName]) shaders[programName] = {}
+            shaders[programName].glsl = content
+        } else if (path.startsWith('wgsl/') && path.endsWith('.wgsl')) {
+            const programName = path.slice(5, -5) // Remove 'wgsl/' and '.wgsl'
+            if (!shaders[programName]) shaders[programName] = {}
+            shaders[programName].wgsl = content
+        }
+    }
+
+    // Determine passes - use stored passes from definition if available,
+    // otherwise create correct pass structure based on effect type (same as shade/foundry)
+    let passes
+    if (definition.passes && Array.isArray(definition.passes) && definition.passes.length > 0) {
+        passes = definition.passes
+    } else {
+        // Create correct pass structure based on starter flag
+        const firstProgram = Object.keys(shaders)[0]
+        const isStarter = definition.starter === true
+        
+        if (isStarter) {
+            // Starter effect: no input, just output
+            passes = [
+                {
+                    name: 'render',
+                    program: firstProgram,
+                    inputs: {},
+                    outputs: { fragColor: 'outputTex' }
+                }
+            ]
+        } else {
+            // Filter effect: takes input, produces output
+            passes = [
+                {
+                    name: 'render',
+                    program: firstProgram,
+                    inputs: { inputTex: 'source' },
+                    outputs: { fragColor: 'outputTex' }
+                }
+            ]
+        }
+    }
+
+    // Build effect data for registerPortableEffect
+    const effectData = {
+        name: definition.name || definition.func || name,
+        func: definition.func || definition.name || name,
+        namespace: 'user',
+        description: definition.description || '',
+        tags: definition.tags || ['user'],
+        globals: definition.globals || {},
+        passes,
+        shaders
+    }
+
+    // Register the effect
+    registerPortableEffect(effectData)
+
+    // Get DSL from imported files or generate one
+    let dsl = files['dsl.txt']
+    if (!dsl) {
+        dsl = `search user\n\n${effectData.func}().write(o0)`
+    }
+
+    // Update the DSL editor
+    if (dslEditor) {
+        dslEditor.value = dsl
+    }
+
+    // Compile and run
+    const result = await recompileShader()
+    if (!result.success) {
+        showCompilerError(result.error)
+    } else {
+        hideCompilerError()
+    }
+
+    // Show success message
+    console.log(`[Polymorphic] Imported effect: ${effectData.func}`)
+    
+    // Show toast notification
+    showImportToast(`Effect "${effectData.func}" imported!`)
+})
+
+/**
+ * Show a temporary toast notification
+ * @param {string} message
+ */
+function showImportToast(message) {
+    // Remove any existing toast
+    const existing = document.querySelector('.import-toast')
+    if (existing) existing.remove()
+
+    const toast = document.createElement('div')
+    toast.className = 'import-toast'
+    toast.textContent = message
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(102, 126, 234, 0.95);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 10001;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: toast-in 0.3s ease;
+    `
+    document.body.appendChild(toast)
+
+    // Add animation keyframes if not present
+    if (!document.getElementById('import-toast-styles')) {
+        const style = document.createElement('style')
+        style.id = 'import-toast-styles'
+        style.textContent = `
+            @keyframes toast-in {
+                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `
+        document.head.appendChild(style)
+    }
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0'
+        toast.style.transition = 'opacity 0.3s ease'
+        setTimeout(() => toast.remove(), 300)
+    }, 4000)
+}
+
+/**
+ * Parse a definition.js class file and extract effect properties
+ * @param {string} jsContent - The JS class content
+ * @param {string} fallbackName - Fallback effect name
+ * @returns {object} Parsed definition object
+ */
+function parseDefinitionJs(jsContent, fallbackName) {
+    const def = {
+        name: fallbackName,
+        namespace: 'user',
+        func: fallbackName,
+        description: '',
+        tags: ['user'],
+        globals: {},
+        passes: []
+    }
+
+    // Extract name
+    const nameMatch = jsContent.match(/name\s*[=:]\s*['"]([^'"]+)['"]/)
+    if (nameMatch) def.name = nameMatch[1]
+
+    // Extract func
+    const funcMatch = jsContent.match(/func\s*[=:]\s*['"]([^'"]+)['"]/)
+    if (funcMatch) def.func = funcMatch[1]
+    else def.func = def.name
+
+    // Extract namespace
+    const nsMatch = jsContent.match(/namespace\s*[=:]\s*['"]([^'"]+)['"]/)
+    if (nsMatch) def.namespace = nsMatch[1]
+
+    // Extract description
+    const descMatch = jsContent.match(/description\s*[=:]\s*['"]([^'"]+)['"]/)
+    if (descMatch) def.description = descMatch[1]
+
+    // Extract globals - look for globals = { ... } or globals: { ... }
+    const globalsMatch = jsContent.match(/globals\s*[=:]\s*(\{[\s\S]*?\})\s*[;,]?\s*(?=\n\s*(?:passes|constructor|\})|$)/)
+    if (globalsMatch) {
+        try {
+            def.globals = eval('(' + globalsMatch[1] + ')')
+        } catch (e) {
+            console.warn('[Import] Could not parse globals:', e)
+        }
+    }
+
+    // Extract passes
+    const passesMatch = jsContent.match(/passes\s*[=:]\s*(\[[\s\S]*?\])\s*[;,]?\s*(?=\n\s*(?:globals|constructor|\})|$)/)
+    if (passesMatch) {
+        try {
+            def.passes = eval('(' + passesMatch[1] + ')')
+        } catch (e) {
+            console.warn('[Import] Could not parse passes:', e)
+        }
+    }
+
+    // Extract tags
+    const tagsMatch = jsContent.match(/tags\s*[=:]\s*(\[[^\]]*\])/)
+    if (tagsMatch) {
+        try {
+            def.tags = eval('(' + tagsMatch[1] + ')')
+        } catch (e) {
+            console.warn('[Import] Could not parse tags:', e)
+        }
+    }
+
+    return def
+}
 
 /**
  * Default DSL program for new sessions
@@ -174,7 +410,7 @@ function openAboutModal() {
         <div class="modal-content about-modal">
             <div class="about-modal-content">
                 <div class="about-modal-graphic" role="presentation">
-                    <img class="about-modal-logo" src="/img/polymorphic.png" alt="Polymorphic logo">
+                    <svg class="about-modal-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" fill="currentColor"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M3920 5709 c-248 -32 -507 -143 -790 -337 -282 -194 -349 -237 -426 -273 -178 -84 -313 -93 -571 -35 -246 55 -390 46 -560 -33 -133 -63 -288 -192 -382 -320 -151 -205 -169 -380 -64 -639 102 -254 266 -430 506 -542 337 -158 633 -99 816 161 65 92 103 201 147 417 41 204 68 288 126 390 147 257 354 383 577 352 107 -14 189 -57 273 -142 238 -242 203 -643 -87 -978 -132 -153 -293 -269 -673 -487 -263 -151 -533 -321 -692 -439 -277 -204 -450 -460 -499 -738 -31 -172 11 -257 146 -297 39 -11 45 -10 81 13 93 62 198 105 337 139 76 19 118 23 275 23 160 -1 197 -4 270 -23 105 -28 224 -84 309 -145 71 -50 103 -57 164 -31 52 22 93 60 111 105 21 53 39 292 31 415 -3 55 -13 161 -22 235 -24 208 -22 397 5 493 41 145 108 258 269 455 228 278 568 616 908 902 265 223 372 356 411 513 22 93 15 298 -15 412 -33 123 -65 181 -151 267 -111 111 -197 146 -409 168 -119 12 -327 11 -421 -1z"/><path d="M2316 1660 c-220 -35 -399 -121 -519 -250 -119 -128 -163 -247 -154 -415 9 -173 75 -340 187 -473 57 -67 152 -147 214 -179 113 -58 273 -77 416 -49 347 68 650 439 650 796 0 152 -41 242 -166 361 -165 157 -418 241 -628 209z"/></g></svg>
                 </div>
                 <div class="about-modal-details" tabindex="-1">
                     <div class="about-modal-title" id="about-modal-title">Polymorphic</div>
@@ -611,9 +847,38 @@ function setupMenuBar() {
         })
     }
     
+    // Save/Load/Delete program handlers
+    if (saveProgram) {
+        saveProgram.addEventListener('click', () => {
+            openProgramModal('save')
+        })
+    }
+    
+    if (loadProgram) {
+        loadProgram.addEventListener('click', () => {
+            openProgramModal('load')
+        })
+    }
+    
+    if (deleteProgram) {
+        deleteProgram.addEventListener('click', () => {
+            openProgramModal('delete')
+        })
+    }
+    
     // Edit menu
     if (resetMenuItem) {
         resetMenuItem.addEventListener('click', resetDsl)
+    }
+    
+    // Import from ZIP
+    const importFromZipMenuItem = document.getElementById('importFromZipMenuItem')
+    if (importFromZipMenuItem) {
+        importFromZipMenuItem.addEventListener('click', () => {
+            importEffectDialog.open()
+            // Close menus
+            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
+        })
     }
     
     // File menu
@@ -704,6 +969,18 @@ function init() {
     if (docToggleBtn) {
         docToggleBtn.classList.add('active')
     }
+    
+    // Initialize program modal
+    initProgramModal({
+        getDsl: () => dslEditor?.value || '',
+        setDsl: (dsl) => {
+            if (dslEditor) {
+                dslEditor.value = dsl
+                updateResetButtonVisibility()
+                scheduleHotReload()
+            }
+        }
+    })
     
     // Set up menu bar
     setupMenuBar()

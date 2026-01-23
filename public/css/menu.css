@@ -43,6 +43,9 @@
     --ui-chrome-shadow-blend: 72%;
     --ui-chrome-shadow-shade: 28%;
     
+    /* Font family definitions */
+    --font-accent: 'Comfortaa', 'Nunito', sans-serif;
+    
     /* Noisedeck colors */
     --color2: #101522;
     --color6: #d9deeb;
