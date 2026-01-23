@@ -58,9 +58,6 @@
     --menu-accent-hover: #dce6ff;
     --menu-border: rgba(255, 255, 255, 0.1);
 }
-    --menu-accent-hover: #7c8ff0;
-    --menu-border: rgba(255, 255, 255, 0.1);
-}
 
 /* Menu Bar Container */
 #menu {
