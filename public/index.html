@@ -89,67 +89,10 @@
             border-radius: 8px;
         }
         
-        /* Control Buttons Container */
-        .control-buttons {
-            position: fixed;
-            top: 1em;
-            right: 1em;
-            display: flex;
-            flex-direction: row-reverse;
-            gap: 0.5rem;
-            z-index: 200;
-        }
-        
-        /* Control Buttons */
-        .control-btn {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #aaa;
-            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-            text-decoration: none;
-        }
-        
-        .control-btn.visible {
-            display: flex;
-        }
-        
-        .control-btn:hover {
-            background: rgba(0, 0, 0, 0.75);
-            border-color: rgba(255, 255, 255, 0.25);
-            color: #fff;
-        }
-        
-        #code-toggle.active {
-            opacity: 0.5;
-        }
-        
-        #doc-toggle.active {
-            opacity: 0.5;
-        }
-        
-        #fullscreen-btn {
-            font-size: 14px;
-        }
-        
-        #play-pause-btn {
-            font-size: 14px;
-            line-height: 1;
-        }
-        
         /* DSL Editor Overlay */
         #dsl-overlay {
             position: fixed;
-            top: 0.75rem;
+            top: calc(2.25em + 0.75rem);
             bottom: 0.75rem;
             left: 0.75rem;
             right: 0.75rem;
@@ -210,11 +153,11 @@
         /* Doc Reader Panel */
         #doc-reader-panel {
             position: fixed;
-            top: calc(1em + 32px + 1em);
+            top: 1em;
             right: 1em;
             bottom: 1em;
             width: 50%;
-            max-width: calc(100% - 2em);
+            max-width: calc(100% - 590px - 1em);
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -672,9 +615,265 @@
             color: #888;
             margin-bottom: 1.5rem;
         }
+        
+        /* Responsive - small screens: paned layout with canvas on top, docs at bottom */
+        @media (max-width: 768px) {
+            body {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                overflow: hidden;
+            }
+            
+            #canvas {
+                position: relative;
+                top: auto;
+                left: auto;
+                width: 100%;
+                height: auto;
+                flex: 1;
+                min-height: 0;
+            }
+            
+            #doc-reader-panel {
+                position: relative;
+                top: auto;
+                right: auto;
+                bottom: auto;
+                left: auto;
+                width: 100%;
+                max-width: 100%;
+                height: 40vh;
+                max-height: 40vh;
+                flex-shrink: 0;
+                border-radius: 8px 8px 0 0;
+                border-bottom: none;
+            }
+            
+            #doc-reader-panel.visible {
+                display: flex;
+            }
+            
+            #dsl-overlay {
+                top: calc(2.25em + 0.5em);
+                left: 0.5em;
+                right: 0.5em;
+                max-width: calc(100% - 1em);
+            }
+        }
+        
+        /* About Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .modal-overlay.modal-visible {
+            opacity: 1;
+        }
+        
+        .modal-content {
+            background-color: rgba(15, 17, 20, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 520px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.96) translateY(10px);
+            transition: transform 0.2s ease;
+        }
+        
+        .modal-visible .modal-content {
+            transform: scale(1) translateY(0);
+        }
+        
+        .about-modal {
+            width: min(720px, 100vw);
+            max-width: 720px;
+            min-width: 360px;
+            background: rgba(15, 17, 20, 0.95);
+            border: none;
+            padding: 0;
+            position: relative;
+            overflow: hidden;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 60px rgba(102, 126, 234, 0.15);
+        }
+        
+        .about-modal-content {
+            display: grid;
+            grid-template-columns: min(80%, 320px) 1fr;
+            align-items: stretch;
+            background-color: transparent;
+            border: none;
+        }
+        
+        .about-modal-graphic {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2.75rem 2.5rem;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, transparent 100%);
+        }
+        
+        .about-modal-logo {
+            width: min(80%, 200px);
+            max-width: 200px;
+            height: auto;
+            filter: drop-shadow(0 0 20px rgba(102, 126, 234, 0.6));
+        }
+        
+        .about-modal-details {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+            padding: 2.75rem 1.5rem;
+            color: #888;
+            background-color: inherit;
+        }
+        
+        .about-modal-details:focus,
+        .about-modal-details:focus-visible {
+            outline: none;
+        }
+        
+        .about-modal-title {
+            font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-weight: 700;
+            font-size: clamp(2rem, 4vw, 2.5rem);
+            color: #fff;
+            text-shadow: 0 0 40px rgba(102, 126, 234, 0.4), 0 0 80px rgba(102, 126, 234, 0.2);
+        }
+        
+        .about-modal-tagline {
+            font-size: 1rem;
+            color: #667eea;
+        }
+        
+        .about-modal-copyright {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .about-modal-build {
+            font-size: 0.75rem;
+            color: #555;
+            font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+        }
+        
+        .about-modal-link {
+            color: #667eea;
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+        
+        .about-modal-link:hover {
+            color: #7c8ff0;
+        }
+        
+        @media (max-width: 720px) {
+            .about-modal {
+                width: min(540px, 94vw);
+                max-width: 540px;
+            }
+        
+            .about-modal-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        
+            .about-modal-graphic {
+                padding: 2.25rem 2rem 1.5rem;
+            }
+        
+            .about-modal-details {
+                align-items: center;
+                padding: 1.75rem 2rem 2.25rem;
+            }
+        
+            .about-modal-logo {
+                width: min(60%, 180px);
+            }
+        }
     </style>
+    <link rel="stylesheet" href="/css/menu.css">
 </head>
 <body>
+    <!-- Menu Bar -->
+    <div id="menu">
+        <div id="menuBackdrop"></div>
+        <div id="menuLeft">
+            <!-- Logo Menu -->
+            <div class="menu">
+                <div class="menu-title">
+                    <svg id="logo" width="1.25em" height="1.5em" viewBox="0 0 600 600" fill="currentColor">
+                        <g transform="translate(0,600) scale(0.1,-0.1)">
+                            <path d="M3920 5709 c-248 -32 -507 -143 -790 -337 -282 -194 -349 -237 -426 -273 -178 -84 -313 -93 -571 -35 -246 55 -390 46 -560 -33 -133 -63 -288 -192 -382 -320 -151 -205 -169 -380 -64 -639 102 -254 266 -430 506 -542 337 -158 633 -99 816 161 65 92 103 201 147 417 41 204 68 288 126 390 147 257 354 383 577 352 107 -14 189 -57 273 -142 238 -242 203 -643 -87 -978 -132 -153 -293 -269 -673 -487 -263 -151 -533 -321 -692 -439 -277 -204 -450 -460 -499 -738 -31 -172 11 -257 146 -297 39 -11 45 -10 81 13 93 62 198 105 337 139 76 19 118 23 275 23 160 -1 197 -4 270 -23 105 -28 224 -84 309 -145 71 -50 103 -57 164 -31 52 22 93 60 111 105 21 53 39 292 31 415 -3 55 -13 161 -22 235 -24 208 -22 397 5 493 41 145 108 258 269 455 228 278 568 616 908 902 265 223 372 356 411 513 22 93 15 298 -15 412 -33 123 -65 181 -151 267 -111 111 -197 146 -409 168 -119 12 -327 11 -421 -1z"/>
+                            <path d="M2316 1660 c-220 -35 -399 -121 -519 -250 -119 -128 -163 -247 -154 -415 9 -173 75 -340 187 -473 57 -67 152 -147 214 -179 113 -58 273 -77 416 -49 347 68 650 439 650 796 0 152 -41 242 -166 361 -165 157 -418 241 -628 209z"/>
+                        </g>
+                    </svg>
+                </div>
+                <div class="menu-items hide">
+                    <div id="aboutMenuItem">about Polymorphic</div>
+                    <hr class="menu-seperator">
+                    <div id="docsMenuItem">documentation</div>
+                </div>
+            </div>
+            
+            <!-- File Menu -->
+            <div class="menu">
+                <div id="fileMenuTitle" class="menu-title">file</div>
+                <div class="menu-items hide">
+                    <div id="savePNG">quick save as png</div>
+                    <div id="saveJPG">quick save as jpg</div>
+                    <hr class="menu-seperator">
+                    <div id="exportImage">export image...</div>
+                </div>
+            </div>
+            
+            <!-- Edit Menu -->
+            <div class="menu">
+                <div id="editMenuTitle" class="menu-title">edit</div>
+                <div class="menu-items hide">
+                    <div id="resetMenuItem">reset to original</div>
+                </div>
+            </div>
+            
+            <!-- Program Menu -->
+            <div class="menu">
+                <div id="programMenuTitle" class="menu-title">program</div>
+                <div class="menu-items hide">
+                    <div id="copyProgram">copy program</div>
+                    <div id="pasteProgram">paste program</div>
+                    <hr class="menu-seperator">
+                    <div id="shareProgram">share publicly...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="menuRight">
+            <button id="doc-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="documentation" aria-label="Toggle documentation">description</button>
+            <button id="code-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="code editor" aria-label="Toggle code view">code</button>
+            <button id="fullscreen-btn-menu" class="menu-icon-btn icon-material tooltip" data-title="fullscreen" aria-label="Toggle fullscreen">fullscreen</button>
+            <button id="play-pause-btn-menu" class="menu-icon-btn icon-material tooltip" data-title="pause" aria-label="Pause animation">pause</button>
+        </div>
+    </div>
+
     <!-- Loading -->
     <div id="loading">
         <div class="spinner"></div>
@@ -691,28 +890,6 @@
     
     <!-- Compiler Error Display -->
     <div id="compiler-error"></div>
-    
-    <!-- Control Buttons -->
-    <div class="control-buttons">
-        <button id="share-btn" class="control-btn" aria-label="Share program">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
-        </button>
-        <button id="fullscreen-btn" class="control-btn" aria-label="Toggle fullscreen">⛶</button>
-        <button id="play-pause-btn" class="control-btn" aria-label="Play/Pause">⏸</button>
-        <button id="reset-btn" class="control-btn" aria-label="Reset to original">
-            <svg width="16" height="16" viewBox="0 -960 960 960" fill="currentColor">
-                <path d="M480-80q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T120-440h80q0 117 81.5 198.5T480-160q117 0 198.5-81.5T760-440q0-117-81.5-198.5T480-720h-6l62 62-56 58-160-160 160-160 56 58-62 62h6q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-440q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-80Z"/>
-            </svg>
-        </button>
-        <button id="code-toggle" class="control-btn" aria-label="Toggle code view">#</button>
-        <button id="doc-toggle" class="control-btn" aria-label="Toggle documentation">?</button>
-    </div>
     
     <!-- Doc Reader Panel -->
     <div id="doc-reader-panel">

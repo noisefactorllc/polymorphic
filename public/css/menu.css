@@ -1,0 +1,307 @@
+/**
+ * Polymorphic Menu Bar Styles
+ * Ported from Noisedeck - exact pixel dimensions
+ */
+
+/* Material Symbols font */
+@font-face {
+    font-family: 'Material Symbols Outlined';
+    font-style: normal;
+    font-weight: 400;
+    font-display: block;
+    src: url('/fonts/MaterialSymbolsOutlined.woff2') format('woff2');
+}
+
+.icon-material {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+}
+
+:root {
+    --ui-titlebar-height: 2.25em;
+    --ui-corner-radius: 0.5rem;
+    --ui-corner-radius-small: 0.375rem;
+    --glass-blur-strength: blur(20px);
+    --effect-surface-opacity: 85%;
+    --effect-surface-transparency: 15%;
+    
+    /* Menu colors */
+    --menu-bg: rgba(10, 10, 15, 0.92);
+    --menu-text: #aaa;
+    --menu-text-hover: #fff;
+    --menu-accent: #667eea;
+    --menu-accent-hover: #7c8ff0;
+    --menu-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Menu Bar Container */
+#menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: calc(590px - 0.5em);
+    height: var(--ui-titlebar-height);
+    z-index: 2000;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    border-radius: 0 0 var(--ui-corner-radius) 0;
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px;
+}
+
+#menuBackdrop {
+    position: absolute;
+    inset: 0;
+    background-color: var(--menu-bg);
+    backdrop-filter: var(--glass-blur-strength);
+    -webkit-backdrop-filter: var(--glass-blur-strength);
+    pointer-events: none;
+    z-index: -1;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    border-radius: 0 0 var(--ui-corner-radius) 0;
+}
+
+#menuLeft {
+    grid-column: 1;
+    grid-row: 1;
+    padding-left: 0.75em;
+    display: flex;
+    gap: 1.5em;
+    color: var(--menu-text);
+    align-items: center;
+    height: 100%;
+}
+
+#menuRight {
+    grid-column: 2;
+    grid-row: 1;
+    padding-right: 1em;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1em;
+    color: var(--menu-text);
+    align-items: center;
+    height: 100%;
+}
+
+/* Menu Links */
+#menu a {
+    color: var(--menu-accent);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+#menu a:hover {
+    color: var(--menu-accent-hover);
+}
+
+/* Menu Buttons */
+#menu button {
+    background: none;
+    border: none;
+    color: var(--menu-text);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s ease;
+    font-size: 1.25em;
+}
+
+#menu span:hover,
+#menu button:hover {
+    color: var(--menu-text-hover);
+}
+
+/* Logo */
+#logo {
+    height: 1.5em;
+    width: 1.5em;
+    margin-right: -0.5em;
+    pointer-events: none;
+}
+
+/* Dropdown Menu */
+.menu {
+    position: relative;
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.875em;
+    color: var(--menu-accent);
+    margin: 0;
+    background-color: transparent;
+    padding: 0;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.menu-title {
+    position: relative;
+    top: -1px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+}
+
+.menu-items {
+    position: absolute;
+    background-color: color-mix(in srgb, var(--menu-bg) var(--effect-surface-opacity), transparent var(--effect-surface-transparency));
+    color: var(--menu-accent);
+    width: max-content;
+    min-width: 200px;
+    text-wrap: nowrap;
+    z-index: 5;
+    top: calc(var(--ui-titlebar-height) + 4px);
+    left: -10px;
+    font-weight: normal;
+    border-radius: var(--ui-corner-radius-small);
+    backdrop-filter: var(--glass-blur-strength);
+    -webkit-backdrop-filter: var(--glass-blur-strength);
+    border: 1px solid var(--menu-border);
+}
+
+.menu-items div {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: color 0.15s ease;
+}
+
+.menu-items div:hover {
+    background-color: transparent;
+    color: var(--menu-accent-hover);
+}
+
+.menu-seperator {
+    border: none;
+    border-top: 1px solid color-mix(in srgb, var(--menu-accent) 20%, transparent 80%);
+    margin: 0.25em 0;
+}
+
+/* Menu item with keyboard shortcut */
+.menu-item-with-shortcut {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2em;
+}
+
+.menu-item-with-shortcut .shortcut {
+    font-size: 0.75rem;
+    color: var(--menu-text);
+    opacity: 0.6;
+}
+
+/* Hide class */
+.hide {
+    display: none !important;
+}
+
+/* Menu icon button style */
+.menu-icon-btn {
+    background: none;
+    border: none;
+    color: var(--menu-text);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s ease;
+    font-size: 1.25em;
+}
+
+.menu-icon-btn:hover {
+    color: var(--menu-text-hover);
+}
+
+.menu-icon-btn.active {
+    color: var(--menu-accent);
+}
+
+/* Material symbols font for icons */
+.material-symbols {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Icon sizes */
+.icon-md {
+    font-size: 20px;
+}
+
+.icon-lg {
+    font-size: 24px;
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+}
+
+.tooltip::before {
+    content: attr(data-title);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.tooltip:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Responsive - small screens */
+@media (max-width: 768px) {
+    #menu {
+        width: 100%;
+        border-radius: 0;
+    }
+    
+    #menuBackdrop {
+        border-radius: 0;
+    }
+}

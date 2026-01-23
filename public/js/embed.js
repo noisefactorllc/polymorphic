@@ -18,14 +18,25 @@ const loadingEl = document.getElementById('loading')
 const errorEl = document.getElementById('error')
 const dslOverlay = document.getElementById('dsl-overlay')
 const dslEditor = document.getElementById('dsl-editor')
-const codeToggle = document.getElementById('code-toggle')
-const docToggle = document.getElementById('doc-toggle')
-const shareBtn = document.getElementById('share-btn')
-const resetBtn = document.getElementById('reset-btn')
-const fullscreenBtn = document.getElementById('fullscreen-btn')
-const playPauseBtn = document.getElementById('play-pause-btn')
 const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
+
+// Menu bar elements
+const codeToggleBtn = document.getElementById('code-toggle-btn')
+const docToggleBtn = document.getElementById('doc-toggle-btn')
+const fullscreenBtnMenu = document.getElementById('fullscreen-btn-menu')
+const playPauseBtnMenu = document.getElementById('play-pause-btn-menu')
+
+// Menu items
+const resetMenuItem = document.getElementById('resetMenuItem')
+const shareProgram = document.getElementById('shareProgram')
+const copyProgram = document.getElementById('copyProgram')
+const pasteProgram = document.getElementById('pasteProgram')
+const savePNG = document.getElementById('savePNG')
+const saveJPG = document.getElementById('saveJPG')
+const exportImage = document.getElementById('exportImage')
+const aboutMenuItem = document.getElementById('aboutMenuItem')
+const docsMenuItem = document.getElementById('docsMenuItem')
 
 // Renderer reference (set after initialization)
 let renderer = null
@@ -101,17 +112,21 @@ function hideCompilerError() {
  * Toggle play/pause state
  */
 function togglePlayPause() {
-    if (!renderer || !playPauseBtn) return
+    if (!renderer || !playPauseBtnMenu) return
     
     isPlaying = !isPlaying
     
     if (isPlaying) {
         renderer.start()
-        playPauseBtn.textContent = '⏸' // Pause symbol
+        playPauseBtnMenu.textContent = 'pause'
+        playPauseBtnMenu.setAttribute('data-title', 'pause')
+        playPauseBtnMenu.setAttribute('aria-label', 'Pause animation')
         canvas.classList.remove('paused')
     } else {
         renderer.stop()
-        playPauseBtn.textContent = '▶' // Play symbol
+        playPauseBtnMenu.textContent = 'play_arrow'
+        playPauseBtnMenu.setAttribute('data-title', 'play')
+        playPauseBtnMenu.setAttribute('aria-label', 'Play animation')
         canvas.classList.add('paused')
     }
 }
@@ -137,8 +152,102 @@ function toggleFullscreen() {
  * Update fullscreen button icon based on current state
  */
 function updateFullscreenButton() {
-    if (!fullscreenBtn) return
-    fullscreenBtn.textContent = document.fullscreenElement ? '⛶' : '⛶'
+    if (!fullscreenBtnMenu) return
+    fullscreenBtnMenu.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen'
+}
+
+/**
+ * About Modal
+ */
+let aboutModalEl = null
+let aboutModalEscHandler = null
+
+function openAboutModal() {
+    if (aboutModalEl) return
+    
+    aboutModalEl = document.createElement('div')
+    aboutModalEl.className = 'modal-overlay'
+    aboutModalEl.setAttribute('role', 'dialog')
+    aboutModalEl.setAttribute('aria-modal', 'true')
+    aboutModalEl.setAttribute('aria-labelledby', 'about-modal-title')
+    
+    aboutModalEl.innerHTML = `
+        <div class="modal-content about-modal">
+            <div class="about-modal-content">
+                <div class="about-modal-graphic" role="presentation">
+                    <img class="about-modal-logo" src="/img/polymorphic.png" alt="Polymorphic logo">
+                </div>
+                <div class="about-modal-details" tabindex="-1">
+                    <div class="about-modal-title" id="about-modal-title">Polymorphic</div>
+                    <div class="about-modal-tagline">Live Shader Coding Environment</div>
+                    <div class="about-modal-copyright">&copy; 2026 <a href="https://noisefactor.io/" class="about-modal-link" target="_blank" rel="noopener">Noise Factor LLC.</a></div>
+                    <div class="about-modal-build">build: local</div>
+                </div>
+            </div>
+        </div>
+    `
+    
+    // Close on backdrop click
+    aboutModalEl.addEventListener('click', (e) => {
+        if (e.target === aboutModalEl) closeAboutModal()
+    })
+    
+    // Close on escape
+    aboutModalEscHandler = (e) => {
+        if (e.key === 'Escape') closeAboutModal()
+    }
+    document.addEventListener('keydown', aboutModalEscHandler)
+    
+    document.body.appendChild(aboutModalEl)
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        aboutModalEl.classList.add('modal-visible')
+    })
+    
+    // Fetch deployment metadata
+    fetchDeploymentMetadata()
+}
+
+function closeAboutModal() {
+    if (!aboutModalEl) return
+    
+    aboutModalEl.classList.remove('modal-visible')
+    setTimeout(() => {
+        aboutModalEl.remove()
+        aboutModalEl = null
+    }, 200)
+    
+    document.removeEventListener('keydown', aboutModalEscHandler)
+}
+
+async function fetchDeploymentMetadata() {
+    if (!aboutModalEl) return
+    
+    const buildInfoEl = aboutModalEl.querySelector('.about-modal-build')
+    if (!buildInfoEl) return
+    
+    try {
+        const response = await fetch('./deployment-meta.json', { cache: 'no-store' })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const data = await response.json()
+        const hash = (data?.git_hash || '').trim().slice(0, 8) || 'LOCAL'
+        const timestamp = data?.date
+        
+        let dateStr = 'n/a'
+        if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+            const date = new Date(timestamp * 1000)
+            if (!Number.isNaN(date.getTime())) {
+                const pad = (v) => String(Math.trunc(v)).padStart(2, '0')
+                dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+            }
+        }
+        
+        buildInfoEl.textContent = `build: ${hash} / deployed: ${dateStr}`
+    } catch (error) {
+        buildInfoEl.textContent = 'build: local / deployed: n/a'
+    }
 }
 
 /**
@@ -164,34 +273,9 @@ function showCanvas() {
     loadingEl.classList.remove('visible')
     canvas.classList.add('visible')
     
-    // Show the code toggle button once canvas is visible
-    if (codeToggle) {
-        codeToggle.classList.add('visible')
-    }
-    
-    // Show share button
-    if (shareBtn) {
-        shareBtn.classList.add('visible')
-    }
-    
-    // Show doc toggle button
-    if (docToggle) {
-        docToggle.classList.add('visible')
-    }
-    
-    // Show fullscreen button
-    if (fullscreenBtn) {
-        fullscreenBtn.classList.add('visible')
-    }
-    
-    // Show play/pause button
-    if (playPauseBtn) {
-        playPauseBtn.classList.add('visible')
-    }
-    
     // Show DSL editor by default
-    if (codeToggle) {
-        codeToggle.classList.add('active')
+    if (codeToggleBtn) {
+        codeToggleBtn.classList.add('active')
     }
     if (dslEditor) {
         dslEditor.focus()
@@ -202,15 +286,10 @@ function showCanvas() {
 
 /**
  * Update reset button visibility based on whether DSL has been modified
+ * (No longer used - reset is now a menu item, but kept for API compatibility)
  */
 function updateResetButtonVisibility() {
-    if (!resetBtn || !dslEditor) return
-    const isDirty = dslEditor.value !== originalDsl
-    if (isDirty) {
-        resetBtn.classList.add('visible')
-    } else {
-        resetBtn.classList.remove('visible')
-    }
+    // No-op: reset functionality moved to Edit menu
 }
 
 /**
@@ -237,8 +316,8 @@ function toggleDslOverlay() {
     if (!dslOverlay) return
     const isHidden = dslOverlay.style.display === 'none'
     dslOverlay.style.display = isHidden ? '' : 'none'
-    if (codeToggle) {
-        codeToggle.classList.toggle('active', isHidden)
+    if (codeToggleBtn) {
+        codeToggleBtn.classList.toggle('active', isHidden)
     }
     // Hide compiler error when editor is closed
     if (!isHidden) {
@@ -462,6 +541,165 @@ async function startShader() {
 }
 
 /**
+ * Set up menu bar dropdowns and handlers
+ */
+function setupMenuBar() {
+    const menus = document.querySelectorAll('#menuLeft .menu')
+    
+    // Toggle dropdown on click
+    menus.forEach(menu => {
+        const title = menu.querySelector('.menu-title')
+        const items = menu.querySelector('.menu-items')
+        
+        if (title && items) {
+            title.addEventListener('click', (e) => {
+                e.stopPropagation()
+                
+                // Close other menus
+                menus.forEach(m => {
+                    if (m !== menu) {
+                        m.querySelector('.menu-items')?.classList.add('hide')
+                    }
+                })
+                
+                // Toggle this menu
+                items.classList.toggle('hide')
+            })
+        }
+    })
+    
+    // Close menus when clicking outside
+    document.addEventListener('click', () => {
+        menus.forEach(menu => {
+            menu.querySelector('.menu-items')?.classList.add('hide')
+        })
+    })
+    
+    // Menu item handlers
+    
+    // Program menu
+    if (shareProgram) {
+        shareProgram.addEventListener('click', () => {
+            const dsl = dslEditor?.value || ''
+            shareModal.open({ dsl, canvas })
+        })
+    }
+    
+    if (copyProgram) {
+        copyProgram.addEventListener('click', async () => {
+            const dsl = dslEditor?.value || ''
+            try {
+                await navigator.clipboard.writeText(dsl)
+                console.log('Program copied to clipboard')
+            } catch (err) {
+                console.error('Failed to copy program:', err)
+            }
+        })
+    }
+    
+    if (pasteProgram) {
+        pasteProgram.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText()
+                if (dslEditor && text) {
+                    dslEditor.value = text
+                    updateResetButtonVisibility()
+                    scheduleHotReload()
+                }
+            } catch (err) {
+                console.error('Failed to paste program:', err)
+            }
+        })
+    }
+    
+    // Edit menu
+    if (resetMenuItem) {
+        resetMenuItem.addEventListener('click', resetDsl)
+    }
+    
+    // File menu
+    if (savePNG) {
+        savePNG.addEventListener('click', () => {
+            if (canvas) {
+                const link = document.createElement('a')
+                link.download = 'polymorphic.png'
+                link.href = canvas.toDataURL('image/png')
+                link.click()
+            }
+        })
+    }
+    
+    if (saveJPG) {
+        saveJPG.addEventListener('click', () => {
+            if (canvas) {
+                const link = document.createElement('a')
+                link.download = 'polymorphic.jpg'
+                link.href = canvas.toDataURL('image/jpeg', 0.95)
+                link.click()
+            }
+        })
+    }
+    
+    if (exportImage) {
+        exportImage.addEventListener('click', () => {
+            // For now, same as quick save PNG
+            if (canvas) {
+                const link = document.createElement('a')
+                link.download = 'polymorphic-export.png'
+                link.href = canvas.toDataURL('image/png')
+                link.click()
+            }
+        })
+    }
+    
+    // Logo menu
+    if (aboutMenuItem) {
+        aboutMenuItem.addEventListener('click', () => {
+            openAboutModal()
+        })
+    }
+    
+    if (docsMenuItem) {
+        docsMenuItem.addEventListener('click', () => {
+            showDocReader()
+            if (docToggleBtn) {
+                docToggleBtn.classList.add('active')
+            }
+        })
+    }
+    
+    // Right side icon buttons
+    if (codeToggleBtn) {
+        codeToggleBtn.addEventListener('click', toggleDslOverlay)
+    }
+    
+    if (docToggleBtn) {
+        docToggleBtn.addEventListener('click', () => {
+            const isVisible = toggleDocReader()
+            docToggleBtn.classList.toggle('active', isVisible)
+        })
+    }
+    
+    if (fullscreenBtnMenu) {
+        fullscreenBtnMenu.addEventListener('click', toggleFullscreen)
+    }
+    
+    if (playPauseBtnMenu) {
+        playPauseBtnMenu.addEventListener('click', togglePlayPause)
+    }
+    
+    // Listen for fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+        updateFullscreenButton()
+        // Trigger resize to handle adaptive pixel density
+        if (renderer) {
+            const { width, height } = resizeCanvas()
+            renderer.resize(width, height)
+        }
+    })
+}
+
+/**
  * Initialize the app
  */
 function init() {
@@ -476,61 +714,19 @@ function init() {
     });
     showPlaceholderContent()
     showDocReader()
-    if (docToggle) {
-        docToggle.classList.add('active')
+    if (docToggleBtn) {
+        docToggleBtn.classList.add('active')
     }
     
-    // Set up code toggle button
-    if (codeToggle) {
-        codeToggle.addEventListener('click', toggleDslOverlay)
-    }
-    
-    // Set up share button
-    if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
-            const dsl = dslEditor?.value || ''
-            shareModal.open({ dsl, canvas })
-        })
-    }
-    
-    // Set up doc toggle button
-    if (docToggle) {
-        docToggle.addEventListener('click', () => {
-            const isVisible = toggleDocReader()
-            docToggle.classList.toggle('active', isVisible)
-        })
-    }
+    // Set up menu bar
+    setupMenuBar()
     
     // Set up doc reader close button
     if (docReaderClose) {
         docReaderClose.addEventListener('click', () => {
             hideDocReader()
-            if (docToggle) {
-                docToggle.classList.remove('active')
-            }
-        })
-    }
-    
-    // Set up reset button
-    if (resetBtn) {
-        resetBtn.addEventListener('click', resetDsl)
-    }
-    
-    // Set up play/pause button
-    if (playPauseBtn) {
-        playPauseBtn.addEventListener('click', togglePlayPause)
-    }
-    
-    // Set up fullscreen button
-    if (fullscreenBtn) {
-        fullscreenBtn.addEventListener('click', toggleFullscreen)
-        // Listen for fullscreen changes to update button state
-        document.addEventListener('fullscreenchange', () => {
-            updateFullscreenButton()
-            // Trigger resize to handle adaptive pixel density
-            if (renderer) {
-                const { width, height } = resizeCanvas()
-                renderer.resize(width, height)
+            if (docToggleBtn) {
+                docToggleBtn.classList.remove('active')
             }
         })
     }
