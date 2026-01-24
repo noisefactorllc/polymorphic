@@ -20,9 +20,8 @@ if (!document.getElementById(STYLES_ID)) {
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: center;
-            padding-top: 15vh;
             z-index: 10000;
             opacity: 0;
             transition: opacity 0.15s ease;

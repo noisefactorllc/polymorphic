@@ -822,12 +822,19 @@
             }
         }
         
-        /* Program Modal Styles */
+        /* Program Modal Styles - matching noisedeck exactly */
         #programModal {
-            background: rgba(15, 17, 20, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: auto;
+            background: color-mix(in srgb,
+                var(--color2, #101522) 85%,
+                transparent 15%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: none;
             border-radius: 0.5rem;
             padding: 0;
+            color: #d9deeb;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             min-width: 280px;
             max-width: 320px;
             overflow: visible;
