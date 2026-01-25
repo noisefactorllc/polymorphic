@@ -72,6 +72,13 @@ class ShareModal {
             this.doneBtn.addEventListener('click', this.closeHandler);
         }
 
+        // NoiseBLASTER! publish button
+        this.blasterBtn = document.getElementById('share-blaster-btn');
+        this.blasterHandler = () => this._publishToBlaster();
+        if (this.blasterBtn) {
+            this.blasterBtn.addEventListener('click', this.blasterHandler);
+        }
+
         // Close on overlay click
         this.overlayClickHandler = (e) => {
             if (e.target === this.overlay) {
@@ -112,6 +119,10 @@ class ShareModal {
 
         if (this.escapeHandler) {
             document.removeEventListener('keydown', this.escapeHandler);
+        }
+
+        if (this.blasterBtn && this.blasterHandler) {
+            this.blasterBtn.removeEventListener('click', this.blasterHandler);
         }
     }
 
@@ -243,6 +254,21 @@ class ShareModal {
 
         this.sharedUrl = url;
         this.isSharing = false;
+    }
+
+    _publishToBlaster() {
+        if (!this.sharedUrl) return;
+
+        // Extract code from URL (e.g., https://sharing.noisedeck.app/s/ABC123)
+        const match = this.sharedUrl.match(/\/s\/([a-zA-Z0-9_-]+)$/);
+        if (!match) {
+            console.error('Could not extract share code from URL:', this.sharedUrl);
+            return;
+        }
+
+        const code = match[1];
+        const intakeUrl = `https://blaster.noisedeck.app/intake?code=${encodeURIComponent(code)}&app=polymorphic`;
+        window.open(intakeUrl, '_blank');
     }
 
     _copyUrl() {
