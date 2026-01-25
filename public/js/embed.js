@@ -55,6 +55,20 @@ let originalDsl = ''
 let isPlaying = false
 
 // =========================================================================
+// Imported Effect Storage (for Edit in Noisedeck)
+// =========================================================================
+
+/**
+ * Store for the last imported effect files.
+ * This allows us to transport the effect to Noisedeck via sharing-is-caring.
+ * Structure: { files: Map<string, string>, name: string }
+ */
+let importedEffectStore = {
+    files: new Map(),
+    name: ''
+}
+
+// =========================================================================
 // Import from ZIP Dialog
 // =========================================================================
 
@@ -142,6 +156,17 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
 
     // Register the effect
     registerPortableEffect(effectData)
+
+    // Store the imported files for "Edit in Noisedeck" feature
+    importedEffectStore.files.clear()
+    importedEffectStore.name = effectData.func || name
+    for (const [path, content] of Object.entries(files)) {
+        importedEffectStore.files.set(path, content)
+    }
+    // Store definition.json if only definition.js was present
+    if (!files['definition.json'] && definition) {
+        importedEffectStore.files.set('definition.json', JSON.stringify(definition, null, 2))
+    }
 
     // Get DSL from imported files or generate one
     let dsl = files['dsl.txt']
@@ -544,6 +569,203 @@ async function resetDsl() {
     }
 }
 
+// =========================================================================
+// Edit in Noisedeck
+// =========================================================================
+
+const SHARE_API_URL = 'https://sharing.noisedeck.app/api/embed/shorten'
+const NOISEDECK_URL = 'https://preview.noisedeck.app'
+
+/**
+ * Show a toast notification (styled like the import toast)
+ * @param {string} message
+ * @param {'info'|'success'|'warning'|'error'} type
+ */
+function showToast(message, type = 'info') {
+    // Remove any existing toast
+    const existing = document.querySelector('.polymorphic-toast')
+    if (existing) existing.remove()
+
+    const colors = {
+        info: 'rgba(102, 126, 234, 0.95)',
+        success: 'rgba(74, 222, 128, 0.95)',
+        warning: 'rgba(251, 191, 36, 0.95)',
+        error: 'rgba(239, 68, 68, 0.95)'
+    }
+
+    const toast = document.createElement('div')
+    toast.className = 'polymorphic-toast'
+    toast.textContent = message
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${colors[type] || colors.info};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 10001;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: toast-in 0.3s ease;
+    `
+    document.body.appendChild(toast)
+
+    // Add animation keyframes if not present
+    if (!document.getElementById('polymorphic-toast-styles')) {
+        const style = document.createElement('style')
+        style.id = 'polymorphic-toast-styles'
+        style.textContent = `
+            @keyframes toast-in {
+                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `
+        document.head.appendChild(style)
+    }
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0'
+        toast.style.transition = 'opacity 0.3s ease'
+        setTimeout(() => toast.remove(), 300)
+    }, 4000)
+}
+
+/**
+ * Share the effect and open Noisedeck in a new window
+ */
+async function handleEditInNoisedeck() {
+    // Get DSL from editor
+    let dsl = dslEditor?.value || ''
+    if (!dsl) {
+        showToast('Nothing to edit. Create an effect first!', 'warning')
+        return
+    }
+
+    showToast('Opening in Noisedeck...', 'info')
+
+    try {
+        // Capture screenshot
+        let screenshot = null
+        try {
+            const targetWidth = 1200
+            const targetHeight = 630
+            const tempCanvas = document.createElement('canvas')
+            tempCanvas.width = targetWidth
+            tempCanvas.height = targetHeight
+            const ctx = tempCanvas.getContext('2d')
+            const sourceAspect = canvas.width / canvas.height
+            const targetAspect = targetWidth / targetHeight
+            let sx, sy, sw, sh
+            if (sourceAspect > targetAspect) {
+                sh = canvas.height
+                sw = canvas.height * targetAspect
+                sx = (canvas.width - sw) / 2
+                sy = 0
+            } else {
+                sw = canvas.width
+                sh = canvas.width / targetAspect
+                sx = 0
+                sy = (canvas.height - sh) / 2
+            }
+            ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
+            screenshot = tempCanvas.toDataURL('image/jpeg', 0.85)
+        } catch (err) {
+            console.warn('[Noisedeck] Screenshot capture failed:', err)
+        }
+
+        // Create effect ZIP if we have imported effect files
+        let effectZip = null
+        const defJson = importedEffectStore.files.get('definition.json')
+        const glslFiles = Array.from(importedEffectStore.files.keys()).filter(
+            p => p.startsWith('glsl/') && p.endsWith('.glsl')
+        )
+        const wgslFiles = Array.from(importedEffectStore.files.keys()).filter(
+            p => p.startsWith('wgsl/') && p.endsWith('.wgsl')
+        )
+
+        if (defJson && (glslFiles.length > 0 || wgslFiles.length > 0)) {
+            try {
+                // Load JSZip if needed
+                if (!window.JSZip) {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script')
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+                        script.onload = resolve
+                        script.onerror = () => reject(new Error('Failed to load JSZip'))
+                        document.head.appendChild(script)
+                    })
+                }
+
+                const zip = new window.JSZip()
+                zip.file('definition.json', defJson)
+
+                // Add all GLSL shaders
+                for (const path of glslFiles) {
+                    zip.file(path, importedEffectStore.files.get(path))
+                }
+
+                // Add all WGSL shaders
+                for (const path of wgslFiles) {
+                    zip.file(path, importedEffectStore.files.get(path))
+                }
+
+                // Add help.md if present
+                const helpMd = importedEffectStore.files.get('help.md')
+                if (helpMd) {
+                    zip.file('help.md', helpMd)
+                }
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' })
+                const reader = new FileReader()
+                effectZip = await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result.split(',')[1])
+                    reader.onerror = reject
+                    reader.readAsDataURL(zipBlob)
+                })
+            } catch (err) {
+                console.warn('[Noisedeck] Effect ZIP creation failed:', err)
+            }
+        }
+
+        // Build payload
+        const payload = {
+            dsl,
+            title: importedEffectStore.name || 'Polymorphic Effect',
+            description: 'Created with Polymorphic',
+            ttlMinutes: 60  // Reduced TTL for edit-in-noisedeck links
+        }
+        if (screenshot) payload.screenshot = screenshot
+        if (effectZip) payload.effects = [effectZip]
+
+        // Upload to sharing service
+        const response = await fetch(SHARE_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+        }
+
+        const result = await response.json()
+        console.log('[Noisedeck] Share result:', result)
+
+        // Open Noisedeck with the short code
+        const noisedeckUrl = `${NOISEDECK_URL}/?code=${result.code}`
+        window.open(noisedeckUrl, '_blank')
+
+        showToast('Opened in Noisedeck', 'success')
+    } catch (error) {
+        console.error('[Noisedeck] Error:', error)
+        showToast(`Failed to open in Noisedeck: ${error.message}`, 'error')
+    }
+}
+
 /**
  * Toggle DSL overlay visibility
  */
@@ -817,6 +1039,16 @@ function setupMenuBar() {
         shareProgram.addEventListener('click', () => {
             const dsl = dslEditor?.value || ''
             shareModal.open({ dsl, canvas })
+        })
+    }
+
+    // Edit in Noisedeck
+    const editInNoisedeckMenuItem = document.getElementById('editInNoisedeckMenuItem')
+    if (editInNoisedeckMenuItem) {
+        editInNoisedeckMenuItem.addEventListener('click', () => {
+            handleEditInNoisedeck()
+            // Close menus
+            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
         })
     }
     
