@@ -12,6 +12,7 @@ import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
+import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -840,6 +841,28 @@ async function handleEditInNoisedeck() {
 }
 
 /**
+ * Handle loading a composition from a sharing URL
+ * @param {object} composition - The loaded composition data
+ */
+function handleLoadFromUrl(composition) {
+    if (!composition) return
+    
+    console.log('[Polymorphic] Loaded composition from URL:', composition.title || 'Untitled')
+    
+    // Set DSL from composition
+    if (composition.dsl && dslEditor) {
+        dslEditor.value = composition.dsl
+        
+        // Trigger rebuild
+        recompileShader().catch(err => {
+            console.error('[Polymorphic] Failed to build loaded DSL:', err)
+        })
+    }
+    
+    showToast(`Loaded: ${composition.title || 'Imported composition'}`, 'success')
+}
+
+/**
  * Toggle DSL overlay visibility
  */
 function toggleDslOverlay() {
@@ -1121,6 +1144,17 @@ function setupMenuBar() {
         editInNoisedeckMenuItem.addEventListener('click', () => {
             handleEditInNoisedeck()
             // Close menus
+            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
+        })
+    }
+    
+    // Import from URL
+    const importFromUrlMenuItem = document.getElementById('importFromUrlMenuItem')
+    if (importFromUrlMenuItem) {
+        importFromUrlMenuItem.addEventListener('click', () => {
+            importFromUrlDialog.open({
+                onLoad: (composition) => handleLoadFromUrl(composition)
+            })
             document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
         })
     }
