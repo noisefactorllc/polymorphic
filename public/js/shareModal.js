@@ -1,6 +1,87 @@
 // Share modal for Polymorphic
 // Posts to sharing.noisedeck.app API
 
+import { getLoadedPortableEffects } from './sharingLoader.js'
+
+/**
+ * Build a portable effect ZIP as base64 from effect data
+ * @param {object} effectData - Effect data with shaders
+ * @returns {Promise<string>} Base64-encoded ZIP
+ */
+async function buildEffectZip(effectData) {
+    // Load JSZip if needed
+    if (!window.JSZip) {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+            script.onload = resolve
+            script.onerror = () => reject(new Error('Failed to load JSZip'))
+            document.head.appendChild(script)
+        })
+    }
+
+    const zip = new window.JSZip()
+
+    // Create definition.json
+    const definition = {
+        name: effectData.name || effectData.func,
+        func: effectData.func || effectData.name,
+        namespace: effectData.namespace || 'user',
+        description: effectData.description || '',
+        tags: effectData.tags || ['user'],
+        globals: effectData.globals || {},
+        passes: effectData.passes || []
+    }
+    zip.file('definition.json', JSON.stringify(definition, null, 2))
+
+    // Add shaders
+    const shaders = effectData.shaders || {}
+    for (const [programName, shader] of Object.entries(shaders)) {
+        if (shader.glsl) {
+            zip.file(`glsl/${programName}.glsl`, shader.glsl)
+        }
+        if (shader.wgsl) {
+            zip.file(`wgsl/${programName}.wgsl`, shader.wgsl)
+        }
+        // Handle vertex/fragment separately if present
+        if (shader.vertex) {
+            zip.file(`glsl/${programName}.vert`, shader.vertex)
+        }
+        if (shader.fragment) {
+            zip.file(`glsl/${programName}.frag`, shader.fragment)
+        }
+    }
+
+    // Generate as base64
+    const blob = await zip.generateAsync({ type: 'blob' })
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+    })
+}
+
+/**
+ * Get portable effects that are used in the DSL
+ * @param {string} dsl - DSL code
+ * @returns {object[]} Array of effect data objects
+ */
+function getUsedPortableEffects(dsl) {
+    const loadedEffects = getLoadedPortableEffects()
+    if (loadedEffects.size === 0) return []
+
+    const usedEffects = []
+    for (const [effectId, effectData] of loadedEffects) {
+        const effectFunc = effectData.func || effectData.name
+        // Check if effect is referenced in DSL
+        if (dsl.includes(effectFunc)) {
+            usedEffects.push(effectData)
+        }
+    }
+    return usedEffects
+}
+
 class ShareModal {
     constructor() {
         this.overlay = null;
@@ -187,12 +268,25 @@ class ShareModal {
         }
 
         try {
+            // Build effect ZIPs for any portable effects used in the DSL
+            const usedEffects = getUsedPortableEffects(this.dsl)
+            const effectZips = []
+            for (const effectData of usedEffects) {
+                try {
+                    const zip = await buildEffectZip(effectData)
+                    effectZips.push(zip)
+                    console.log(`[ShareModal] Packaged effect: ${effectData.func || effectData.name}`)
+                } catch (err) {
+                    console.error(`[ShareModal] Failed to package effect ${effectData.name}:`, err)
+                }
+            }
+
             const payload = {
                 dsl: this.dsl,
                 title: title || 'Untitled',
                 description: description || '',
                 screenshot: this.screenshot || '',
-                effects: [] // No workspace files in Polymorphic
+                effects: effectZips
             };
 
             const response = await fetch('https://sharing.noisedeck.app/api/embed/shorten', {

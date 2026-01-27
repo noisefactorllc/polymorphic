@@ -17,6 +17,28 @@ import {
 const SHARING_API_BASE = 'https://sharing.noisedeck.app'
 
 /**
+ * Storage for portable effects loaded from sharing URLs.
+ * These are kept so they can be re-shared when the user shares.
+ * @type {Map<string, object>}
+ */
+const loadedPortableEffects = new Map()
+
+/**
+ * Get all loaded portable effects
+ * @returns {Map<string, object>}
+ */
+export function getLoadedPortableEffects() {
+    return loadedPortableEffects
+}
+
+/**
+ * Clear all loaded portable effects
+ */
+export function clearLoadedPortableEffects() {
+    loadedPortableEffects.clear()
+}
+
+/**
  * Fetch composition data from the sharing API
  * @param {string} code - The short code
  * @returns {Promise<object>} Composition data including dsl, effects, title, etc.
@@ -53,6 +75,10 @@ export function registerPortableEffect(effectData) {
     } = effectData
 
     const effectFunc = func || name
+
+    // Store the original effectData for re-sharing
+    const effectId = `${namespace}/${effectFunc}`
+    loadedPortableEffects.set(effectId, effectData)
 
     // Create an effect instance-like object
     const instance = {

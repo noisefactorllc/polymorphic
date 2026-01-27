@@ -9,7 +9,7 @@ import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl, registerPortableEffect } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
@@ -676,8 +676,10 @@ async function handleEditInNoisedeck() {
             console.warn('[Noisedeck] Screenshot capture failed:', err)
         }
 
-        // Create effect ZIP if we have imported effect files
-        let effectZip = null
+        // Collect all effect ZIPs
+        const effectZips = []
+
+        // First, check importedEffectStore (from ZIP import)
         const defJson = importedEffectStore.files.get('definition.json')
         const glslFiles = Array.from(importedEffectStore.files.keys()).filter(
             p => p.startsWith('glsl/') && p.endsWith('.glsl')
@@ -720,13 +722,84 @@ async function handleEditInNoisedeck() {
 
                 const zipBlob = await zip.generateAsync({ type: 'blob' })
                 const reader = new FileReader()
-                effectZip = await new Promise((resolve, reject) => {
+                const effectZip = await new Promise((resolve, reject) => {
                     reader.onload = () => resolve(reader.result.split(',')[1])
                     reader.onerror = reject
                     reader.readAsDataURL(zipBlob)
                 })
+                effectZips.push(effectZip)
             } catch (err) {
                 console.warn('[Noisedeck] Effect ZIP creation failed:', err)
+            }
+        }
+
+        // Also check for effects loaded from sharing URLs
+        // Skip if we already packaged from importedEffectStore (avoid duplicates)
+        const alreadyPackagedName = importedEffectStore.name || null
+        const loadedEffects = getLoadedPortableEffects()
+        for (const [effectId, effectData] of loadedEffects) {
+            const effectFunc = effectData.func || effectData.name
+            // Skip if already packaged from importedEffectStore
+            if (alreadyPackagedName && effectFunc === alreadyPackagedName) {
+                continue
+            }
+            // Check if effect is referenced in DSL
+            if (dsl.includes(effectFunc)) {
+                try {
+                    // Load JSZip if needed
+                    if (!window.JSZip) {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script')
+                            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+                            script.onload = resolve
+                            script.onerror = () => reject(new Error('Failed to load JSZip'))
+                            document.head.appendChild(script)
+                        })
+                    }
+
+                    const zip = new window.JSZip()
+
+                    // Create definition.json
+                    const definition = {
+                        name: effectData.name || effectData.func,
+                        func: effectData.func || effectData.name,
+                        namespace: effectData.namespace || 'user',
+                        description: effectData.description || '',
+                        tags: effectData.tags || ['user'],
+                        globals: effectData.globals || {},
+                        passes: effectData.passes || []
+                    }
+                    zip.file('definition.json', JSON.stringify(definition, null, 2))
+
+                    // Add shaders
+                    const shaders = effectData.shaders || {}
+                    for (const [programName, shader] of Object.entries(shaders)) {
+                        if (shader.glsl) {
+                            zip.file(`glsl/${programName}.glsl`, shader.glsl)
+                        }
+                        if (shader.wgsl) {
+                            zip.file(`wgsl/${programName}.wgsl`, shader.wgsl)
+                        }
+                        if (shader.vertex) {
+                            zip.file(`glsl/${programName}.vert`, shader.vertex)
+                        }
+                        if (shader.fragment) {
+                            zip.file(`glsl/${programName}.frag`, shader.fragment)
+                        }
+                    }
+
+                    const zipBlob = await zip.generateAsync({ type: 'blob' })
+                    const reader = new FileReader()
+                    const sharingEffectZip = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result.split(',')[1])
+                        reader.onerror = reject
+                        reader.readAsDataURL(zipBlob)
+                    })
+                    effectZips.push(sharingEffectZip)
+                    console.log(`[Noisedeck] Packaged sharing effect: ${effectFunc}`)
+                } catch (err) {
+                    console.warn(`[Noisedeck] Failed to package sharing effect ${effectFunc}:`, err)
+                }
             }
         }
 
@@ -738,7 +811,7 @@ async function handleEditInNoisedeck() {
             ttlMinutes: 60  // Reduced TTL for edit-in-noisedeck links
         }
         if (screenshot) payload.screenshot = screenshot
-        if (effectZip) payload.effects = [effectZip]
+        if (effectZips.length > 0) payload.effects = effectZips
 
         // Upload to sharing service
         const response = await fetch(SHARE_API_URL, {
