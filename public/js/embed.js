@@ -443,6 +443,7 @@ function openAboutModal() {
                     <div class="about-modal-tagline">Live Shader Coding Environment</div>
                     <div class="about-modal-copyright">&copy; 2026 <a href="https://noisefactor.io/" class="about-modal-link" target="_blank" rel="noopener">Noise Factor LLC.</a></div>
                     <div class="about-modal-build">build: local</div>
+                    <div class="about-modal-build noisemaker-version"></div>
                 </div>
             </div>
         </div>
@@ -484,18 +485,18 @@ function closeAboutModal() {
 
 async function fetchDeploymentMetadata() {
     if (!aboutModalEl) return
-    
+
     const buildInfoEl = aboutModalEl.querySelector('.about-modal-build')
     if (!buildInfoEl) return
-    
+
     try {
         const response = await fetch('./deployment-meta.json', { cache: 'no-store' })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        
+
         const data = await response.json()
         const hash = (data?.git_hash || '').trim().slice(0, 8) || 'LOCAL'
         const timestamp = data?.date
-        
+
         let dateStr = 'n/a'
         if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
             const date = new Date(timestamp * 1000)
@@ -504,10 +505,30 @@ async function fetchDeploymentMetadata() {
                 dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
             }
         }
-        
+
         buildInfoEl.textContent = `build: ${hash} / deployed: ${dateStr}`
     } catch (error) {
         buildInfoEl.textContent = 'build: local / deployed: n/a'
+    }
+
+    // Fetch noisemaker version from vendor bundle
+    const nmVersionEl = aboutModalEl.querySelector('.about-modal-build.noisemaker-version')
+    if (nmVersionEl) {
+        try {
+            const nmResponse = await fetch('./js/noisemaker/vendor/noisemaker-shaders-core.esm.js', { cache: 'no-store' })
+            if (nmResponse.ok) {
+                const reader = nmResponse.body.getReader()
+                const { value } = await reader.read()
+                reader.cancel()
+                const headerText = new TextDecoder().decode(value).slice(0, 500)
+                const match = headerText.match(/^\s*\*\s*Build:\s*(\S+)/m)
+                if (match) {
+                    nmVersionEl.textContent = `noisemaker version: ${match[1]}`
+                }
+            }
+        } catch (nmError) {
+            console.warn('Failed to fetch noisemaker version:', nmError)
+        }
     }
 }
 
