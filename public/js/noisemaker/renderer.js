@@ -251,6 +251,22 @@ export class PolymorphicRenderer {
             await this._renderer.compile(dsl)
             this._currentDsl = dsl
 
+            // Fix color uniforms: DSL parser returns RGBA (4 components) but shaders expect vec3 (3 components)
+            const pipeline = this._renderer._pipeline
+            if (pipeline && pipeline.graph && Array.isArray(pipeline.graph.passes)) {
+                for (const pass of pipeline.graph.passes) {
+                    if (!pass.uniforms) continue
+
+                    for (const [name, value] of Object.entries(pass.uniforms)) {
+                        if (Array.isArray(value) && value.length === 4) {
+                            if (name.toLowerCase().includes('color')) {
+                                pass.uniforms[name] = value.slice(0, 3)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Check for text effects and render text textures (supports multiple)
             const allTextParams = extractAllTextParams(dsl)
             const textStepIndices = this._findAllTextStepIndices(dsl)
