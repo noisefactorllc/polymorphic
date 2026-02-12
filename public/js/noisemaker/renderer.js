@@ -251,21 +251,9 @@ export class PolymorphicRenderer {
             await this._renderer.compile(dsl)
             this._currentDsl = dsl
 
-            // Fix color uniforms: DSL parser returns RGBA (4 components) but shaders expect vec3 (3 components)
-            const pipeline = this._renderer._pipeline
-            if (pipeline && pipeline.graph && Array.isArray(pipeline.graph.passes)) {
-                for (const pass of pipeline.graph.passes) {
-                    if (!pass.uniforms) continue
-
-                    for (const [name, value] of Object.entries(pass.uniforms)) {
-                        if (Array.isArray(value) && value.length === 4) {
-                            if (name.toLowerCase().includes('color')) {
-                                pass.uniforms[name] = value.slice(0, 3)
-                            }
-                        }
-                    }
-                }
-            }
+            // Normalize color uniforms: DSL defaults may be hex strings
+            // which the WebGL uniform setter can't parse as vec3
+            this._normalizeColorUniforms()
 
             // Check for text effects and render text textures (supports multiple)
             const allTextParams = extractAllTextParams(dsl)
@@ -346,18 +334,21 @@ export class PolymorphicRenderer {
         try {
             // Use the bundle's DSL parser to get effect info
             const effects = extractEffectsFromDsl(dsl)
-            
+
             // Find ALL text effects
             for (const effect of effects) {
                 if (effect.name === 'text' || effect.fullName === 'filter.text' || effect.effectKey === 'text') {
-                    console.log('Found text effect at step', effect.stepIndex)
-                    indices.push(effect.stepIndex)
+                    // Use effect.temp which matches the pipeline's texture binding
+                    // (pass.stepIndex = step.temp), NOT effect.stepIndex (globalStepIndex)
+                    const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
+                    console.log('Found text effect at step', stepIndex, 'temp:', effect.temp)
+                    indices.push(stepIndex)
                 }
             }
         } catch (err) {
             console.warn('Failed to parse DSL for text step indices:', err)
         }
-        
+
         return indices
     }
 
@@ -371,18 +362,20 @@ export class PolymorphicRenderer {
         try {
             // Use the bundle's DSL parser to get effect info
             const effects = extractEffectsFromDsl(dsl)
-            
+
             // Find the media effect
             for (const effect of effects) {
                 if (effect.name === 'media' || effect.fullName === 'synth.media' || effect.effectKey === 'media') {
-                    console.log('Found media effect at step', effect.stepIndex)
-                    return effect.stepIndex
+                    // Use effect.temp which matches the pipeline's texture binding
+                    const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
+                    console.log('Found media effect at step', stepIndex, 'temp:', effect.temp)
+                    return stepIndex
                 }
             }
         } catch (err) {
             console.warn('Failed to parse DSL for media step index:', err)
         }
-        
+
         return 0 // Default to step 0
     }
 
@@ -464,7 +457,7 @@ export class PolymorphicRenderer {
         // Upload to texture with step-indexed ID
         const textureId = `imageTex_step_${stepIndex}`
         this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
-        console.log('Media texture rendered:', params?.url || 'image', 'to', textureId)
+        console.log('Media texture rendered to', textureId)
     }
 
     /**
@@ -542,6 +535,24 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * Normalize color uniforms after compilation.
+     * @private
+     */
+    _normalizeColorUniforms() {
+        const passes = this._renderer._pipeline?.graph?.passes
+        if (!passes) return
+
+        for (const pass of passes) {
+            if (!pass.uniforms) continue
+            for (const [name, value] of Object.entries(pass.uniforms)) {
+                if (typeof value === 'string' && /^#[a-f0-9]{6}$/i.test(value)) {
+                    pass.uniforms[name] = hexToRgb(value)
+                }
+            }
+        }
+    }
+
+    /**
      * Resize the canvas
      * @param {number} width
      * @param {number} height
@@ -552,7 +563,7 @@ export class PolymorphicRenderer {
         this.canvas.width = width
         this.canvas.height = height
         this._renderer.resize(width, height)
-        
+
         // Re-render ALL text textures with new dimensions
         if (this._lastAllTextParams && this._lastAllTextParams.length > 0) {
             for (const { params, stepIndex } of this._lastAllTextParams) {
