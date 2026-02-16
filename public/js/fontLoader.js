@@ -1,13 +1,13 @@
 /**
  * Font Loader for Polymorphic
  *
- * Dynamically loads fonts from fonts.noisedeck.app for text effects in compositions.
+ * Dynamically loads fonts from fonts.noisefactor.io for text effects in compositions.
  * Uses FontFace API for fast loading without full bundle download.
  *
  * @module fontLoader
  */
 
-const FONTS_BASE_URL = 'https://fonts.noisedeck.app'
+const FONTS_BASE_URL = 'https://fonts.noisefactor.io'
 
 /**
  * Font Loader singleton
@@ -25,7 +25,7 @@ class FontLoader {
     }
 
     /**
-     * Load the font catalog from fonts.noisedeck.app
+     * Load the font catalog from fonts.noisefactor.io
      * @returns {Promise<Object>} The font catalog
      */
     async loadCatalog() {
