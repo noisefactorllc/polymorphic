@@ -11,7 +11,7 @@ let effectManifest = null;
 let applyToEditorCallback = null;
 
 // Base URL for fetching effect help files
-const EFFECTS_BASE_URL = '/js/noisemaker/vendor/effects';
+const EFFECTS_BASE_URL = 'https://shaders.noisedeck.app/0.8.0/effects';
 
 /**
  * Set the callback for applying code to editor

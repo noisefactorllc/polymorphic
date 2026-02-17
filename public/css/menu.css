@@ -9,7 +9,7 @@
     font-style: normal;
     font-weight: 400;
     font-display: block;
-    src: url('/fonts/MaterialSymbolsOutlined.woff2') format('woff2');
+    src: url('https://fonts.noisefactor.io/fonts/material-symbols-outlined/material-symbols-outlined.woff2') format('woff2');
 }
 
 .icon-material {

@@ -172,10 +172,10 @@ export class PolymorphicRenderer {
             canvas: this.canvas,
             width: this.width,
             height: this.height,
-            basePath: '/js/noisemaker/vendor',
+            basePath: 'https://shaders.noisedeck.app/0.8.0',
             preferWebGPU: this.preferWebGPU,
             useBundles: true,
-            bundlePath: '/js/noisemaker/vendor/effects',
+            bundlePath: 'https://shaders.noisedeck.app/0.8.0/effects',
             onError: options.onError
         })
 
