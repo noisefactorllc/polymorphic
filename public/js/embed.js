@@ -444,6 +444,7 @@ function openAboutModal() {
                     <div class="about-modal-copyright">&copy; 2026 <a href="https://noisefactor.io/" class="about-modal-link" target="_blank" rel="noopener">Noise Factor LLC.</a></div>
                     <div class="about-modal-build">build: local</div>
                     <div class="about-modal-build noisemaker-version"></div>
+                    <div class="about-modal-ecosystem">Polymorphic is a free tool by <a href="https://noisefactor.io/" target="_blank" rel="noopener">Noise Factor</a>, powered by the <a href="https://noisemaker.app/" target="_blank" rel="noopener">Noisemaker</a> open source engine. <a href="https://noisedeck.app/" target="_blank" rel="noopener">Noisedeck</a> is our video synth — free to use, with a $4/mo subscription for pro features.</div>
                 </div>
             </div>
         </div>
