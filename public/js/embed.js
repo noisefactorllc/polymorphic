@@ -519,7 +519,7 @@ async function fetchDeploymentMetadata() {
     const nmVersionEl = aboutModalEl.querySelector('.about-modal-build.noisemaker-version')
     if (nmVersionEl) {
         try {
-            const nmResponse = await fetch('https://shaders.noisedeck.app/0.8.0/noisemaker-shaders-core.esm.js', { cache: 'no-store' })
+            const nmResponse = await fetch('https://shaders.noisedeck.app/0.8.5/noisemaker-shaders-core.esm.js', { cache: 'no-store' })
             if (nmResponse.ok) {
                 const reader = nmResponse.body.getReader()
                 const { value } = await reader.read()
