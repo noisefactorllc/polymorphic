@@ -5,6 +5,8 @@
  * Hot reload functionality for live coding experience.
  */
 
+const APP_VERSION = '0.8.5-SNAPSHOT'
+
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
@@ -441,6 +443,7 @@ function openAboutModal() {
                 <div class="about-modal-details" tabindex="-1">
                     <div class="about-modal-title" id="about-modal-title">Polymorphic</div>
                     <div class="about-modal-tagline">Live Shader Coding Environment</div>
+                    <div class="about-modal-version">version ${APP_VERSION.replace(/-.*$/, '')}</div>
                     <div class="about-modal-copyright">&copy; 2026 <a href="https://noisefactor.io/" class="about-modal-link" target="_blank" rel="noopener">Noise Factor LLC.</a></div>
                     <div class="about-modal-build">build: local</div>
                     <div class="about-modal-build noisemaker-version"></div>
