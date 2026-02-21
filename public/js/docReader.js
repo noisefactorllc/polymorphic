@@ -4,6 +4,8 @@
  * Renders markdown documentation in a side panel.
  */
 
+const APP_VERSION = '0.8.5-SNAPSHOT'
+
 let docReaderPanel = null;
 let docReaderContent = null;
 let dslOverlay = null;
@@ -261,7 +263,7 @@ export function renderDocContent(markdown) {
             const buildInfo = document.createElement('div');
             buildInfo.className = 'doc-build-info';
             buildInfo.style.cssText = 'font-family: ui-monospace, \'Cascadia Mono\', \'Consolas\', monospace; font-size: 9px; color: #444; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1em; margin-top: 1em;';
-            buildInfo.textContent = `build: ${hash} / deployed: ${dateStr}`;
+            buildInfo.textContent = `version ${APP_VERSION.replace(/-.*$/, '')} / build: ${hash} / deployed: ${dateStr}`;
             docReaderContent.appendChild(buildInfo);
         };
         
