@@ -44,7 +44,7 @@
     --ui-chrome-shadow-shade: 28%;
     
     /* Font family definitions */
-    --font-accent: 'Comfortaa', 'Nunito', sans-serif;
+    --font-accent: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block', sans-serif;
     
     /* Neutral colors */
     --color2: #141414;
@@ -74,7 +74,7 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     border-radius: 0 0 var(--ui-corner-radius) 0;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Nunito', 'Nunito Block', sans-serif;
     font-size: 16px;
 }
 
@@ -166,7 +166,7 @@
 /* Dropdown Menu */
 .menu {
     position: relative;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Nunito', 'Nunito Block', sans-serif;
     font-size: 0.875em;
     color: var(--menu-accent);
     margin: 0;
@@ -305,7 +305,7 @@
     color: #fff;
     padding: 4px 8px;
     border-radius: 4px;
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Nunito', 'Nunito Block', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 11px;
     font-weight: 500;
     white-space: nowrap;
@@ -349,7 +349,7 @@
     align-items: center;
     justify-content: center;
     color: #d0d0d0;
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Nunito', 'Nunito Block', -apple-system, BlinkMacSystemFont, sans-serif;
     text-align: center;
     padding: 2rem;
 }
