@@ -27,6 +27,10 @@
     -webkit-font-feature-settings: 'liga';
     font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0;
+    width: 1em;
+    overflow: hidden;
+    text-align: center;
 }
 
 :root {
@@ -279,6 +283,10 @@
     -webkit-font-feature-settings: 'liga';
     font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0;
+    width: 1em;
+    overflow: hidden;
+    text-align: center;
 }
 
 /* Icon sizes */
