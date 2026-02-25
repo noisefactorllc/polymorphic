@@ -5,8 +5,7 @@
   "private": true,
   "scripts": {
     "start": "npx serve public -l 3000",
-    "dev": "npx serve public -l 3000",
-    "pull-noisemaker": "python3 pull-noisemaker"
+    "dev": "npx serve public -l 3000"
   },
   "author": "Noise Factor",
   "license": "UNLICENSED",

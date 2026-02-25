@@ -4,20 +4,14 @@ Live shader coding environment using the Noisemaker DSL (Polymorphic language).
 
 ## Quick Start
 
-1. Pull the Noisemaker shader bundles:
-
-```bash
-./pull-noisemaker
-```
-
-2. Start the development server:
+1. Start the development server:
 
 ```bash
 npm install
 npm start
 ```
 
-3. Open http://localhost:3000 in your browser
+2. Open http://localhost:3000 in your browser
 
 ## Features
 
@@ -51,25 +45,13 @@ polymorphic/
 │       ├── fontLoader.js   # Dynamic font loading
 │       └── noisemaker/
 │           ├── bundle.js   # ESM bundle loader
-│           ├── renderer.js # Shader renderer wrapper
-│           └── vendor/     # Noisemaker shader bundles (generated)
-├── pull-noisemaker         # Script to update shader bundles
+│           └── renderer.js # Shader renderer wrapper
 └── package.json
 ```
 
-### Updating Noisemaker
+### Shader Bundles
 
-To update to the latest Noisemaker shader bundles:
-
-```bash
-./pull-noisemaker
-```
-
-To use a specific commit:
-
-```bash
-NOISEMAKER_SHA=abc123 ./pull-noisemaker
-```
+Noisemaker shaders are loaded at runtime from the CDN (shaders.noisedeck.app). No local vendor files are needed.
 
 ## Portable Effects
 
