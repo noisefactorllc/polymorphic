@@ -4,7 +4,7 @@
  * Renders markdown documentation in a side panel.
  */
 
-const APP_VERSION = '0.8.5-SNAPSHOT'
+const APP_VERSION = '0.9.0-SNAPSHOT'
 
 let docReaderPanel = null;
 let docReaderContent = null;
@@ -13,7 +13,7 @@ let effectManifest = null;
 let applyToEditorCallback = null;
 
 // Base URL for fetching effect help files
-const EFFECTS_BASE_URL = 'https://shaders.noisedeck.app/0.8.5/effects';
+const EFFECTS_BASE_URL = 'https://shaders.noisedeck.app/0.9.0/effects';
 
 /**
  * Set the callback for applying code to editor

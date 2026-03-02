@@ -6,7 +6,7 @@
  * - Minified for production
  */
 
-const SHADER_CDN = 'https://shaders.noisedeck.app/0.8.5'
+const SHADER_CDN = 'https://shaders.noisedeck.app/0.9.0'
 
 // Detect if we're in local development
 const isLocalDev = typeof window !== 'undefined' && (
