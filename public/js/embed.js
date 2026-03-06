@@ -600,7 +600,7 @@ async function resetDsl() {
 // =========================================================================
 
 const SHARE_API_URL = 'https://sharing.noisedeck.app/api/embed/shorten'
-const NOISEDECK_URL = 'https://preview.noisedeck.app'
+const NOISEDECK_URL = 'https://noisedeck.app'
 
 /**
  * Show a toast notification (styled like the import toast)
