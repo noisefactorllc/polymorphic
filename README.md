@@ -57,7 +57,7 @@ Noisemaker shaders are loaded at runtime from the CDN (shaders.noisedeck.app). N
 
 Polymorphic supports the Portable Effects Format for creating and sharing custom shader effects.
 
-See the **[Portable Effects Format](https://github.com/noisedeck/portable)** repository for:
+See the **[Portable Effects Format](https://github.com/noisefactorllc/portable)** repository for:
 - Effect format specification
 - Parameter definitions
 - Example effects
