@@ -320,16 +320,16 @@ function parseDefinitionJs(jsContent, fallbackName) {
 const DEFAULT_DSL = `search synth, filter, render
 
 noise(
-  noiseType: linear,
+  type: linear,
   octaves: 4,
   scaleX: 100,
   scaleY: 100,
   seed: 3,
   ridges: true,
   loopScale: 1,
-  loopAmp: 100
+  speed: 100
 )
-  .palette(paletteIndex: palette.dealerHat)
+  .palette(index: dealerHat)
   .loopBegin(alpha: 94.895, intensity: 94.309)
   .warp(
     strength: 23.566,
