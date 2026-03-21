@@ -129,7 +129,7 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
                     name: 'render',
                     program: firstProgram,
                     inputs: {},
-                    outputs: { fragColor: 'outputTex' }
+                    outputs: { color: 'outputTex' }
                 }
             ]
         } else {
@@ -138,8 +138,8 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
                 {
                     name: 'render',
                     program: firstProgram,
-                    inputs: { inputTex: 'source' },
-                    outputs: { fragColor: 'outputTex' }
+                    inputs: { inputTex: 'inputTex' },
+                    outputs: { color: 'outputTex' }
                 }
             ]
         }
@@ -154,7 +154,8 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
         tags: definition.tags || ['user'],
         globals: definition.globals || {},
         passes,
-        shaders
+        shaders,
+        asyncInit: async () => {}
     }
 
     // Register the effect
@@ -321,8 +322,8 @@ const DEFAULT_DSL = `search synth, filter, render
 noise(
   noiseType: linear,
   octaves: 4,
-  xScale: 100,
-  yScale: 100,
+  scaleX: 100,
+  scaleY: 100,
   seed: 3,
   ridges: true,
   loopScale: 1,
