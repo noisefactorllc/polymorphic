@@ -268,7 +268,7 @@ export function renderDocContent(markdown) {
         };
         
         fetch('/deployment-meta.json')
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : Promise.reject())
             .then(meta => {
                 const hash = meta.git_hash ? meta.git_hash.trim().slice(0, 8) : 'LOCAL';
                 let dateStr = 'n/a';
@@ -383,13 +383,13 @@ Effects accept parameters either by position or by name:
 
 \`\`\`
 noise(4, 3)
-noise(octaves: 4, xScale: 75)
+noise(octaves: 4, scaleX: 75)
 \`\`\`
 
 You can do math in arguments:
 
 \`\`\`
-noise(xScale: 50 + 25, octaves: 2 * 2)
+noise(scaleX: 50 + 25, octaves: 2 * 2)
 \`\`\`
 
 ### Colors
@@ -415,7 +415,7 @@ let pattern = noise
 pattern(4).write(o0)
 
 let myNoise = noise(octaves: 4)
-myNoise(xScale: 50).write(o0)
+myNoise(scaleX: 50).write(o0)
 \`\`\`
 
 ---
@@ -427,7 +427,7 @@ myNoise(xScale: 50).write(o0)
 Make parameters change over time:
 
 \`\`\`
-noise(xScale: osc(type: oscKind.sine, min: 25, max: 100)).write(o0)
+noise(scaleX: osc(type: oscKind.sine, min: 25, max: 100)).write(o0)
 \`\`\`
 
 **Oscillator types:** \`sine\`, \`tri\`, \`saw\`, \`sawInv\`, \`square\`, \`noise\`
@@ -442,8 +442,8 @@ noise(xScale: osc(type: oscKind.sine, min: 25, max: 100)).write(o0)
 Drive parameters from MIDI or audio:
 
 \`\`\`
-noise(xScale: midi(channel: 1, min: 10, max: 100)).write(o0)
-noise(xScale: audio(band: audioBand.low, min: 25, max: 100)).write(o0)
+noise(scaleX: midi(channel: 1, min: 10, max: 100)).write(o0)
+noise(scaleX: audio(band: audioBand.low, min: 25, max: 100)).write(o0)
 \`\`\`
 
 ---
@@ -487,7 +487,7 @@ Color palettes apply to many effects. Use the \`palette\` enum to reference them
 
 \`\`\`
 search synth, filter
-noise().palette(paletteIndex: palette.vaporwave).write(o0)
+noise().palette(index: vaporwave).write(o0)
 \`\`\`
 
 **Available palettes:**
