@@ -330,8 +330,6 @@ Be advised that syntax is still settling and may change in subtle but breaking w
 
 Learn, experiment, and share. Have fun!
 
-<small>Hello to users of the popular Hydra editor. We know Polymorphic looks similar at a glance, but this is a different language with its own syntax. We invite you to explore another world!</small>
-
 ---
 
 ## Quick Start
