@@ -7,6 +7,7 @@
 
 const APP_VERSION = '0.9.0-SNAPSHOT'
 
+import { AboutDialog } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
@@ -421,121 +422,39 @@ function updateFullscreenButton() {
 }
 
 /**
- * About Modal
+ * About Dialog (handfish AboutDialog component)
  */
-let aboutModalEl = null
-let aboutModalEscHandler = null
+const aboutDialog = new AboutDialog({
+    name: 'Polymorphic',
+    version: APP_VERSION,
+    tagline: 'Live Shader Coding Environment',
+    logo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" fill="currentColor"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M3920 5709 c-248 -32 -507 -143 -790 -337 -282 -194 -349 -237 -426 -273 -178 -84 -313 -93 -571 -35 -246 55 -390 46 -560 -33 -133 -63 -288 -192 -382 -320 -151 -205 -169 -380 -64 -639 102 -254 266 -430 506 -542 337 -158 633 -99 816 161 65 92 103 201 147 417 41 204 68 288 126 390 147 257 354 383 577 352 107 -14 189 -57 273 -142 238 -242 203 -643 -87 -978 -132 -153 -293 -269 -673 -487 -263 -151 -533 -321 -692 -439 -277 -204 -450 -460 -499 -738 -31 -172 11 -257 146 -297 39 -11 45 -10 81 13 93 62 198 105 337 139 76 19 118 23 275 23 160 -1 197 -4 270 -23 105 -28 224 -84 309 -145 71 -50 103 -57 164 -31 52 22 93 60 111 105 21 53 39 292 31 415 -3 55 -13 161 -22 235 -24 208 -22 397 5 493 41 145 108 258 269 455 228 278 568 616 908 902 265 223 372 356 411 513 22 93 15 298 -15 412 -33 123 -65 181 -151 267 -111 111 -197 146 -409 168 -119 12 -327 11 -421 -1z"/><path d="M2316 1660 c-220 -35 -399 -121 -519 -250 -119 -128 -163 -247 -154 -415 9 -173 75 -340 187 -473 57 -67 152 -147 214 -179 113 -58 273 -77 416 -49 347 68 650 439 650 796 0 152 -41 242 -166 361 -165 157 -418 241 -628 209z"/></g></svg>`,
+    titleFont: "'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block'",
+    repo: 'noisefactorllc/polymorphic',
+    ecosystem: 'Polymorphic is a free tool by <a href="https://noisefactor.io/" target="_blank" rel="noopener">Noise Factor</a>, powered by the <a href="https://noisemaker.app/" target="_blank" rel="noopener">Noisemaker</a> open source engine. <a href="https://noisedeck.app/" target="_blank" rel="noopener">Noisedeck</a> is our video synth. Free to use, with a $4/mo subscription for pro features.',
+})
 
-function openAboutModal() {
-    if (aboutModalEl) return
-    
-    aboutModalEl = document.createElement('div')
-    aboutModalEl.className = 'modal-overlay'
-    aboutModalEl.setAttribute('role', 'dialog')
-    aboutModalEl.setAttribute('aria-modal', 'true')
-    aboutModalEl.setAttribute('aria-labelledby', 'about-modal-title')
-    
-    aboutModalEl.innerHTML = `
-        <div class="modal-content about-modal">
-            <div class="about-modal-content">
-                <div class="about-modal-graphic" role="presentation">
-                    <svg class="about-modal-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" fill="currentColor"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M3920 5709 c-248 -32 -507 -143 -790 -337 -282 -194 -349 -237 -426 -273 -178 -84 -313 -93 -571 -35 -246 55 -390 46 -560 -33 -133 -63 -288 -192 -382 -320 -151 -205 -169 -380 -64 -639 102 -254 266 -430 506 -542 337 -158 633 -99 816 161 65 92 103 201 147 417 41 204 68 288 126 390 147 257 354 383 577 352 107 -14 189 -57 273 -142 238 -242 203 -643 -87 -978 -132 -153 -293 -269 -673 -487 -263 -151 -533 -321 -692 -439 -277 -204 -450 -460 -499 -738 -31 -172 11 -257 146 -297 39 -11 45 -10 81 13 93 62 198 105 337 139 76 19 118 23 275 23 160 -1 197 -4 270 -23 105 -28 224 -84 309 -145 71 -50 103 -57 164 -31 52 22 93 60 111 105 21 53 39 292 31 415 -3 55 -13 161 -22 235 -24 208 -22 397 5 493 41 145 108 258 269 455 228 278 568 616 908 902 265 223 372 356 411 513 22 93 15 298 -15 412 -33 123 -65 181 -151 267 -111 111 -197 146 -409 168 -119 12 -327 11 -421 -1z"/><path d="M2316 1660 c-220 -35 -399 -121 -519 -250 -119 -128 -163 -247 -154 -415 9 -173 75 -340 187 -473 57 -67 152 -147 214 -179 113 -58 273 -77 416 -49 347 68 650 439 650 796 0 152 -41 242 -166 361 -165 157 -418 241 -628 209z"/></g></svg>
-                </div>
-                <div class="about-modal-details" tabindex="-1">
-                    <div class="about-modal-title" id="about-modal-title">Polymorphic</div>
-                    <div class="about-modal-tagline">Live Shader Coding Environment</div>
-                    <div class="about-modal-version">version ${APP_VERSION.replace(/-.*$/, '')}</div>
-                    <div class="about-modal-copyright">&copy; 2026 <a href="https://noisefactor.io/" class="about-modal-link" target="_blank" rel="noopener">Noise Factor LLC.</a></div>
-                    <div class="about-modal-build">build: local</div>
-                    <div class="about-modal-build noisemaker-version"></div>
-                    <div class="about-modal-ecosystem">Polymorphic is a free tool by <a href="https://noisefactor.io/" target="_blank" rel="noopener">Noise Factor</a>, powered by the <a href="https://noisemaker.app/" target="_blank" rel="noopener">Noisemaker</a> open source engine. <a href="https://noisedeck.app/" target="_blank" rel="noopener">Noisedeck</a> is our video synth. Free to use, with a $4/mo subscription for pro features.</div>
-                </div>
-            </div>
-        </div>
-    `
-    
-    // Close on backdrop click
-    aboutModalEl.addEventListener('click', (e) => {
-        if (e.target === aboutModalEl) closeAboutModal()
-    })
-    
-    // Close on escape
-    aboutModalEscHandler = (e) => {
-        if (e.key === 'Escape') closeAboutModal()
+fetch('./deployment-meta.json', { cache: 'no-store' }).then(async (res) => {
+    if (!res.ok) return
+    const data = await res.json()
+    const hash = data.git_hash?.trim().slice(0, 8) || 'LOCAL'
+    let deployed = 'n/a'
+    if (data.date) {
+        const d = new Date(data.date * 1000)
+        const pad = (n) => String(n).padStart(2, '0')
+        deployed = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
-    document.addEventListener('keydown', aboutModalEscHandler)
-    
-    document.body.appendChild(aboutModalEl)
-    
-    // Animate in
-    requestAnimationFrame(() => {
-        aboutModalEl.classList.add('modal-visible')
-    })
-    
-    // Fetch deployment metadata
-    fetchDeploymentMetadata()
-}
+    aboutDialog.setBuild({ hash, deployed })
+}).catch(() => {})
 
-function closeAboutModal() {
-    if (!aboutModalEl) return
-    
-    aboutModalEl.classList.remove('modal-visible')
-    setTimeout(() => {
-        aboutModalEl.remove()
-        aboutModalEl = null
-    }, 200)
-    
-    document.removeEventListener('keydown', aboutModalEscHandler)
-}
-
-async function fetchDeploymentMetadata() {
-    if (!aboutModalEl) return
-
-    const buildInfoEl = aboutModalEl.querySelector('.about-modal-build')
-    if (!buildInfoEl) return
-
-    try {
-        const response = await fetch('./deployment-meta.json', { cache: 'no-store' })
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-        const data = await response.json()
-        const hash = (data?.git_hash || '').trim().slice(0, 8) || 'LOCAL'
-        const timestamp = data?.date
-
-        let dateStr = 'n/a'
-        if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
-            const date = new Date(timestamp * 1000)
-            if (!Number.isNaN(date.getTime())) {
-                const pad = (v) => String(Math.trunc(v)).padStart(2, '0')
-                dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-            }
-        }
-
-        buildInfoEl.textContent = `build: ${hash} / deployed: ${dateStr}`
-    } catch (error) {
-        buildInfoEl.textContent = 'build: local / deployed: n/a'
-    }
-
-    // Fetch noisemaker version from vendor bundle
-    const nmVersionEl = aboutModalEl.querySelector('.about-modal-build.noisemaker-version')
-    if (nmVersionEl) {
-        try {
-            const nmResponse = await fetch('https://shaders.noisedeck.app/0.9.0/noisemaker-shaders-core.esm.js', { cache: 'no-store' })
-            if (nmResponse.ok) {
-                const reader = nmResponse.body.getReader()
-                const { value } = await reader.read()
-                reader.cancel()
-                const headerText = new TextDecoder().decode(value).slice(0, 500)
-                const match = headerText.match(/^\s*\*\s*Build:\s*(\S+)/m)
-                if (match) {
-                    nmVersionEl.textContent = `noisemaker version: ${match[1]}`
-                }
-            }
-        } catch (nmError) {
-            console.warn('Failed to fetch noisemaker version:', nmError)
-        }
-    }
-}
+fetch('https://shaders.noisedeck.app/0.9.0/noisemaker-shaders-core.esm.js', { cache: 'no-store' }).then(async (res) => {
+    if (!res.ok) return
+    const reader = res.body.getReader()
+    const { value } = await reader.read()
+    reader.cancel()
+    const match = new TextDecoder().decode(value).slice(0, 500).match(/^\s*\*\s*Build:\s*(\S+)/m)
+    if (match) aboutDialog.setNoisemaker(match[1])
+}).catch(() => {})
 
 /**
  * Show error message
@@ -1272,7 +1191,7 @@ function setupMenuBar() {
     // Logo menu
     if (aboutMenuItem) {
         aboutMenuItem.addEventListener('click', () => {
-            openAboutModal()
+            aboutDialog.show()
         })
     }
     

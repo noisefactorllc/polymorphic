@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -35,6 +35,11 @@
         }
     }
     </script>
+    <script type="importmap">
+        { "imports": { "handfish": "https://handfish.noisefactor.io/0.9.0/handfish.esm.min.js" } }
+    </script>
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0.9.0/styles/tokens.css">
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0.9.0/styles/dialogs.css">
     <!-- CDN preconnect -->
     <link rel="preconnect" href="https://fonts.noisefactor.io" crossorigin>
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
@@ -762,172 +767,6 @@
                 left: 0.5em;
                 right: 0.5em;
                 max-width: calc(100% - 1em);
-            }
-        }
-        
-        /* About Modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10001;
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-        
-        .modal-overlay.modal-visible {
-            opacity: 1;
-        }
-        
-        .modal-content {
-            background-color: rgba(15, 17, 20, 0.95);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 12px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 520px;
-            width: 90%;
-            max-height: 80vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            transform: scale(0.96) translateY(10px);
-            transition: transform 0.2s ease;
-        }
-        
-        .modal-visible .modal-content {
-            transform: scale(1) translateY(0);
-        }
-        
-        .about-modal {
-            width: min(720px, 100vw);
-            max-width: 720px;
-            min-width: 360px;
-            background: rgba(15, 17, 20, 0.95);
-            border: none;
-            padding: 0;
-            position: relative;
-            overflow: hidden;
-            border-radius: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 60px rgba(102, 126, 234, 0.15);
-        }
-        
-        .about-modal-content {
-            display: grid;
-            grid-template-columns: min(80%, 320px) 1fr;
-            align-items: stretch;
-            background-color: transparent;
-            border: none;
-        }
-        
-        .about-modal-graphic {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2.75rem 2.5rem;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, transparent 100%);
-        }
-        
-        .about-modal-logo {
-            width: min(80%, 200px);
-            max-width: 200px;
-            height: auto;
-            filter: drop-shadow(0 0 20px rgba(102, 126, 234, 0.6));
-        }
-        
-        .about-modal-details {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 1rem;
-            padding: 2.75rem 1.5rem;
-            color: #888;
-            background-color: inherit;
-        }
-        
-        .about-modal-details:focus,
-        .about-modal-details:focus-visible {
-            outline: none;
-        }
-        
-        .about-modal-title {
-            font-family: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
-            font-weight: 700;
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            color: #fff;
-            text-shadow: 0 0 40px rgba(102, 126, 234, 0.4), 0 0 80px rgba(102, 126, 234, 0.2);
-        }
-        
-        .about-modal-tagline {
-            font-family: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
-            font-size: 1rem;
-            color: #667eea;
-        }
-        
-        .about-modal-copyright {
-            font-size: 0.9rem;
-            color: #666;
-        }
-        
-        .about-modal-build {
-            font-size: 0.75rem;
-            color: #555;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block';
-        }
-        
-        .about-modal-link {
-            color: #667eea;
-            text-decoration: none;
-            transition: color 0.15s ease;
-        }
-        
-        .about-modal-link:hover {
-            color: #7c8ff0;
-        }
-
-        .about-modal-ecosystem {
-            font-size: 0.8rem;
-            color: #888;
-            margin-top: 0.75rem;
-            line-height: 1.4;
-        }
-
-        .about-modal-ecosystem a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .about-modal-ecosystem a:hover {
-            color: #7c8ff0;
-        }
-
-        @media (max-width: 720px) {
-            .about-modal {
-                width: min(540px, 94vw);
-                max-width: 540px;
-            }
-        
-            .about-modal-content {
-                grid-template-columns: 1fr;
-                text-align: center;
-            }
-        
-            .about-modal-graphic {
-                padding: 2.25rem 2rem 1.5rem;
-            }
-        
-            .about-modal-details {
-                align-items: center;
-                padding: 1.75rem 2rem 2.25rem;
-            }
-        
-            .about-modal-logo {
-                width: min(60%, 180px);
             }
         }
         
