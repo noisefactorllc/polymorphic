@@ -337,8 +337,7 @@ noise(
     scale: 0.83,
     seed: 3,
     speed: 1,
-    wrap: clamp,
-    rotation: 31.193
+    wrap: clamp
   )
   .loopEnd()
   .lighting(
