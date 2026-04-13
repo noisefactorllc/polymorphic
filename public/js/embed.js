@@ -441,7 +441,7 @@ fetch('./deployment-meta.json', { cache: 'no-store' }).then(async (res) => {
     aboutDialog.setBuild({ hash, deployed })
 }).catch(() => {})
 
-aboutDialog.setNoisemakerFromUrl('https://shaders.noisedeck.app/0/deployment-meta.json')
+aboutDialog.setNoisemakerFromUrl('https://shaders.noisedeck.app/1/deployment-meta.json')
 
 /**
  * Show error message
