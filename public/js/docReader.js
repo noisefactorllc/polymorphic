@@ -409,9 +409,6 @@ effect(offset: vec2(0.5, 0.25))
 Save effects or partial setups to reuse later:
 
 \`\`\`
-let pattern = noise
-pattern(4).write(o0)
-
 let wobble = osc(type: oscKind.sine, min: 25, max: 100)
 noise(scaleX: wobble).write(o0)
 \`\`\`
