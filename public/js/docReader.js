@@ -412,8 +412,8 @@ Save effects or partial setups to reuse later:
 let pattern = noise
 pattern(4).write(o0)
 
-let myNoise = noise(octaves: 4)
-myNoise(scaleX: 50).write(o0)
+let wobble = osc(type: oscKind.sine, min: 25, max: 100)
+noise(scaleX: wobble).write(o0)
 \`\`\`
 
 ---
