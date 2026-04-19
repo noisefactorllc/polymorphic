@@ -318,36 +318,13 @@ function parseDefinitionJs(jsContent, fallbackName) {
 /**
  * Default DSL program for new sessions
  */
-const DEFAULT_DSL = `search synth, filter, render
+const DEFAULT_DSL = `search synth, filter
 
-noise(
-  type: linear,
-  octaves: 4,
-  scaleX: 100,
-  scaleY: 100,
-  seed: 3,
-  ridges: true,
-  loopScale: 1,
-  speed: 100
-)
-  .palette(index: dealerHat)
-  .loopBegin(alpha: 94.895, intensity: 94.309)
-  .warp(
-    strength: 23.566,
-    scale: 0.83,
-    seed: 3,
-    speed: 1,
-    wrap: clamp
-  )
-  .loopEnd()
-  .lighting(
-    normalStrength: 5,
-    smoothing: 2.3,
-    specularIntensity: 1.04,
-    shininess: 88,
-    reflection: 31.3,
-    refraction: 20.1,
-    aberration: 22.8
+perlin(scale: 75, octaves: 2)
+  .adjust(
+    mode: hsv,
+    rotation: 120,
+    hueRange: 40
   )
   .write(o0)
 
