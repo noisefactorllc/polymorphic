@@ -324,9 +324,7 @@ export function showPlaceholderContent() {
 
 ## By [Noise Factor](https://noisefactor.io)
 
-Polymorphic is a composition language for shader effects. It powers our open source [shader pipeline](https://noisemaker.readthedocs.io/en/latest/shaders.html), and is at the core of our next-gen products like the new version of [Noisedeck](https://noisedeck.app/). We designed it for flexibility and expressiveness.
-
-Be advised that syntax is still settling and may change in subtle but breaking ways as we work towards a stable release.
+Polymorphic is a composition language for shader effects. It powers our open source [shader pipeline](https://noisemaker.readthedocs.io/en/latest/shaders.html), and is at the core of our products like [Noisedeck](https://noisedeck.app/) and [Layers](https://layers.noisefactor.io/). We designed it for flexibility and expressiveness.
 
 Learn, experiment, and share. Have fun!
 
