@@ -148,7 +148,9 @@ const SECTIONS = [
             ['BPM ± 1',                     ['scroll on bpm']],
             ['BPM ± 5',                     ['⇧', 'scroll']],
             ['Drag bpm value',              ['drag']],
-            ['Toggle fullscreen',           ['click ⛶']]
+            ['Toggle fullscreen',           ['click ⛶']],
+            ['Toggle performance mode',     ['⌘/Ctrl', '⇧', 'H']],
+            ['Exit performance mode',       ['Esc']]
         ]
     },
     {

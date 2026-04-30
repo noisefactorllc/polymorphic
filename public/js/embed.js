@@ -388,6 +388,129 @@ function togglePlayPause() {
 }
 
 /**
+ * Wire drag-and-drop for image/video files. Dropping a media file:
+ *  - For images: inserts a media(url: "<data-url>").write(o0) snippet
+ *  - For videos: hands the file off to the live inputs panel as the active
+ *    video source.
+ */
+function setupFileDrop() {
+    const dropTarget = document.body
+    let dragCounter = 0
+
+    const overlay = document.createElement('div')
+    overlay.className = 'file-drop-overlay'
+    overlay.innerHTML = `
+        <div class="file-drop-message">
+            <span class="icon-material">file_upload</span>
+            <span>Drop image or video to use as source</span>
+        </div>
+    `
+    overlay.style.cssText = `
+        position: fixed; inset: 0;
+        background: rgba(102, 126, 234, 0.18);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 6000;
+        display: none;
+        justify-content: center; align-items: center;
+        pointer-events: none;
+    `
+    overlay.querySelector('.file-drop-message').style.cssText = `
+        background: rgba(15,17,22,0.95);
+        border: 2px dashed rgba(165,184,255,0.6);
+        color: #fff;
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        font-family: 'Nunito', sans-serif;
+    `
+    overlay.querySelector('.icon-material').style.fontSize = '24px'
+    document.body.appendChild(overlay)
+
+    dropTarget.addEventListener('dragenter', (e) => {
+        e.preventDefault()
+        if (!hasDraggedFiles(e)) return
+        dragCounter++
+        overlay.style.display = 'flex'
+    })
+    dropTarget.addEventListener('dragover', (e) => {
+        if (hasDraggedFiles(e)) e.preventDefault()
+    })
+    dropTarget.addEventListener('dragleave', () => {
+        dragCounter = Math.max(0, dragCounter - 1)
+        if (dragCounter === 0) overlay.style.display = 'none'
+    })
+    dropTarget.addEventListener('drop', async (e) => {
+        if (!hasDraggedFiles(e)) return
+        e.preventDefault()
+        dragCounter = 0
+        overlay.style.display = 'none'
+        const file = e.dataTransfer.files[0]
+        if (!file) return
+        await handleDroppedFile(file)
+    })
+}
+
+function hasDraggedFiles(e) {
+    const types = e.dataTransfer?.types || []
+    for (let i = 0; i < types.length; i++) {
+        if (types[i] === 'Files') return true
+    }
+    return false
+}
+
+async function handleDroppedFile(file) {
+    if (file.type.startsWith('image/')) {
+        const dataUrl = await new Promise((res, rej) => {
+            const r = new FileReader()
+            r.onload = () => res(r.result)
+            r.onerror = rej
+            r.readAsDataURL(file)
+        })
+        if (dslEditor) {
+            insertAtCursor(dslEditor, `\n\nmedia(url: "${dataUrl}").write(o0)\n\nrender(o0)`)
+            showToast(`Loaded image: ${file.name}`, 'success')
+        }
+        return
+    }
+    if (file.type.startsWith('video/')) {
+        // Hand off to live inputs panel — opens the video source path
+        liveInputsPanel.open()
+        const url = URL.createObjectURL(file)
+        const ev = new CustomEvent('polymorphic-drop-video', { detail: { url, name: file.name } })
+        window.dispatchEvent(ev)
+        showToast(`Drop a moment — using video: ${file.name}`, 'info')
+        // Forward to liveInputsPanel directly
+        if (liveInputsPanel._videoEl) {
+            liveInputsPanel._stopActiveSource?.()
+            liveInputsPanel._videoEl.srcObject = null
+            liveInputsPanel._videoEl.src = url
+            liveInputsPanel._videoEl.loop = true
+            try { await liveInputsPanel._videoEl.play() } catch { /* ignore */ }
+            liveInputsPanel._currentObjectUrl = url
+            liveInputsPanel._startTextureLoop?.(liveInputsPanel._videoEl)
+            liveInputsPanel._setSourceStatus?.(`video: ${file.name}`, 'connected')
+            liveInputsPanel._maybeInsertMediaSnippet?.()
+        }
+        return
+    }
+    showToast(`Unsupported file type: ${file.type || 'unknown'}`, 'warning')
+}
+
+/**
+ * Toggle performance mode — hides every panel, menu, and overlay so only the
+ * canvas is visible. Useful for projection / VJ sets / clean recording.
+ */
+function togglePerformanceMode() {
+    document.body.classList.toggle('performance-mode')
+    const on = document.body.classList.contains('performance-mode')
+    showToast(on ? 'Performance mode — press ⌘⇧H or Esc to exit' : 'Performance mode off', 'info')
+}
+
+/**
  * Toggle fullscreen mode
  */
 function toggleFullscreen() {
@@ -1119,11 +1242,19 @@ async function startShader() {
     // Set up canvas sizing
     const { width, height } = resizeCanvas()
 
+    // Determine backend preference: ?backend= URL param wins, else localStorage,
+    // else default WebGL2.
+    const params = new URLSearchParams(window.location.search)
+    const urlBackend = params.get('backend')
+    const storedBackend = (() => { try { return localStorage.getItem('polymorphic-backend') } catch { return null } })()
+    const preferWebGPU = (urlBackend === 'webgpu') || (!urlBackend && storedBackend === 'webgpu')
+
     // Create renderer
     renderer = new PolymorphicRenderer(canvas, {
         width,
         height,
         loopDuration: 10,
+        preferWebGPU,
         onError: (err) => {
             console.error('Render error:', err)
         }
@@ -1144,6 +1275,9 @@ async function startShader() {
                 liveInputsPanel.flashSnippet?.(snippet)
             }
         })
+
+        // Drag-and-drop image/video files anywhere → become a media() source
+        setupFileDrop(canvas)
         perfOverlay.init({ renderer, canvas })
         bpmClock.init({ renderer, bpm: 120 })
         bpmClock.onChange((bpm) => statusRow.set('bpm', { on: true, label: `${Math.round(bpm)} bpm` }))
@@ -1435,6 +1569,17 @@ function setupMenuBar() {
         if (mod && !e.shiftKey && !e.altKey && e.key === ';') {
             e.preventDefault()
             statusRow.toggle()
+        }
+        // Cmd/Ctrl+Shift+H toggles performance mode (hide all UI)
+        if (mod && e.shiftKey && !e.altKey && (e.key === 'h' || e.key === 'H')) {
+            e.preventDefault()
+            togglePerformanceMode()
+        }
+        // Esc exits performance mode
+        if (e.key === 'Escape' && document.body.classList.contains('performance-mode')) {
+            e.preventDefault()
+            document.body.classList.remove('performance-mode')
+            showToast('Performance mode off', 'info')
         }
     })
     gallery.init({
@@ -1816,6 +1961,65 @@ function setupCommandPalette() {
         keywords: ['help', 'keys', 'cheatsheet'],
         run: () => shortcutsDialog.open()
     })
+    commandPalette.registerAction({
+        id: 'performance-mode',
+        title: 'Toggle performance mode',
+        subtitle: 'Hide all UI for projection / clean recording (⌘⇧H)',
+        icon: 'visibility_off',
+        keywords: ['hide', 'fullscreen', 'projection', 'clean', 'algorave'],
+        run: () => togglePerformanceMode()
+    })
+    commandPalette.registerAction({
+        id: 'backend-webgpu',
+        title: 'Switch to WebGPU backend',
+        subtitle: 'Reload page using the WebGPU pipeline',
+        icon: 'memory',
+        keywords: ['gpu', 'wgsl', 'webgpu', 'backend'],
+        run: () => switchBackend('webgpu')
+    })
+    commandPalette.registerAction({
+        id: 'backend-webgl2',
+        title: 'Switch to WebGL2 backend',
+        subtitle: 'Reload page using the WebGL2 pipeline',
+        icon: 'view_in_ar',
+        keywords: ['gpu', 'glsl', 'webgl', 'backend'],
+        run: () => switchBackend('webgl2')
+    })
+    commandPalette.registerAction({
+        id: 'hush',
+        title: 'Hush — clear surfaces',
+        subtitle: 'Reset all o0..o7 surfaces (clear feedback state)',
+        icon: 'clear_all',
+        keywords: ['stop', 'clear', 'reset', 'hush', 'feedback'],
+        run: () => hushSurfaces()
+    })
+}
+
+/** Switch shader backend by setting a localStorage flag and reloading. */
+function switchBackend(target) {
+    try { localStorage.setItem('polymorphic-backend', target) } catch { /* ignore */ }
+    showToast(`Switching to ${target}…`, 'info')
+    setTimeout(() => window.location.reload(), 300)
+}
+
+/**
+ * Reset surfaces o0..o7 by recompiling. The pipeline reallocates surface
+ * textures on each compile, which clears any feedback state — equivalent to
+ * Hydra's hush(). We also briefly suspend the renderer to avoid showing a
+ * partial frame.
+ */
+async function hushSurfaces() {
+    if (!renderer || !dslEditor) return
+    const dsl = dslEditor.value
+    if (!dsl?.trim()) return
+    renderer.stop()
+    const r = await recompileShader()
+    if (r.success) {
+        renderer.start()
+        showToast('Surfaces cleared', 'success')
+    } else {
+        renderer.start()
+    }
 }
 
 // Start when DOM is ready

@@ -185,6 +185,18 @@
         body.live-inputs-open #dsl-overlay {
             max-width: calc(100vw - 280px - 2rem);
         }
+
+        /* Performance mode — hide every panel/menu/overlay so only the canvas remains */
+        body.performance-mode #menu,
+        body.performance-mode #dsl-overlay,
+        body.performance-mode #compiler-error,
+        body.performance-mode #doc-reader-panel,
+        body.performance-mode .live-inputs-panel,
+        body.performance-mode .perf-overlay,
+        body.performance-mode .bpm-indicator,
+        body.performance-mode .status-row,
+        body.performance-mode .recording-indicator { display: none !important; }
+        body.performance-mode { cursor: none; }
         
         /* Code editor fills the overlay */
         #dsl-editor {
