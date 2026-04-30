@@ -16,6 +16,17 @@ import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortable
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
+import { commandPalette } from './ui/commandPalette.js'
+import { insertAtCursor, getSelectionOrBlock, blockRangeAt } from './ui/editorActions.js'
+import { attachScrubber } from './ui/scrubber.js'
+import { liveInputsPanel } from './ui/liveInputsPanel.js'
+import { recorder } from './ui/recorder.js'
+import { perfOverlay } from './ui/perfOverlay.js'
+import { gallery, pickRandomExample } from './ui/gallery.js'
+import { snapshotHistory } from './ui/snapshotHistory.js'
+import { bpmClock } from './ui/bpm.js'
+import { statusRow } from './ui/statusRow.js'
+import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -32,6 +43,10 @@ const codeToggleBtn = document.getElementById('code-toggle-btn')
 const docToggleBtn = document.getElementById('doc-toggle-btn')
 const fullscreenBtnMenu = document.getElementById('fullscreen-btn-menu')
 const playPauseBtnMenu = document.getElementById('play-pause-btn-menu')
+const inputsToggleBtn = document.getElementById('inputs-toggle-btn')
+const recordToggleBtn = document.getElementById('record-toggle-btn')
+const perfToggleBtn = document.getElementById('perf-toggle-btn')
+const galleryBtn = document.getElementById('gallery-btn')
 
 // Menu items
 const resetMenuItem = document.getElementById('resetMenuItem')
@@ -792,15 +807,16 @@ function toggleDslOverlay() {
 }
 
 /**
- * Get DSL from URL parameters or use default
+ * Get DSL from URL parameters, embed, or null if there's no caller-provided sketch.
+ * Callers fall back to a random gallery example when this returns null.
  */
 function getDslFromUrl() {
-    // Check for embedded DSL first
     if (window.EMBEDDED_DSL) {
         return window.EMBEDDED_DSL
     }
     const params = new URLSearchParams(window.location.search)
-    return params.get('dsl') || DEFAULT_DSL
+    const dsl = params.get('dsl')
+    return dsl || null
 }
 
 /**
@@ -835,15 +851,16 @@ function resizeCanvas() {
 
 /**
  * Recompile the shader with current editor content
+ * @param {string} [overrideDsl] - if provided, compile this DSL instead of the editor value
  */
-async function recompileShader() {
+async function recompileShader(overrideDsl) {
     if (!renderer || !dslEditor) return { success: false, error: 'Not initialized' }
-    
-    const dsl = dslEditor.value
+
+    const dsl = overrideDsl ?? dslEditor.value
     if (!dsl.trim()) {
         return { success: false, error: 'Empty program' }
     }
-    
+
     try {
         // Preload any new fonts used in text effects
         await preloadFontsForDsl(dsl)
@@ -854,6 +871,47 @@ async function recompileShader() {
         console.error('Recompile error:', err)
         return { success: false, error: err.message }
     }
+}
+
+/**
+ * Build a runnable DSL program from a snippet (e.g., a single chain).
+ * - If snippet already has `search`, leave it alone.
+ * - Otherwise prepend a permissive search line.
+ * - If snippet has no `render(...)` call, append `render(o0)`.
+ */
+function buildRunnableProgram(snippet) {
+    const trimmed = snippet.trim()
+    if (!trimmed) return ''
+    let program = trimmed
+    // Auto-search if the snippet doesn't already declare one
+    if (!/^\s*search\s+/m.test(program)) {
+        program = 'search synth, filter, mixer, render, points\n\n' + program
+    }
+    // Ensure something will be rendered. If the snippet writes to o0..o7 but
+    // doesn't render, append a render(o0). We don't add render if the snippet
+    // already has one (renders multiple outputs is rare but allowed).
+    const hasRender = /^|\n\s*render\s*\(/.test(program) && /(^|\n)\s*render\s*\(/.test(program)
+    const writesO = /\.write\s*\(\s*o[0-7]/.test(program)
+    if (!hasRender) {
+        // Pick the lowest output index that's written to, default o0
+        const writes = [...program.matchAll(/\.write\s*\(\s*(o[0-7])/g)].map(m => m[1])
+        const target = writes.length ? writes[0] : 'o0'
+        if (writesO || writes.length) {
+            program += `\n\nrender(${target})`
+        }
+    }
+    return program
+}
+
+/**
+ * Compute 1-based line number for a character index in text.
+ */
+function lineNumberAt(text, index) {
+    let line = 1
+    for (let i = 0; i < index && i < text.length; i++) {
+        if (text[i] === '\n') line++
+    }
+    return line
 }
 
 /**
@@ -881,11 +939,46 @@ function setupDslEditor() {
             hotReloadTimeout = null
         }
         const result = await recompileShader()
+        const value = dslEditor.value || ''
+        const lineCount = value ? value.split('\n').length : 1
         if (!result.success) {
             console.warn('Manual compile failed:', result.error)
             showCompilerError(result.error)
+            dslEditor.flashLines?.(1, lineCount, { error: true })
         } else {
             hideCompilerError()
+            dslEditor.flashLines?.(1, lineCount)
+            if (value) snapshotHistory.push(value)
+        }
+    })
+
+    // Cmd+Shift+Enter / Alt+Enter — evaluate current block (or selection)
+    dslEditor.addEventListener('forceevalblock', async () => {
+        if (hotReloadTimeout) {
+            clearTimeout(hotReloadTimeout)
+            hotReloadTimeout = null
+        }
+        const sel = getSelectionOrBlock(dslEditor)
+        if (!sel || !sel.text.trim()) {
+            // Fall through to whole-program eval
+            const result = await recompileShader()
+            if (!result.success) showCompilerError(result.error)
+            else hideCompilerError()
+            return
+        }
+
+        const program = buildRunnableProgram(sel.text)
+        const result = await recompileShader(program)
+        const value = dslEditor.value || ''
+        const startLine = lineNumberAt(value, sel.start)
+        const endLine = lineNumberAt(value, Math.max(sel.start, sel.end - 1))
+        if (!result.success) {
+            console.warn('Block eval failed:', result.error)
+            showCompilerError(result.error)
+            dslEditor.flashLines?.(startLine, endLine, { error: true })
+        } else {
+            hideCompilerError()
+            dslEditor.flashLines?.(startLine, endLine)
         }
     })
 }
@@ -898,7 +991,7 @@ function scheduleHotReload() {
     if (hotReloadTimeout) {
         clearTimeout(hotReloadTimeout)
     }
-    
+
     // Schedule recompile 500ms after typing stops
     hotReloadTimeout = setTimeout(async () => {
         hotReloadTimeout = null
@@ -908,8 +1001,76 @@ function scheduleHotReload() {
             showCompilerError(result.error)
         } else {
             hideCompilerError()
+            // Snapshot the successful program state and stamp the URL so the
+            // current sketch is shareable just by copying the URL.
+            if (dslEditor?.value) {
+                snapshotHistory.push(dslEditor.value)
+                stampUrl(dslEditor.value)
+            }
         }
     }, 500)
+}
+
+/**
+ * Update the browser URL to encode the current DSL.
+ * Uses ?dsl= for short programs (<2KB after encoding) so the URL stays
+ * pasteable; for longer programs we leave the URL alone (the user can use
+ * "Share publicly" to get a short link instead).
+ *
+ * Throttled to once per 500ms to avoid spamming history entries while typing.
+ */
+let urlStampTimeout = null
+function stampUrl(dsl) {
+    if (urlStampTimeout) return
+    urlStampTimeout = setTimeout(() => {
+        urlStampTimeout = null
+        try {
+            const encoded = encodeURIComponent(dsl)
+            if (encoded.length > 2000) return  // too big — leave URL alone
+            const url = new URL(window.location.href)
+            url.searchParams.set('dsl', dsl)
+            // Use replaceState so we don't blow up the browser history with
+            // every keystroke — the snapshot history covers in-app rewinds.
+            window.history.replaceState(null, '', url)
+        } catch (err) {
+            console.debug('[Polymorphic] URL stamp failed:', err)
+        }
+    }, 500)
+}
+
+/**
+ * Step backward in snapshot history (older successful program).
+ */
+function snapshotBack() {
+    const prev = snapshotHistory.back()
+    if (prev != null && dslEditor) {
+        snapshotHistory.silence(() => {
+            dslEditor.value = prev
+        })
+        // Recompile immediately, but don't re-snapshot
+        if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
+        recompileShader().then(r => {
+            if (!r.success) showCompilerError(r.error)
+            else hideCompilerError()
+        })
+    }
+}
+
+/**
+ * Step forward in snapshot history (newer successful program).
+ */
+function snapshotForward() {
+    const next = snapshotHistory.forward()
+    if (next != null && dslEditor) {
+        snapshotHistory.silence(() => {
+            dslEditor.value = next
+        })
+        if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
+        recompileShader().then(r => {
+            if (!r.success) showCompilerError(r.error)
+            else hideCompilerError()
+        })
+    }
 }
 
 /**
@@ -939,11 +1100,19 @@ async function startShader() {
     if (!dsl) {
         dsl = getDslFromUrl()
     }
-    
+
+    // Fresh visit (no sketch in URL): boot a random gallery example.
+    // Falls back to the bundled DEFAULT_DSL if the gallery fetch fails.
     if (!dsl) {
-        showError('No shader program specified')
-        return
+        try {
+            const example = await pickRandomExample()
+            if (example?.dsl) dsl = example.dsl
+        } catch (err) {
+            console.warn('[Polymorphic] Random example load failed:', err)
+        }
     }
+
+    if (!dsl) dsl = DEFAULT_DSL
 
     showLoading()
 
@@ -966,6 +1135,38 @@ async function startShader() {
 
         // Initialize the renderer
         await renderer.init()
+
+        // Initialize panels that depend on the renderer
+        liveInputsPanel.init({
+            renderer,
+            onInsert: (snippet) => {
+                if (dslEditor) insertAtCursor(dslEditor, snippet)
+                liveInputsPanel.flashSnippet?.(snippet)
+            }
+        })
+        perfOverlay.init({ renderer, canvas })
+        bpmClock.init({ renderer, bpm: 120 })
+        bpmClock.onChange((bpm) => statusRow.set('bpm', { on: true, label: `${Math.round(bpm)} bpm` }))
+        statusRow.init({
+            renderer,
+            hooks: {
+                mic: () => commandPalette.open(),
+                midi: () => commandPalette.open(),
+                source: () => liveInputsPanel.open(),
+                recording: () => recorder.toggle(),
+                bpm: () => bpmClock.tap(),
+                fps: () => perfOverlay.toggle()
+            }
+        })
+        // Wire recorder state into status row
+        recorder.init({
+            canvas,
+            onChange: ({ recording }) => {
+                recordToggleBtn?.classList.toggle('recording', recording)
+                recordToggleBtn?.setAttribute('data-title', recording ? 'stop recording' : 'record')
+                statusRow.setRecording(recording)
+            }
+        })
 
         // Compile the DSL program
         const result = await renderer.compile(dsl)
@@ -1187,6 +1388,64 @@ function setupMenuBar() {
     if (playPauseBtnMenu) {
         playPauseBtnMenu.addEventListener('click', togglePlayPause)
     }
+
+    if (inputsToggleBtn) {
+        inputsToggleBtn.addEventListener('click', () => {
+            liveInputsPanel.toggle()
+            inputsToggleBtn.classList.toggle('active', liveInputsPanel.isOpen())
+        })
+    }
+
+    if (recordToggleBtn) {
+        recordToggleBtn.addEventListener('click', () => {
+            if (recorder.isRecording()) recorder.stop()
+            else recorder.start()
+        })
+    }
+
+    if (perfToggleBtn) {
+        perfToggleBtn.addEventListener('click', () => {
+            perfOverlay.toggle()
+            perfToggleBtn.classList.toggle('active', perfOverlay.isOpen())
+        })
+    }
+
+    if (galleryBtn) {
+        galleryBtn.addEventListener('click', () => {
+            gallery.open().catch(err => console.error('[Gallery] open failed:', err))
+        })
+    }
+
+    // Snapshot history shortcuts (Cmd/Ctrl+Alt+Left/Right)
+    document.addEventListener('keydown', (e) => {
+        const mod = e.metaKey || e.ctrlKey
+        if (mod && e.altKey) {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault()
+                snapshotBack()
+                return
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault()
+                snapshotForward()
+                return
+            }
+        }
+        // Cmd/Ctrl+; toggles the status row
+        if (mod && !e.shiftKey && !e.altKey && e.key === ';') {
+            e.preventDefault()
+            statusRow.toggle()
+        }
+    })
+    gallery.init({
+        onLoad: (example) => {
+            if (!dslEditor) return
+            dslEditor.value = example.dsl
+            originalDsl = example.dsl
+            scheduleHotReload()
+            dslEditor.focus()
+        }
+    })
     
     // Listen for fullscreen changes
     document.addEventListener('fullscreenchange', () => {
@@ -1258,9 +1517,305 @@ function init() {
     
     // Set up DSL editor with hot reload
     setupDslEditor()
-    
+
+    // Inline number scrubbing — Alt+drag any numeric literal
+    if (dslEditor) {
+        let scrubbing = false
+        attachScrubber(dslEditor, {
+            onScrubStart: () => { scrubbing = true },
+            onScrubEnd: () => { scrubbing = false },
+            recompile: async () => {
+                // While scrubbing we want immediate compile; debounce is too slow
+                if (hotReloadTimeout) {
+                    clearTimeout(hotReloadTimeout)
+                    hotReloadTimeout = null
+                }
+                const r = await recompileShader()
+                if (!r.success) showCompilerError(r.error)
+                else hideCompilerError()
+            }
+        })
+    }
+
+    // Initialize the command palette (Cmd/Ctrl+K)
+    setupCommandPalette()
+
+    // Shortcuts dialog (?)
+    shortcutsDialog.init()
+
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()
+}
+
+/**
+ * Initialize the command palette and register the basic action set.
+ */
+function setupCommandPalette() {
+    commandPalette.init({
+        onInsert: (snippet, opts) => {
+            if (!dslEditor) return
+            if (opts?.as === 'starter') {
+                // Starter snippets are full programs — replace the editor content
+                dslEditor.value = snippet
+                scheduleHotReload()
+                dslEditor.focus()
+            } else {
+                insertAtCursor(dslEditor, snippet)
+            }
+        }
+    })
+
+    // Register top-level actions
+    commandPalette.registerAction({
+        id: 'eval-all',
+        title: 'Evaluate whole program',
+        subtitle: 'Compile and run the entire editor',
+        icon: 'play_arrow',
+        keywords: ['compile', 'run', 'all', 'recompile'],
+        run: () => dslEditor?.dispatchEvent(new CustomEvent('forcerecompile', { bubbles: true, composed: true }))
+    })
+    commandPalette.registerAction({
+        id: 'eval-block',
+        title: 'Evaluate current block',
+        subtitle: 'Run the paragraph under the cursor (or current selection)',
+        icon: 'play_circle',
+        keywords: ['block', 'eval', 'paragraph', 'selection'],
+        run: () => dslEditor?.dispatchEvent(new CustomEvent('forceevalblock', { bubbles: true, composed: true }))
+    })
+    commandPalette.registerAction({
+        id: 'reset',
+        title: 'Reset to original',
+        subtitle: 'Restore the program loaded at startup',
+        icon: 'restart_alt',
+        keywords: ['original', 'undo'],
+        run: () => resetDsl()
+    })
+    commandPalette.registerAction({
+        id: 'fullscreen',
+        title: 'Toggle fullscreen',
+        icon: 'fullscreen',
+        keywords: ['expand', 'large'],
+        run: () => toggleFullscreen()
+    })
+    commandPalette.registerAction({
+        id: 'play-pause',
+        title: 'Play / pause animation',
+        icon: 'pause',
+        keywords: ['stop', 'animate'],
+        run: () => togglePlayPause()
+    })
+    commandPalette.registerAction({
+        id: 'toggle-editor',
+        title: 'Toggle code editor',
+        icon: 'code',
+        keywords: ['hide', 'show', 'visible'],
+        run: () => toggleDslOverlay()
+    })
+    commandPalette.registerAction({
+        id: 'toggle-docs',
+        title: 'Toggle documentation panel',
+        icon: 'menu_book',
+        keywords: ['help', 'reference'],
+        run: () => {
+            const visible = toggleDocReader()
+            if (docToggleBtn) docToggleBtn.classList.toggle('active', visible)
+        }
+    })
+    commandPalette.registerAction({
+        id: 'save-png',
+        title: 'Save canvas as PNG',
+        icon: 'image',
+        keywords: ['screenshot', 'export'],
+        run: () => savePNG?.click?.()
+    })
+    commandPalette.registerAction({
+        id: 'save-jpg',
+        title: 'Save canvas as JPG',
+        icon: 'photo_camera',
+        keywords: ['screenshot', 'export'],
+        run: () => saveJPG?.click?.()
+    })
+    commandPalette.registerAction({
+        id: 'share',
+        title: 'Share program publicly',
+        icon: 'share',
+        keywords: ['link', 'url', 'export'],
+        run: () => shareProgram?.click?.()
+    })
+    commandPalette.registerAction({
+        id: 'load-program',
+        title: 'Load saved program',
+        icon: 'folder_open',
+        run: () => openProgramModal('load')
+    })
+    commandPalette.registerAction({
+        id: 'save-program',
+        title: 'Save program',
+        icon: 'save',
+        run: () => openProgramModal('save')
+    })
+    commandPalette.registerAction({
+        id: 'docs-search',
+        title: 'Open documentation',
+        icon: 'menu_book',
+        run: () => {
+            showDocReader()
+            docToggleBtn?.classList.add('active')
+        }
+    })
+    commandPalette.registerAction({
+        id: 'live-inputs',
+        title: 'Toggle live inputs panel',
+        subtitle: 'Audio FFT meters, MIDI CCs, oscillator snippets',
+        icon: 'tune',
+        keywords: ['audio', 'midi', 'mic', 'osc', 'oscillator'],
+        run: () => {
+            liveInputsPanel.toggle()
+            inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
+        }
+    })
+    commandPalette.registerAction({
+        id: 'mic-enable',
+        title: 'Enable microphone (audio FFT)',
+        subtitle: 'Use a.low / a.mid / a.high / a.vol in your DSL',
+        icon: 'mic',
+        keywords: ['audio', 'fft', 'microphone'],
+        run: () => {
+            liveInputsPanel.open()
+            inputsToggleBtn?.classList.add('active')
+            const btn = document.querySelector('.live-inputs-panel [data-id=audio-toggle]')
+            if (btn && !btn.classList.contains('active')) btn.click()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'midi-enable',
+        title: 'Connect MIDI device',
+        subtitle: 'Live-map any MIDI CC into your DSL',
+        icon: 'piano',
+        keywords: ['midi', 'controller', 'cc'],
+        run: () => {
+            liveInputsPanel.open()
+            inputsToggleBtn?.classList.add('active')
+            const btn = document.querySelector('.live-inputs-panel [data-id=midi-toggle]')
+            if (btn && !btn.classList.contains('active')) btn.click()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'record',
+        title: 'Start / stop recording',
+        subtitle: 'Capture canvas as WebM video',
+        icon: 'fiber_manual_record',
+        keywords: ['record', 'video', 'webm', 'capture'],
+        run: () => {
+            if (recorder.isRecording()) recorder.stop()
+            else recorder.start()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'webcam',
+        title: 'Use webcam as media source',
+        subtitle: 'Stream the camera into your sketch',
+        icon: 'videocam',
+        keywords: ['camera', 'video', 'cam'],
+        run: () => {
+            liveInputsPanel.open()
+            inputsToggleBtn?.classList.add('active')
+            document.querySelector('.live-inputs-panel .source-btn[data-source="webcam"]')?.click()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'screen-capture',
+        title: 'Use screen capture as media source',
+        icon: 'screen_share',
+        keywords: ['screen', 'display', 'capture', 'window'],
+        run: () => {
+            liveInputsPanel.open()
+            inputsToggleBtn?.classList.add('active')
+            document.querySelector('.live-inputs-panel .source-btn[data-source="screen"]')?.click()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'perf',
+        title: 'Toggle performance overlay',
+        subtitle: 'FPS, frame time, jitter, render passes',
+        icon: 'speed',
+        keywords: ['fps', 'performance', 'stats', 'profiler'],
+        run: () => {
+            perfOverlay.toggle()
+            perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
+        }
+    })
+    commandPalette.registerAction({
+        id: 'gallery',
+        title: 'Open inspiration gallery',
+        subtitle: 'Browse curated example sketches',
+        icon: 'collections',
+        keywords: ['examples', 'inspiration', 'sketches', 'browse'],
+        run: () => gallery.open()
+    })
+    commandPalette.registerAction({
+        id: 'shuffle',
+        title: 'Shuffle to a random example',
+        subtitle: 'Load a random sketch from the gallery',
+        icon: 'shuffle',
+        keywords: ['random', 'next', 'roll'],
+        run: async () => {
+            const ex = await pickRandomExample()
+            if (ex && dslEditor) {
+                dslEditor.value = ex.dsl
+                originalDsl = ex.dsl
+                scheduleHotReload()
+                dslEditor.focus()
+            }
+        }
+    })
+    commandPalette.registerAction({
+        id: 'snapshot-back',
+        title: 'Step back through program history',
+        subtitle: 'Cmd/Ctrl+Alt+← — older successful program',
+        icon: 'undo',
+        keywords: ['undo', 'history', 'previous'],
+        run: () => snapshotBack()
+    })
+    commandPalette.registerAction({
+        id: 'snapshot-forward',
+        title: 'Step forward through program history',
+        subtitle: 'Cmd/Ctrl+Alt+→ — newer successful program',
+        icon: 'redo',
+        keywords: ['redo', 'history', 'next'],
+        run: () => snapshotForward()
+    })
+    commandPalette.registerAction({
+        id: 'bpm-tap',
+        title: 'Tap tempo',
+        subtitle: 'Press T to tap, or use this action',
+        icon: 'touch_app',
+        keywords: ['bpm', 'tempo', 'beat', 'clock'],
+        run: () => bpmClock.tap()
+    })
+    commandPalette.registerAction({
+        id: 'bpm-toggle',
+        title: 'Toggle BPM indicator',
+        icon: 'metronome',
+        keywords: ['bpm', 'tempo', 'clock', 'beat'],
+        run: () => bpmClock.toggle()
+    })
+    commandPalette.registerAction({
+        id: 'status-row',
+        title: 'Toggle status row',
+        subtitle: 'Bottom-edge live state strip',
+        icon: 'view_agenda',
+        keywords: ['status', 'bar', 'bottom'],
+        run: () => statusRow.toggle()
+    })
+    commandPalette.registerAction({
+        id: 'shortcuts',
+        title: 'Show keyboard shortcuts',
+        subtitle: 'Press ? to open at any time',
+        icon: 'keyboard',
+        keywords: ['help', 'keys', 'cheatsheet'],
+        run: () => shortcutsDialog.open()
+    })
 }
 
 // Start when DOM is ready

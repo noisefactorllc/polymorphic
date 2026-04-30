@@ -71,59 +71,48 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: calc(590px - 0.5em);
+    right: 0;
+    width: auto;
     height: var(--ui-titlebar-height);
     z-index: 2000;
-    display: grid;
-    grid-template-columns: 1fr auto;
+    display: flex;
     align-items: center;
-    border-radius: 0 0 var(--ui-corner-radius) 0;
+    justify-content: space-between;
+    border-radius: 0;
     font-family: 'Nunito', 'Nunito Block';
-    font-size: 16px;
+    font-size: 15px;
 }
 
 #menuBackdrop {
     position: absolute;
     inset: 0;
-    --ui-titlebar-highlight: color-mix(in srgb,
-            var(--menu-bg) var(--ui-chrome-highlight-blend),
-            white var(--ui-chrome-highlight-tint));
-    --ui-titlebar-shadow: color-mix(in srgb,
-            var(--menu-bg) var(--ui-chrome-shadow-blend),
-            black var(--ui-chrome-shadow-shade));
-    --ui-titlebar-gradient: linear-gradient(180deg,
-            var(--ui-titlebar-highlight) 0%,
-            var(--menu-bg) 55%,
-            var(--ui-titlebar-shadow) 100%);
-    background-color: var(--menu-bg);
-    background-image: var(--ui-titlebar-gradient);
-    backdrop-filter: var(--glass-blur-strength);
-    -webkit-backdrop-filter: var(--glass-blur-strength);
+    background-color: rgba(8, 10, 14, 0.55);
+    background-image: linear-gradient(
+        180deg,
+        rgba(20, 22, 30, 0.55) 0%,
+        rgba(8, 10, 14, 0.55) 100%
+    );
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     pointer-events: none;
     z-index: -1;
-    grid-column: 1 / -1;
-    grid-row: 1;
-    border-radius: 0 0 var(--ui-corner-radius) 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 #menuLeft {
-    grid-column: 1;
-    grid-row: 1;
-    padding-left: 0.75em;
+    padding-left: 0.85em;
     display: flex;
-    gap: 1.5em;
+    gap: 1.25em;
     color: var(--menu-text);
     align-items: center;
     height: 100%;
 }
 
 #menuRight {
-    grid-column: 2;
-    grid-row: 1;
-    padding-right: 1em;
+    padding-right: 0.85em;
     display: flex;
     justify-content: flex-end;
-    gap: 1em;
+    gap: 0.6em;
     color: var(--menu-text);
     align-items: center;
     height: 100%;
@@ -251,20 +240,23 @@
     border: none;
     color: var(--menu-text);
     cursor: pointer;
-    padding: 0;
+    padding: 0.18em 0.32em;
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    transition: color 0.15s ease;
-    font-size: 1.25em;
+    border-radius: 6px;
+    transition: color 0.15s ease, background 0.15s ease;
+    font-size: 1.2em;
 }
 
 .menu-icon-btn:hover {
     color: var(--menu-text-hover);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .menu-icon-btn.active {
-    color: var(--menu-accent);
+    color: #a5b8ff;
+    background: rgba(165, 184, 255, 0.12);
 }
 
 /* Material symbols font for icons */

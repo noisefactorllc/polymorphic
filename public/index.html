@@ -180,6 +180,11 @@
         #dsl-overlay.doc-open {
             right: calc(50% + 1em + 0.5em);
         }
+
+        /* Push editor over when live inputs panel is open */
+        body.live-inputs-open #dsl-overlay {
+            max-width: calc(100vw - 280px - 2rem);
+        }
         
         /* Code editor fills the overlay */
         #dsl-editor {
@@ -233,6 +238,7 @@
             bottom: 1em;
             width: 50%;
             max-width: calc(100% - 590px - 1em);
+            transition: right 0.18s ease, max-width 0.18s ease;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -246,6 +252,12 @@
         
         #doc-reader-panel.visible {
             display: flex;
+        }
+
+        /* When the live-inputs panel is open, narrow the docs panel so they don't overlap */
+        body.live-inputs-open #doc-reader-panel {
+            right: calc(280px + 1em + 0.75rem);
+            max-width: calc(100% - 590px - 280px - 2em);
         }
         
         /* Doc Reader Header */
@@ -1008,6 +1020,10 @@
         </div>
         
         <div id="menuRight">
+            <button id="gallery-btn" class="menu-icon-btn icon-material tooltip" data-title="gallery" aria-label="Open inspiration gallery">collections</button>
+            <button id="inputs-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="live inputs" aria-label="Toggle live inputs">tune</button>
+            <button id="record-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="record" aria-label="Toggle recording">fiber_manual_record</button>
+            <button id="perf-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="performance" aria-label="Toggle performance overlay">speed</button>
             <button id="doc-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="documentation" aria-label="Toggle documentation">info</button>
             <button id="code-toggle-btn" class="menu-icon-btn icon-material tooltip" data-title="code editor" aria-label="Toggle code view">code</button>
             <button id="fullscreen-btn-menu" class="menu-icon-btn icon-material tooltip" data-title="fullscreen" aria-label="Toggle fullscreen">fullscreen</button>
