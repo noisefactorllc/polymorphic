@@ -245,11 +245,11 @@
         /* Doc Reader Panel */
         #doc-reader-panel {
             position: fixed;
-            top: 1em;
-            right: 1em;
-            bottom: 1em;
+            top: 1rem;
+            right: 1rem;
+            bottom: 1rem;
             width: 50%;
-            max-width: calc(100% - 590px - 1em);
+            max-width: calc(100% - 590px - 1rem);
             transition: right 0.18s ease, max-width 0.18s ease;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(16px);
@@ -266,10 +266,15 @@
             display: flex;
         }
 
-        /* When the live-inputs panel is open, narrow the docs panel so they don't overlap */
+        /* When the live-inputs panel is open, narrow the docs panel so its
+           right edge sits flush against the live-inputs panel's left edge.
+           live-inputs is at right:1rem width 280px, so docs' right offset is
+           280px + 1rem (gap between panels) + 1rem (live-inputs' own right margin)
+           = 280px + 2rem. Uses rem to anchor on the root font-size, so panels
+           with their own (smaller) font-size still resolve to the same offset. */
         body.live-inputs-open #doc-reader-panel {
-            right: calc(280px + 1em + 0.75rem);
-            max-width: calc(100% - 590px - 280px - 2em);
+            right: calc(280px + 2rem);
+            max-width: calc(100% - 590px - 280px - 3rem);
         }
         
         /* Doc Reader Header */

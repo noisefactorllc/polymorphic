@@ -22,10 +22,10 @@ if (!document.getElementById(STYLES_ID)) {
     style.textContent = `
         .live-inputs-panel {
             position: fixed;
-            top: calc(2.25em + 0.75rem);
-            right: 0.75rem;
+            top: 1rem;
+            right: 1rem;
+            bottom: 1rem;
             width: 280px;
-            max-height: calc(100vh - 4em);
             background: rgba(10, 12, 17, 0.92);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -277,11 +277,12 @@ if (!document.getElementById(STYLES_ID)) {
         }
         @media (max-width: 768px) {
             .live-inputs-panel {
-                top: 3em;
-                right: 0.5rem;
-                left: 0.5rem;
+                top: 1rem;
+                right: 1rem;
+                bottom: 1rem;
+                left: 1rem;
                 width: auto;
-                max-width: calc(100% - 1rem);
+                max-width: calc(100% - 2rem);
             }
         }
     `

@@ -13,8 +13,8 @@ if (!document.getElementById(STYLES_ID)) {
     style.textContent = `
         .perf-overlay {
             position: fixed;
-            right: 0.75rem;
-            bottom: 0.75rem;
+            right: 1rem;
+            bottom: 1rem;
             background: rgba(10, 12, 17, 0.85);
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 6px;
@@ -58,7 +58,7 @@ if (!document.getElementById(STYLES_ID)) {
         .perf-graph-bar.over { background: #ff6b6b; }
         .perf-graph-bar.warn { background: #facc15; }
         body.live-inputs-open .perf-overlay {
-            right: calc(280px + 1em + 0.75rem);
+            right: calc(280px + 2rem);
         }
     `
     document.head.appendChild(style)
