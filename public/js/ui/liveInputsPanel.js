@@ -446,6 +446,41 @@ class LiveInputsPanel {
         this._videoEl.playsInline = true
         document.body.appendChild(this._videoEl)
         this._sourceFrameLoop = null
+        // Bumped each time _startTextureLoop is called so old closures can detect
+        // they've been superseded and stop scheduling.
+        this._sourceLoopGen = 0
+    }
+
+    /**
+     * Use a video file (e.g., from a drop) as the active media source.
+     * Public counterpart to the internal _activateSource('video') path —
+     * does not invoke the file picker since the caller already has the file.
+     * @param {File} file
+     */
+    async useVideoFile(file) {
+        if (!file) return
+        await this.useObjectUrl(URL.createObjectURL(file), file.name)
+    }
+
+    /**
+     * Use an arbitrary object URL (or other video URL) as the active source.
+     * @param {string} url
+     * @param {string} [label]
+     */
+    async useObjectUrl(url, label = 'video') {
+        if (!url) return
+        this.open()
+        this._stopActiveSource()
+        this._currentObjectUrl = url
+        this._videoEl.srcObject = null
+        this._videoEl.src = url
+        this._videoEl.loop = true
+        try { await this._videoEl.play() } catch { /* may need user gesture */ }
+        this._startTextureLoop(this._videoEl)
+        this._setSourceStatus(`video: ${label}`, 'connected')
+        this._maybeInsertMediaSnippet()
+        const btn = this._panel?.querySelector('.source-btn[data-source="video"]')
+        if (btn) this._markActiveSourceBtn(btn)
     }
 
     /**
@@ -512,6 +547,8 @@ class LiveInputsPanel {
     }
 
     _stopActiveSource() {
+        // Bump the generation so any in-flight texture loop closure stops scheduling.
+        this._sourceLoopGen++
         if (this._sourceFrameLoop) {
             cancelAnimationFrame(this._sourceFrameLoop)
             this._sourceFrameLoop = null
@@ -555,30 +592,20 @@ class LiveInputsPanel {
     _startTextureLoop(videoEl) {
         const innerRenderer = this._innerRenderer
         if (!innerRenderer || !videoEl) return
-        let stepIndex = null
-        let stepHint = 0
+        // Generation token — captured by closure. If _stopActiveSource bumps the
+        // counter (or another _startTextureLoop runs), this loop self-cancels on
+        // its next frame.
+        const generation = ++this._sourceLoopGen
 
         const update = () => {
+            if (generation !== this._sourceLoopGen) return
             this._sourceFrameLoop = requestAnimationFrame(update)
             if (videoEl.paused || videoEl.videoWidth === 0) return
-            // We try imageTex_step_0 first; if rendering with media() at a different
-            // step, we walk a few candidate indices. For most sketches there is
-            // only one media() call.
+            // For now we always write to step 0 — Polymorphic sketches with a
+            // single media() call always end up there. Multi-media support is a
+            // followup that needs an engine-level "find media step" accessor.
             try {
-                if (stepIndex == null) {
-                    // Probe stepIndex 0..7
-                    for (let i = 0; i < 8; i++) {
-                        const id = `imageTex_step_${i}`
-                        if (innerRenderer._pipeline?.textureBindings?.has?.(id)
-                            || innerRenderer._pipeline?.textures?.[id]
-                            || true) { // we update unconditionally; pipeline silently ignores missing IDs
-                            stepIndex = i
-                            break
-                        }
-                    }
-                    if (stepIndex == null) stepIndex = stepHint
-                }
-                innerRenderer.updateTextureFromSource?.(`imageTex_step_${stepIndex}`, videoEl, { flipY: false })
+                innerRenderer.updateTextureFromSource?.('imageTex_step_0', videoEl, { flipY: false })
             } catch { /* ignore */ }
         }
         update()

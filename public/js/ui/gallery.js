@@ -188,6 +188,7 @@ class Gallery {
         this._open = false
         this._onLoad = () => {}
         this._onShuffle = () => {}
+        this._escHandler = null
     }
 
     /**
@@ -214,6 +215,10 @@ class Gallery {
         const ov = this._overlay
         setTimeout(() => ov?.remove(), 200)
         this._overlay = null
+        if (this._escHandler) {
+            document.removeEventListener('keydown', this._escHandler)
+            this._escHandler = null
+        }
     }
 
     isOpen() { return this._open }
@@ -250,13 +255,10 @@ class Gallery {
         this._overlay.addEventListener('click', (e) => {
             if (e.target === this._overlay) this.close()
         })
-        const escHandler = (e) => {
-            if (e.key === 'Escape') {
-                this.close()
-                document.removeEventListener('keydown', escHandler)
-            }
+        this._escHandler = (e) => {
+            if (e.key === 'Escape') this.close()
         }
-        document.addEventListener('keydown', escHandler)
+        document.addEventListener('keydown', this._escHandler)
     }
 
     _buildCard(ex) {

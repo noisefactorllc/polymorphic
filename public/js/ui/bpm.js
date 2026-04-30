@@ -213,8 +213,14 @@ class BpmClock {
     _loop() {
         const tick = () => {
             this._raf = requestAnimationFrame(tick)
+            // Skip all DOM work when the indicator is hidden — saves the cost
+            // of the per-beat class toggle + setTimeout while still keeping the
+            // beat counter in sync if/when the indicator is shown again.
+            if (this._el?.classList.contains('hidden')) {
+                this._lastBeatIndex = Math.floor((this._renderer?.lastTime ?? 0) * 4)
+                return
+            }
             const lastTime = this._renderer?.lastTime ?? 0 // 0..1 normalized
-            const beatPhase = (lastTime * 4) % 1 // 4 beats per bar
             const currentBeat = Math.floor(lastTime * 4)
             const isBeat = currentBeat !== this._lastBeatIndex
             if (isBeat) {

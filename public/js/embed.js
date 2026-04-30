@@ -73,6 +73,12 @@ let originalDsl = ''
 // Playback state
 let isPlaying = false
 
+// True when the current sketch was loaded via ?code= (a sharing URL). When
+// true, we skip URL-stamping on each compile so we don't accidentally
+// shadow the short link with a verbose ?dsl=. The user can still manually
+// share via the share modal.
+let loadedFromShareCode = false
+
 // =========================================================================
 // Imported Effect Storage (for Edit in Noisedeck)
 // =========================================================================
@@ -439,7 +445,9 @@ function setupFileDrop() {
     dropTarget.addEventListener('dragover', (e) => {
         if (hasDraggedFiles(e)) e.preventDefault()
     })
-    dropTarget.addEventListener('dragleave', () => {
+    dropTarget.addEventListener('dragleave', (e) => {
+        // Match the dragenter guard so non-files drags don't underflow the counter
+        if (!hasDraggedFiles(e)) return
         dragCounter = Math.max(0, dragCounter - 1)
         if (dragCounter === 0) overlay.style.display = 'none'
     })
@@ -477,24 +485,8 @@ async function handleDroppedFile(file) {
         return
     }
     if (file.type.startsWith('video/')) {
-        // Hand off to live inputs panel — opens the video source path
-        liveInputsPanel.open()
-        const url = URL.createObjectURL(file)
-        const ev = new CustomEvent('polymorphic-drop-video', { detail: { url, name: file.name } })
-        window.dispatchEvent(ev)
-        showToast(`Drop a moment — using video: ${file.name}`, 'info')
-        // Forward to liveInputsPanel directly
-        if (liveInputsPanel._videoEl) {
-            liveInputsPanel._stopActiveSource?.()
-            liveInputsPanel._videoEl.srcObject = null
-            liveInputsPanel._videoEl.src = url
-            liveInputsPanel._videoEl.loop = true
-            try { await liveInputsPanel._videoEl.play() } catch { /* ignore */ }
-            liveInputsPanel._currentObjectUrl = url
-            liveInputsPanel._startTextureLoop?.(liveInputsPanel._videoEl)
-            liveInputsPanel._setSourceStatus?.(`video: ${file.name}`, 'connected')
-            liveInputsPanel._maybeInsertMediaSnippet?.()
-        }
+        await liveInputsPanel.useVideoFile(file)
+        showToast(`Using video: ${file.name}`, 'success')
         return
     }
     showToast(`Unsupported file type: ${file.type || 'unknown'}`, 'warning')
@@ -1136,21 +1128,34 @@ function scheduleHotReload() {
 
 /**
  * Update the browser URL to encode the current DSL.
- * Uses ?dsl= for short programs (<2KB after encoding) so the URL stays
- * pasteable; for longer programs we leave the URL alone (the user can use
- * "Share publicly" to get a short link instead).
+ * Skipped entirely when the page was loaded via ?code= (we don't want to
+ * shadow a short link with a verbose ?dsl=).
+ *
+ * Uses ?dsl= for short programs (encoded under 2KB) so the URL stays
+ * pasteable. For oversize programs, we strip any stale ?dsl= so the URL
+ * doesn't carry an old, smaller version.
  *
  * Throttled to once per 500ms to avoid spamming history entries while typing.
  */
 let urlStampTimeout = null
 function stampUrl(dsl) {
+    if (loadedFromShareCode) return
     if (urlStampTimeout) return
     urlStampTimeout = setTimeout(() => {
         urlStampTimeout = null
         try {
-            const encoded = encodeURIComponent(dsl)
-            if (encoded.length > 2000) return  // too big — leave URL alone
             const url = new URL(window.location.href)
+            const oversize = encodeURIComponent(dsl).length > 2000
+            if (oversize) {
+                // Drop any stale ?dsl= so the URL doesn't look right but
+                // load wrong on next paste. Other params (?backend, etc.)
+                // are preserved.
+                if (url.searchParams.has('dsl')) {
+                    url.searchParams.delete('dsl')
+                    window.history.replaceState(null, '', url)
+                }
+                return
+            }
             url.searchParams.set('dsl', dsl)
             // Use replaceState so we don't blow up the browser history with
             // every keystroke — the snapshot history covers in-app rewinds.
@@ -1206,6 +1211,7 @@ async function startShader() {
     // Check for ?code= parameter to load from sharing API
     const code = getCodeFromUrl()
     if (code) {
+        loadedFromShareCode = true
         showLoading()
         try {
             // Load composition and register any portable effects

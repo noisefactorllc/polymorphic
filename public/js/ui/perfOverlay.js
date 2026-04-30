@@ -114,6 +114,13 @@ class PerfOverlay {
         if (this._open) return
         this._open = true
         this._el?.classList.add('visible')
+        // Reset the frame-time graph so it starts from a clean state instead of
+        // showing whatever stale buffer was left from the previous session.
+        this._frameTimes.fill(0)
+        this._frameTimesIdx = 0
+        this._frameTimesCount = 0
+        this._lastFrameStart = 0
+        this._lastSampleTime = 0
         this._loop()
     }
 

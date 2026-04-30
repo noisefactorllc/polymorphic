@@ -98,6 +98,11 @@ export function getSelectionOrBlock(editor) {
 /**
  * Find the numeric literal under (or adjacent to) the given cursor index.
  * Used by the inline scrubber.
+ *
+ * Recognises plain integers (`42`), decimals (`3.14`), trailing-dot
+ * literals (`2.`), leading-dot literals (`.5`), leading minus, and scientific
+ * notation (`1.5e-3`, `2E10`).
+ *
  * @param {string} text
  * @param {number} cursor
  * @returns {{start: number, end: number, value: number, raw: string} | null}
@@ -105,22 +110,31 @@ export function getSelectionOrBlock(editor) {
 export function numberLiteralAt(text, cursor) {
     const len = text.length
     if (cursor < 0 || cursor > len) return null
-    // Expand outward while we're on digits / . / -
+    // Expand outward while we're on digits, dot, or scientific-notation chars (e/E/+/-)
     let s = cursor
     let e = cursor
-    const isNumChar = (ch) => /[0-9.]/.test(ch)
-    // Walk back
-    while (s > 0 && isNumChar(text[s - 1])) s--
+    const isNumCharCore = (ch) => /[0-9.]/.test(ch)
+    // Walk back through digits/dots
+    while (s > 0 && isNumCharCore(text[s - 1])) s--
     // Allow a leading minus if it's the start of a number (preceded by an operator/whitespace/punct)
     if (s > 0 && text[s - 1] === '-') {
         const prev = s >= 2 ? text[s - 2] : ' '
         if (!/[A-Za-z0-9_]/.test(prev)) s--
     }
-    // Walk forward
-    while (e < len && isNumChar(text[e])) e++
+    // Walk forward through digits/dots
+    while (e < len && isNumCharCore(text[e])) e++
+    // Optional scientific notation suffix: e or E, then optional sign, then digits
+    if (e < len && (text[e] === 'e' || text[e] === 'E')) {
+        let probe = e + 1
+        if (probe < len && (text[probe] === '+' || text[probe] === '-')) probe++
+        let digits = probe
+        while (digits < len && /[0-9]/.test(text[digits])) digits++
+        if (digits > probe) e = digits
+    }
     if (s === e) return null
     const raw = text.slice(s, e)
-    if (!/^-?(\d+\.?\d*|\.\d+)$/.test(raw)) return null
+    // Validate — accept int, leading-dot, trailing-dot, full decimals, all with optional minus and exponent
+    if (!/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(raw)) return null
     const value = parseFloat(raw)
     if (!Number.isFinite(value)) return null
     return { start: s, end: e, value, raw }

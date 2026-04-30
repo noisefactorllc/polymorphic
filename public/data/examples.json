@@ -31,9 +31,9 @@
   },
   {
     "title": "Physarum Slime",
-    "tagline": "Slime-mold particle simulation",
+    "tagline": "Slime-mold particle simulation seeded by noise",
     "tags": ["points", "feedback"],
-    "dsl": "search points, filter, render\n\nphysarum()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
+    "dsl": "search synth, points, filter, render\n\nnoise()\n  .physarum()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
   },
   {
     "title": "Polar Vortex",
@@ -69,7 +69,7 @@
     "title": "Feedback Echo",
     "tagline": "Surface o0 feeds back through warp",
     "tags": ["feedback", "warp"],
-    "dsl": "search synth, filter, render, mixer\n\nnoise(scaleX: 50, scaleY: 50, speed: 25)\n  .blendMode(tex: read(o0), mode: screen, alpha: 0.92)\n  .warp(strength: 6, speed: 0.5)\n  .palette(index: skykissed)\n  .write(o0)\n\nrender(o0)"
+    "dsl": "search synth, filter, render, mixer\n\nnoise(scaleX: 50, scaleY: 50, speed: 25)\n  .blendMode(tex: read(o0), mode: screen, mix: 92)\n  .warp(strength: 6, speed: 0.5)\n  .palette(index: skykissed)\n  .write(o0)\n\nrender(o0)"
   },
   {
     "title": "CRT Dream",
@@ -91,20 +91,20 @@
   },
   {
     "title": "Lenia",
-    "tagline": "Continuous cellular automata",
+    "tagline": "Continuous cellular automata seeded by noise",
     "tags": ["points", "feedback"],
-    "dsl": "search points, filter, render\n\nlenia()\n  .palette(index: organic)\n  .write(o0)\n\nrender(o0)"
+    "dsl": "search synth, points, filter, render\n\nnoise()\n  .lenia()\n  .palette(index: organic)\n  .write(o0)\n\nrender(o0)"
   },
   {
     "title": "Game of Life",
-    "tagline": "Conway's classic cellular automaton",
+    "tagline": "Conway's classic cellular automaton on noise",
     "tags": ["points", "feedback"],
-    "dsl": "search points, filter, render\n\nlife()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
+    "dsl": "search synth, points, filter, render\n\nnoise(scaleX: 200, scaleY: 200)\n  .life()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
   },
   {
     "title": "Flow Field",
     "tagline": "Particle flow over noise",
     "tags": ["points", "flow"],
-    "dsl": "search points, filter, render\n\nflow()\n  .palette(index: solaris)\n  .write(o0)\n\nrender(o0)"
+    "dsl": "search synth, points, filter, render\n\nnoise()\n  .flow()\n  .palette(index: solaris)\n  .write(o0)\n\nrender(o0)"
   }
 ]
