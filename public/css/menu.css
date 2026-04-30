@@ -71,48 +71,59 @@
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    width: auto;
+    width: calc(590px - 0.5em);
     height: var(--ui-titlebar-height);
     z-index: 2000;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto;
     align-items: center;
-    justify-content: space-between;
-    border-radius: 0;
+    border-radius: 0 0 var(--ui-corner-radius) 0;
     font-family: 'Nunito', 'Nunito Block';
-    font-size: 15px;
+    font-size: 16px;
 }
 
 #menuBackdrop {
     position: absolute;
     inset: 0;
-    background-color: rgba(8, 10, 14, 0.55);
-    background-image: linear-gradient(
-        180deg,
-        rgba(20, 22, 30, 0.55) 0%,
-        rgba(8, 10, 14, 0.55) 100%
-    );
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    --ui-titlebar-highlight: color-mix(in srgb,
+            var(--menu-bg) var(--ui-chrome-highlight-blend),
+            white var(--ui-chrome-highlight-tint));
+    --ui-titlebar-shadow: color-mix(in srgb,
+            var(--menu-bg) var(--ui-chrome-shadow-blend),
+            black var(--ui-chrome-shadow-shade));
+    --ui-titlebar-gradient: linear-gradient(180deg,
+            var(--ui-titlebar-highlight) 0%,
+            var(--menu-bg) 55%,
+            var(--ui-titlebar-shadow) 100%);
+    background-color: var(--menu-bg);
+    background-image: var(--ui-titlebar-gradient);
+    backdrop-filter: var(--glass-blur-strength);
+    -webkit-backdrop-filter: var(--glass-blur-strength);
     pointer-events: none;
     z-index: -1;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    grid-column: 1 / -1;
+    grid-row: 1;
+    border-radius: 0 0 var(--ui-corner-radius) 0;
 }
 
 #menuLeft {
-    padding-left: 0.85em;
+    grid-column: 1;
+    grid-row: 1;
+    padding-left: 0.75em;
     display: flex;
-    gap: 1.25em;
+    gap: 1.5em;
     color: var(--menu-text);
     align-items: center;
     height: 100%;
 }
 
 #menuRight {
-    padding-right: 0.85em;
+    grid-column: 2;
+    grid-row: 1;
+    padding-right: 1em;
     display: flex;
     justify-content: flex-end;
-    gap: 0.6em;
+    gap: 1em;
     color: var(--menu-text);
     align-items: center;
     height: 100%;
