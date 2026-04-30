@@ -1,0 +1,185 @@
+/**
+ * Status Row
+ *
+ * Slim bottom-edge bar showing live state at a glance:
+ *   [● mic]  [♪ midi]  [⏺ recording]  [♩ 120 bpm]  [⚡ 60 fps]  [program: Aurora]
+ *
+ * Each chip exposes a click handler for quick toggles. The row is opt-in via
+ * Cmd/Ctrl+; (semicolon) and the command palette ("toggle status row").
+ */
+
+const STYLES_ID = 'status-row-styles'
+if (!document.getElementById(STYLES_ID)) {
+    const style = document.createElement('style')
+    style.id = STYLES_ID
+    style.textContent = `
+        .status-row {
+            position: fixed;
+            left: 0.75rem;
+            right: 0.75rem;
+            bottom: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            font-size: 0.6875rem;
+            color: #d9deeb;
+            z-index: 230;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .status-row.hidden { opacity: 0; pointer-events: none; }
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: rgba(10, 12, 17, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .status-chip:hover {
+            background: rgba(102, 126, 234, 0.25);
+            border-color: rgba(165, 184, 255, 0.4);
+        }
+        .status-chip .icon-material { font-size: 13px; }
+        .status-chip-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #555;
+        }
+        .status-chip.on .status-chip-dot { background: #4ade80; }
+        .status-chip.warn .status-chip-dot { background: #facc15; }
+        .status-chip.err .status-chip-dot { background: #ff6b6b; }
+        .status-chip.recording {
+            border-color: rgba(255, 107, 107, 0.4);
+            color: #ffb4b4;
+        }
+        .status-chip.recording .status-chip-dot {
+            background: #ff4d4d;
+            animation: status-rec-pulse 1.4s infinite;
+        }
+        @keyframes status-rec-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+    `
+    document.head.appendChild(style)
+}
+
+class StatusRow {
+    constructor() {
+        this._el = null
+        this._chips = {}
+        this._open = false
+        this._hooks = {}
+        this._raf = null
+        this._renderer = null
+    }
+
+    init(opts = {}) {
+        this._renderer = opts.renderer
+        this._hooks = opts.hooks || {}
+        this._build()
+        // Hidden by default; toggle via Cmd+;
+        this._el.classList.add('hidden')
+        this._open = false
+    }
+
+    show() {
+        if (this._open) return
+        this._open = true
+        this._el?.classList.remove('hidden')
+        this._loop()
+    }
+
+    hide() {
+        if (!this._open) return
+        this._open = false
+        this._el?.classList.add('hidden')
+        if (this._raf) cancelAnimationFrame(this._raf)
+        this._raf = null
+    }
+
+    toggle() { this._open ? this.hide() : this.show() }
+    isOpen() { return this._open }
+
+    /** Update a chip's state. */
+    set(chipId, { on = false, warn = false, err = false, label = null, icon = null } = {}) {
+        const chip = this._chips[chipId]
+        if (!chip) return
+        chip.classList.toggle('on', !!on)
+        chip.classList.toggle('warn', !!warn)
+        chip.classList.toggle('err', !!err)
+        if (label != null) {
+            const lbl = chip.querySelector('.status-chip-label')
+            if (lbl) lbl.textContent = label
+        }
+        if (icon != null) {
+            const ic = chip.querySelector('.icon-material')
+            if (ic) ic.textContent = icon
+        }
+    }
+
+    /** Add a custom recording state class. */
+    setRecording(rec) {
+        const chip = this._chips.recording
+        if (!chip) return
+        chip.classList.toggle('recording', !!rec)
+        const lbl = chip.querySelector('.status-chip-label')
+        if (lbl) lbl.textContent = rec ? 'rec' : 'rec'
+    }
+
+    _build() {
+        this._el = document.createElement('div')
+        this._el.className = 'status-row'
+
+        const chipDefs = [
+            { id: 'mic',       icon: 'mic',                  label: 'mic' },
+            { id: 'midi',      icon: 'piano',                label: 'midi' },
+            { id: 'source',    icon: 'videocam',             label: 'source' },
+            { id: 'recording', icon: 'fiber_manual_record',  label: 'rec' },
+            { id: 'bpm',       icon: 'metronome',            label: '120 bpm' },
+            { id: 'fps',       icon: 'speed',                label: '— fps' }
+        ]
+        for (const def of chipDefs) {
+            const chip = document.createElement('span')
+            chip.className = 'status-chip'
+            chip.dataset.id = def.id
+            chip.innerHTML = `
+                <span class="status-chip-dot"></span>
+                <span class="icon-material">${def.icon}</span>
+                <span class="status-chip-label">${def.label}</span>
+            `
+            chip.addEventListener('click', () => {
+                const fn = this._hooks[def.id]
+                if (typeof fn === 'function') fn()
+            })
+            this._el.appendChild(chip)
+            this._chips[def.id] = chip
+        }
+        document.body.appendChild(this._el)
+    }
+
+    _loop() {
+        const tick = () => {
+            this._raf = requestAnimationFrame(tick)
+            const fps = Math.round(this._renderer?.currentFPS || 0)
+            const fpsLbl = fps ? `${fps} fps` : '— fps'
+            const fpsCls = fps && fps < 30 ? 'err' : (fps && fps < 50 ? 'warn' : 'on')
+            this.set('fps', { on: fpsCls === 'on', warn: fpsCls === 'warn', err: fpsCls === 'err', label: fpsLbl })
+        }
+        tick()
+    }
+}
+
+export const statusRow = new StatusRow()

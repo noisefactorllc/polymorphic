@@ -1,0 +1,110 @@
+[
+  {
+    "title": "Aurora",
+    "tagline": "Layered noise with palette and warp loop",
+    "tags": ["starter", "noise", "warp"],
+    "dsl": "search synth, filter, render\n\nnoise(\n  type: linear,\n  octaves: 4,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 3,\n  ridges: true,\n  loopScale: 1,\n  speed: 100\n)\n  .palette(index: dealerHat)\n  .loopBegin(alpha: 94.895, intensity: 94.309)\n  .warp(\n    strength: 23.566,\n    scale: 0.83,\n    seed: 3,\n    speed: 1,\n    wrap: clamp\n  )\n  .loopEnd()\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.3,\n    specularIntensity: 1.04,\n    shininess: 88,\n    reflection: 31.3,\n    refraction: 20.1,\n    aberration: 22.8\n  )\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Cosmic Drift",
+    "tagline": "Slow noise with vaporwave palette",
+    "tags": ["starter", "noise", "palette"],
+    "dsl": "search synth, filter, render\n\nnoise(octaves: 3, scaleX: 60, scaleY: 60, speed: 10)\n  .palette(index: vaporwave)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Voronoi Cells",
+    "tagline": "Cellular pattern coloured by a palette",
+    "tags": ["cell", "starter"],
+    "dsl": "search synth, filter, render\n\ncell()\n  .palette(index: organic)\n  .lighting(normalStrength: 4, smoothing: 1.5)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Mandelbrot",
+    "tagline": "Classic fractal — explore points of interest",
+    "tags": ["fractal", "starter"],
+    "dsl": "search synth, filter, render\n\nmandelbrot()\n  .palette(index: heatmap)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Reaction Diffusion",
+    "tagline": "Gray–Scott pattern with palette",
+    "tags": ["reaction", "feedback"],
+    "dsl": "search synth, filter, render\n\nreactionDiffusion()\n  .palette(index: organic)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Physarum Slime",
+    "tagline": "Slime-mold particle simulation",
+    "tags": ["points", "feedback"],
+    "dsl": "search points, filter, render\n\nphysarum()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Polar Vortex",
+    "tagline": "Polar coordinate transform over warped noise",
+    "tags": ["polar", "noise"],
+    "dsl": "search synth, filter, render\n\nnoise(octaves: 5, scaleX: 80, scaleY: 80, speed: 25)\n  .palette(index: tropicalia)\n  .warp(strength: 60, scale: 0.5, speed: 0.5)\n  .polar()\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Bitwise",
+    "tagline": "Geometric pattern from bit ops",
+    "tags": ["bitwise", "geometric"],
+    "dsl": "search synth, filter, render\n\nbitwise()\n  .palette(index: hypercolor)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Audio Reactive",
+    "tagline": "Mic FFT drives noise scale (turn on the mic)",
+    "tags": ["audio", "noise"],
+    "dsl": "search synth, filter, render\n\nnoise(\n  scaleX: audio(band: low, min: 30, max: 200),\n  scaleY: audio(band: low, min: 30, max: 200),\n  octaves: 4,\n  speed: 30\n)\n  .palette(index: superhero)\n  .lighting(normalStrength: audio(band: vol, min: 1, max: 8))\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Gabor Field",
+    "tagline": "Anisotropic gabor noise",
+    "tags": ["gabor", "synth"],
+    "dsl": "search synth, filter, render\n\ngabor()\n  .palette(index: brushedMetal)\n  .grade(contrast: 1.4, saturation: 1.5)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Curl Field",
+    "tagline": "Curl noise with smooth lighting",
+    "tags": ["curl", "synth"],
+    "dsl": "search synth, filter, render\n\ncurl()\n  .palette(index: solaris)\n  .lighting(normalStrength: 4)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Feedback Echo",
+    "tagline": "Surface o0 feeds back through warp",
+    "tags": ["feedback", "warp"],
+    "dsl": "search synth, filter, render, mixer\n\nnoise(scaleX: 50, scaleY: 50, speed: 25)\n  .blendMode(tex: read(o0), mode: screen, alpha: 0.92)\n  .warp(strength: 6, speed: 0.5)\n  .palette(index: skykissed)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "CRT Dream",
+    "tagline": "Soft noise through a CRT filter",
+    "tags": ["crt"],
+    "dsl": "search synth, filter, render\n\nnoise(scaleX: 40, scaleY: 40, speed: 20)\n  .palette(index: dreamy)\n  .crt()\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Mod Pattern",
+    "tagline": "Shape arithmetic with osc",
+    "tags": ["geometric"],
+    "dsl": "search synth, filter, render\n\nmodPattern()\n  .palette(index: papaya)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Gradient Tunnel",
+    "tagline": "Tunnel filter over a gradient source",
+    "tags": ["gradient", "tunnel"],
+    "dsl": "search synth, filter, render\n\ngradient()\n  .tunnel()\n  .palette(index: justBlue)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Lenia",
+    "tagline": "Continuous cellular automata",
+    "tags": ["points", "feedback"],
+    "dsl": "search points, filter, render\n\nlenia()\n  .palette(index: organic)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Game of Life",
+    "tagline": "Conway's classic cellular automaton",
+    "tags": ["points", "feedback"],
+    "dsl": "search points, filter, render\n\nlife()\n  .palette(index: ghostly)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Flow Field",
+    "tagline": "Particle flow over noise",
+    "tags": ["points", "flow"],
+    "dsl": "search points, filter, render\n\nflow()\n  .palette(index: solaris)\n  .write(o0)\n\nrender(o0)"
+  }
+]
