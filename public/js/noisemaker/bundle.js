@@ -40,5 +40,18 @@ export const unparse = bundle.unparse
 export const extractEffectNamesFromDsl = bundle.extractEffectNamesFromDsl
 export const extractEffectsFromDsl = bundle.extractEffectsFromDsl
 
+// Engine subsystems (audio/MIDI/external inputs, UI controller, program state)
+export const AudioInputManager = bundle.AudioInputManager
+export const MidiInputManager = bundle.MidiInputManager
+export const ExternalInputManager = bundle.ExternalInputManager
+export const UIController = bundle.UIController
+export const ProgramState = bundle.ProgramState
+export const setToastProvider = bundle.setToastProvider
+export const formatValue = bundle.formatValue
+export const formatDslError = bundle.formatDslError
+export const isStarterEffect = bundle.isStarterEffect
+export const isIOFunction = bundle.isIOFunction
+export const VERSION = bundle.VERSION
+
 // Debug: expose bundle for verification
 export const _bundle = bundle

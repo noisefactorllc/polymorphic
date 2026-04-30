@@ -201,6 +201,39 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * @returns {object} Underlying noisemaker CanvasRenderer (for advanced integrations
+     * like AudioInputManager, MidiInputManager, perf instrumentation)
+     */
+    get inner() {
+        return this._renderer
+    }
+
+    /** @returns {number} Live FPS reported by the inner renderer */
+    get currentFPS() {
+        return this._renderer.currentFPS || 0
+    }
+
+    /** @returns {object} Frame-time stats from the inner renderer */
+    getFrameTimeStats() {
+        return this._renderer.getFrameTimeStats?.() || { mean: 0, std: 0, min: 0, max: 0, count: 0 }
+    }
+
+    /** @returns {number} Last frame render time in ms */
+    get lastRenderTime() {
+        return this._renderer.lastRenderTime || 0
+    }
+
+    /** @returns {number} Number of render passes in the last frame */
+    get lastPassCount() {
+        return this._renderer.lastPassCount || 0
+    }
+
+    /** @returns {number} Normalized loop time (0-1) */
+    get lastTime() {
+        return this._renderer.lastTime || 0
+    }
+
+    /**
      * Initialize the renderer
      * @returns {Promise<void>}
      */

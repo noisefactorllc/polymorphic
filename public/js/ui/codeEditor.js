@@ -401,6 +401,32 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             z-index: 0;
             overflow: hidden;
         }
+
+        /* Eval flash overlay (briefly highlights the evaluated lines) */
+        code-editor .code-editor-flash {
+            position: absolute;
+            left: var(--code-editor-gutter-width, 3em);
+            right: 0;
+            pointer-events: none;
+            z-index: 4;
+            background: linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--flash-color, #a5b8ff) 35%, transparent) 0%,
+                color-mix(in srgb, var(--flash-color, #a5b8ff) 12%, transparent) 100%
+            );
+            border-left: 2px solid var(--flash-color, #a5b8ff);
+            border-radius: 1px;
+            opacity: 0;
+            animation: code-editor-flash 0.55s ease-out forwards;
+        }
+        code-editor .code-editor-flash.error {
+            --flash-color: #ff7b72;
+        }
+        @keyframes code-editor-flash {
+            0% { opacity: 0; transform: translateX(-4px); }
+            12% { opacity: 1; transform: translateX(0); }
+            100% { opacity: 0; }
+        }
     `
     document.head.appendChild(styleEl)
 }
@@ -668,6 +694,36 @@ class CodeEditor extends HTMLElement {
     }
 
     /**
+     * Briefly flash a range of lines to indicate that they were just evaluated.
+     * @param {number} startLine - 1-based line number (inclusive)
+     * @param {number} endLine - 1-based line number (inclusive)
+     * @param {{ error?: boolean }} [options]
+     */
+    flashLines(startLine, endLine, options = {}) {
+        if (!this._display || !this._gutter) return
+        const codeLines = this._display.querySelectorAll('.code-line')
+        if (codeLines.length === 0) return
+        const a = Math.max(0, startLine - 1)
+        const b = Math.min(codeLines.length - 1, endLine - 1)
+        if (a > b) return
+        const top = codeLines[a].offsetTop
+        const bottom = codeLines[b].offsetTop + codeLines[b].offsetHeight
+
+        const flash = document.createElement('div')
+        flash.className = 'code-editor-flash' + (options.error ? ' error' : '')
+        flash.style.top = `${top}px`
+        flash.style.height = `${bottom - top}px`
+        // Match scroll
+        const scrollTop = this._textarea?.scrollTop ?? 0
+        flash.style.transform = `translateY(${-scrollTop}px)`
+        this.appendChild(flash)
+        // Remove when animation finishes
+        flash.addEventListener('animationend', () => flash.remove(), { once: true })
+        // Safety: also remove after 1s in case animationend doesn't fire
+        setTimeout(() => flash.remove(), 1000)
+    }
+
+    /**
      * Sync the display scroll position with the textarea
      */
     syncScroll() {
@@ -900,8 +956,18 @@ class CodeEditor extends HTMLElement {
      * @private
      */
     _handleKeydown(e) {
-        // Dispatch custom event for force recompile (Ctrl/Cmd+Enter)
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const mod = e.ctrlKey || e.metaKey
+        // Cmd/Ctrl+Shift+Enter OR Alt+Enter — evaluate current block (or selection)
+        if (e.key === 'Enter' && ((mod && e.shiftKey) || (e.altKey && !mod))) {
+            e.preventDefault()
+            this.dispatchEvent(new CustomEvent('forceevalblock', {
+                bubbles: true,
+                composed: true
+            }))
+            return
+        }
+        // Cmd/Ctrl+Enter — force recompile of full program
+        if (mod && e.key === 'Enter') {
             e.preventDefault()
             this.dispatchEvent(new CustomEvent('forcerecompile', {
                 bubbles: true,
