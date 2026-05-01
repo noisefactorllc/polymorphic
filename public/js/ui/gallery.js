@@ -16,6 +16,7 @@
  */
 
 import { loadFromCode } from '../sharingLoader.js'
+import { CanvasRenderer, extractEffectNamesFromDsl } from '../noisemaker/bundle.js'
 
 const STYLES_ID = 'gallery-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -174,6 +175,11 @@ if (!document.getElementById(STYLES_ID)) {
             object-fit: cover;
             display: block;
         }
+        .gallery-card-preview-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
         .gallery-card-thumb-fallback {
             position: absolute;
             inset: 0;
@@ -237,6 +243,80 @@ if (!document.getElementById(STYLES_ID)) {
 }
 
 const BLASTER_FEED_URL = 'https://blaster.noisedeck.app/api/feed'
+const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
+const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
+
+// Caps on simultaneous live preview renderers — each one consumes a WebGL
+// context (browsers cap at ~16) so we visibility-gate cards to keep the
+// active set small. Cards that scroll out of view release their context
+// and reacquire when they come back.
+const PREVIEW_MAX_LIVE = 8
+
+/**
+ * Live mini-preview of a Noisemaker DSL program rendered into a small
+ * canvas inside a gallery card. Mirrors shuffleset's NoisemakerRenderer
+ * pattern: per-canvas CanvasRenderer instance, compile DSL, start loop.
+ *
+ * Visibility-gated via IntersectionObserver: a preview only spins up its
+ * WebGL context when its card is on screen, and tears it down when it
+ * scrolls away. This keeps the simultaneous-context count bounded.
+ */
+class LivePreview {
+    constructor(canvas, dsl, opts = {}) {
+        this._canvas = canvas
+        this._dsl = dsl
+        this._opts = opts
+        this._renderer = null
+        this._ready = false
+        this._disposed = false
+        this._error = null
+    }
+
+    async start() {
+        if (this._renderer || this._disposed) return
+        this._renderer = new CanvasRenderer({
+            canvas: this._canvas,
+            width: this._canvas.width,
+            height: this._canvas.height,
+            basePath: SHADER_BASE_PATH,
+            preferWebGPU: false,
+            useBundles: true,
+            bundlePath: SHADER_BUNDLE_PATH,
+            // Card previews are noisy when a single sketch errors — log
+            // quietly so the user isn't spammed if a feed entry is broken.
+            onError: (err) => {
+                this._error = err
+                this._opts.onError?.(err)
+            }
+        })
+        try {
+            await this._renderer.loadManifest()
+            const effects = extractEffectNamesFromDsl(this._dsl, this._renderer.manifest || {})
+            const ids = effects.map(e => e.effectId)
+            if (ids.length > 0) await this._renderer.loadEffects(ids)
+            await this._renderer.compile(this._dsl)
+            if (this._disposed) return
+            this._renderer.start()
+            this._ready = true
+        } catch (err) {
+            this._error = err
+            this._opts.onError?.(err)
+        }
+    }
+
+    async dispose() {
+        this._disposed = true
+        if (!this._renderer) return
+        try {
+            this._renderer.stop()
+            await this._renderer.dispose({ loseContext: true })
+        } catch { /* ignore */ }
+        this._renderer = null
+        this._ready = false
+    }
+
+    get error() { return this._error }
+}
 
 let cachedExamples = null
 let cachedBlasterFeed = null
@@ -289,6 +369,13 @@ class Gallery {
         this._onLoad = () => {}
         this._escHandler = null
         this._activeTab = 'curated'  // 'curated' | 'blaster'
+        // Live preview bookkeeping. Each entry: { dsl, preview, canvas, started }.
+        // Cards get a LivePreview instance when their canvas scrolls into view
+        // and dispose it when out of view, capped at PREVIEW_MAX_LIVE
+        // simultaneous renderers to stay under the WebGL context limit.
+        this._previewsByCard = new Map()
+        this._observer = null
+        this._activeCards = []  // most-recently-visible first (LRU eviction)
     }
 
     /** @param {object} opts @param {(example:object) => void} opts.onLoad */
@@ -315,9 +402,70 @@ class Gallery {
             document.removeEventListener('keydown', this._escHandler)
             this._escHandler = null
         }
+        // Tear down all live previews so we release WebGL contexts and rAF
+        // loops. dispose() is async but we don't need to await it.
+        this._teardownPreviews()
     }
 
     isOpen() { return this._open }
+
+    _teardownPreviews() {
+        if (this._observer) {
+            this._observer.disconnect()
+            this._observer = null
+        }
+        for (const entry of this._previewsByCard.values()) {
+            entry.preview?.dispose?.()
+        }
+        this._previewsByCard.clear()
+        this._activeCards = []
+    }
+
+    /**
+     * Register a card+canvas+DSL with the visibility observer so the live
+     * preview is started/stopped as the card scrolls in/out of view.
+     */
+    _registerPreview(card, canvas, dsl) {
+        if (!card || !canvas || !dsl) return
+        this._previewsByCard.set(card, { dsl, canvas, preview: null })
+        if (!this._observer) {
+            this._observer = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) this._activatePreview(entry.target)
+                    else this._deactivatePreview(entry.target)
+                }
+            }, { root: null, threshold: 0.1 })
+        }
+        this._observer.observe(card)
+    }
+
+    async _activatePreview(card) {
+        const entry = this._previewsByCard.get(card)
+        if (!entry || entry.preview) return
+        // LRU bookkeeping — bump to front; evict tail past the cap so we
+        // don't outrun the browser's WebGL context limit (~16).
+        this._activeCards = this._activeCards.filter(c => c !== card)
+        this._activeCards.unshift(card)
+        while (this._activeCards.length > PREVIEW_MAX_LIVE) {
+            const evict = this._activeCards.pop()
+            this._deactivatePreview(evict)
+        }
+        const preview = new LivePreview(entry.canvas, entry.dsl, {
+            onError: (err) => console.debug('[Gallery] preview error:', err?.message || err)
+        })
+        entry.preview = preview
+        await preview.start()
+        if (!this._open) preview.dispose()
+    }
+
+    _deactivatePreview(card) {
+        const entry = this._previewsByCard.get(card)
+        if (!entry || !entry.preview) return
+        const p = entry.preview
+        entry.preview = null
+        this._activeCards = this._activeCards.filter(c => c !== card)
+        p.dispose()
+    }
 
     _build() {
         if (this._overlay) this._overlay.remove()
@@ -427,41 +575,129 @@ class Gallery {
         const card = document.createElement('div')
         card.className = 'gallery-card'
         const tags = (ex.tags || []).map(t => `<span class="gallery-card-tag">${escapeHtml(t)}</span>`).join('')
-        card.innerHTML = `
-            <div class="gallery-card-thumb"><div class="gallery-card-thumb-fallback">${escapeHtml(ex.title || '')}</div></div>
-            <div class="gallery-card-body">
-                <div class="gallery-card-title">${escapeHtml(ex.title || '')}</div>
-                <div class="gallery-card-tagline">${escapeHtml(ex.tagline || '')}</div>
-                <div class="gallery-card-tags">${tags}</div>
-            </div>
+        // Each card hosts its own canvas — the visibility observer will
+        // spin up a tiny CanvasRenderer on it once it's in view.
+        const canvas = document.createElement('canvas')
+        canvas.width = 320
+        canvas.height = 180
+        canvas.className = 'gallery-card-preview-canvas'
+        const thumbDiv = document.createElement('div')
+        thumbDiv.className = 'gallery-card-thumb'
+        thumbDiv.appendChild(canvas)
+
+        const body = document.createElement('div')
+        body.className = 'gallery-card-body'
+        body.innerHTML = `
+            <div class="gallery-card-title">${escapeHtml(ex.title || '')}</div>
+            <div class="gallery-card-tagline">${escapeHtml(ex.tagline || '')}</div>
+            <div class="gallery-card-tags">${tags}</div>
         `
+        card.appendChild(thumbDiv)
+        card.appendChild(body)
+
         card.addEventListener('click', () => {
             this._onLoad(ex)
             this.close()
         })
+        if (ex.dsl) this._registerPreview(card, canvas, ex.dsl)
         return card
     }
 
     _buildBlasterCard(item) {
         const card = document.createElement('div')
         card.className = 'gallery-card'
-        const thumb = item.screenshotUrl
-            ? `<img src="${escapeHtml(item.screenshotUrl)}" alt="${escapeHtml(item.title || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'gallery-card-thumb-fallback',textContent:'(no preview)'}))">`
-            : `<div class="gallery-card-thumb-fallback">(no preview)</div>`
+
+        // Thumb container — starts as the static screenshot (cheap), gets
+        // upgraded to a live canvas preview once we fetch the DSL and the
+        // card is on screen.
+        const thumb = document.createElement('div')
+        thumb.className = 'gallery-card-thumb'
+        if (item.screenshotUrl) {
+            const img = document.createElement('img')
+            img.src = item.screenshotUrl
+            img.alt = item.title || ''
+            img.loading = 'lazy'
+            img.referrerPolicy = 'no-referrer'
+            img.onerror = () => {
+                const fb = document.createElement('div')
+                fb.className = 'gallery-card-thumb-fallback'
+                fb.textContent = '(no preview)'
+                img.replaceWith(fb)
+            }
+            thumb.appendChild(img)
+        } else {
+            const fb = document.createElement('div')
+            fb.className = 'gallery-card-thumb-fallback'
+            fb.textContent = '(no preview)'
+            thumb.appendChild(fb)
+        }
+
+        const body = document.createElement('div')
+        body.className = 'gallery-card-body'
         const author = item.username ? `by ${escapeHtml(item.username)}` : ''
         const app = item.app ? `<span class="gallery-card-meta-app">${escapeHtml(item.app)}</span>` : ''
         const date = item.createdAt ? formatRelativeTime(item.createdAt) : ''
-        card.innerHTML = `
-            <div class="gallery-card-thumb">${thumb}</div>
-            <div class="gallery-card-body">
-                <div class="gallery-card-title">${escapeHtml(item.title || '(untitled)')}</div>
-                <div class="gallery-card-meta">${app}<span>${author}</span><span>·</span><span>${escapeHtml(date)}</span></div>
-            </div>
+        body.innerHTML = `
+            <div class="gallery-card-title">${escapeHtml(item.title || '(untitled)')}</div>
+            <div class="gallery-card-meta">${app}<span>${author}</span><span>·</span><span>${escapeHtml(date)}</span></div>
         `
+        card.appendChild(thumb)
+        card.appendChild(body)
+
         card.addEventListener('click', async () => {
             await this._loadBlasterItem(item, card)
         })
+
+        // Lazy-fetch the DSL behind the screenshot and register a live
+        // preview canvas. The screenshot stays as a placeholder until the
+        // canvas is ready, then the canvas takes over by stacking on top.
+        this._upgradeBlasterCardToLive(card, thumb, item).catch(err => {
+            console.debug('[Gallery] blaster live upgrade skipped:', err?.message || err)
+        })
         return card
+    }
+
+    async _upgradeBlasterCardToLive(card, thumb, item) {
+        if (!item?.code) return
+        // Defer the loadFromCode fetch until the card scrolls near view.
+        // We piggyback on the existing IntersectionObserver: until the
+        // card is observed we won't bother fetching the DSL.
+        const fetchAndAttach = async () => {
+            if (card.dataset.liveAttached === '1') return
+            card.dataset.liveAttached = '1'
+            let composition
+            try {
+                composition = await loadFromCode(item.code)
+            } catch (err) {
+                console.debug('[Gallery] could not load blaster DSL:', err?.message || err)
+                return
+            }
+            if (!composition?.dsl) return
+            const canvas = document.createElement('canvas')
+            canvas.width = 320
+            canvas.height = 180
+            canvas.className = 'gallery-card-preview-canvas'
+            // Stack on top of the screenshot. The canvas starts blank;
+            // the screenshot remains visible underneath until the
+            // CanvasRenderer's first frame draws over it.
+            canvas.style.position = 'absolute'
+            canvas.style.inset = '0'
+            canvas.style.width = '100%'
+            canvas.style.height = '100%'
+            thumb.style.position = 'relative'
+            thumb.appendChild(canvas)
+            this._registerPreview(card, canvas, composition.dsl)
+        }
+        // Trigger the fetch lazily via the same observer mechanism.
+        const triggerObs = new IntersectionObserver(async (entries, obs) => {
+            for (const e of entries) {
+                if (e.isIntersecting) {
+                    obs.disconnect()
+                    await fetchAndAttach()
+                }
+            }
+        }, { root: null, threshold: 0.1 })
+        triggerObs.observe(card)
     }
 
     async _loadBlasterItem(item, card) {
