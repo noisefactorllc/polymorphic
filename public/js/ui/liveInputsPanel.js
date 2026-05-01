@@ -391,6 +391,7 @@ class LiveInputsPanel {
                     <div class="live-input-snippet" data-snippet="osc:tri"><span class="live-input-snippet-label">osc(type: tri, min: 0, max: 1)</span><span class="live-input-snippet-add">insert</span></div>
                     <div class="live-input-snippet" data-snippet="osc:saw"><span class="live-input-snippet-label">osc(type: saw, min: 0, max: 1)</span><span class="live-input-snippet-add">insert</span></div>
                     <div class="live-input-snippet" data-snippet="osc:square"><span class="live-input-snippet-label">osc(type: square, min: 0, max: 1)</span><span class="live-input-snippet-add">insert</span></div>
+                    <div class="live-input-snippet" data-snippet="osc:noise"><span class="live-input-snippet-label">osc(type: noise, seed: 1, min: 0, max: 1)</span><span class="live-input-snippet-add">insert</span></div>
                 </section>
             </div>
         `
@@ -815,7 +816,8 @@ class LiveInputsPanel {
             'osc:sine': 'osc(type: sine, min: 0, max: 1)',
             'osc:tri': 'osc(type: tri, min: 0, max: 1)',
             'osc:saw': 'osc(type: saw, min: 0, max: 1)',
-            'osc:square': 'osc(type: square, min: 0, max: 1)'
+            'osc:square': 'osc(type: square, min: 0, max: 1)',
+            'osc:noise': 'osc(type: noise, seed: 1, min: 0, max: 1)'
         }
         const snippet = map[key]
         if (snippet) this._onInsert(snippet)
