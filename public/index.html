@@ -204,19 +204,23 @@
             inset: 0;
         }
         
-        /* Compiler Error Display */
+        /* Compiler Error Display
+           Sits above the BPM indicator (z-index 220) and the status row
+           (z-index 230) so a syntax error can't be hidden behind them.
+           The vertical offset clears the BPM/status lane so the message
+           text isn't covered when both are visible. */
         #compiler-error {
             position: fixed;
-            bottom: 1em;
+            bottom: 3em;
             left: 1em;
             right: 1em;
             padding: 0;
             background: transparent;
             color: #ff6b6b;
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block';
-            font-size: 11px;
-            line-height: 1.4;
-            z-index: 160;
+            font-size: 12px;
+            line-height: 1.45;
+            z-index: 260;
             display: none;
             cursor: pointer;
             user-select: text;

@@ -13,7 +13,153 @@
  * Ctrl/Cmd+I.
  */
 
-import { AudioInputManager, MidiInputManager } from '../noisemaker/bundle.js'
+import { MidiInputManager } from '../noisemaker/bundle.js'
+
+/**
+ * Local audio input manager that mirrors what the bundled AudioInputManager
+ * does (FFT analyser → renderer.audioState bands), but adds explicit
+ * deviceId selection so users can choose between built-in mic, external
+ * interface, BlackHole loopback, etc. The bundled manager always picks
+ * the system default which silently routes the wrong source on multi-mic
+ * setups.
+ */
+class LocalAudioInput {
+    constructor(renderer) {
+        this._renderer = renderer
+        this._audioState = null
+        this._audioContext = null
+        this._analyser = null
+        this._source = null
+        this._stream = null
+        this._fftData = null
+        this._timeDomainData = null
+        this._animationId = null
+        this._enabled = false
+        this._deviceId = ''
+        this._deviceLabel = ''
+        this._onStatusChange = null
+    }
+
+    static isSupported() {
+        return !!(typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof AudioContext !== 'undefined')
+    }
+
+    onStatusChange(cb) { this._onStatusChange = cb }
+
+    get enabled() { return this._enabled }
+    get currentDeviceId() { return this._deviceId }
+    get currentDeviceLabel() { return this._deviceLabel }
+
+    /**
+     * Enable audio capture from the given deviceId (or default if empty).
+     * If already enabled with a different deviceId, stops the existing
+     * stream and re-acquires.
+     */
+    async enable(deviceId = '') {
+        if (this._enabled && deviceId === this._deviceId) return true
+        if (this._enabled) await this.disable()
+        if (!LocalAudioInput.isSupported()) {
+            this._notify('Audio input not supported')
+            return false
+        }
+        const constraints = {
+            audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+            }
+        }
+        if (deviceId) constraints.audio.deviceId = { exact: deviceId }
+        try {
+            this._stream = await navigator.mediaDevices.getUserMedia(constraints)
+        } catch (err) {
+            console.error('[LocalAudioInput] getUserMedia failed:', err)
+            this._notify(`Audio access denied: ${err.message || err.name}`)
+            return false
+        }
+        // Capture the actually-used deviceId/label from the granted track
+        const track = this._stream.getAudioTracks()[0]
+        const settings = track?.getSettings?.() || {}
+        this._deviceId = settings.deviceId || deviceId || ''
+        this._deviceLabel = track?.label || 'default'
+
+        this._audioContext = new AudioContext()
+        this._analyser = this._audioContext.createAnalyser()
+        this._analyser.fftSize = 256
+        this._analyser.smoothingTimeConstant = 0.8
+        this._source = this._audioContext.createMediaStreamSource(this._stream)
+        this._source.connect(this._analyser)
+        this._fftData = new Uint8Array(this._analyser.frequencyBinCount)
+        this._timeDomainData = new Uint8Array(this._analyser.fftSize)
+        this._audioState = this._renderer.setAudioState()
+        this._enabled = true
+        this._update()
+        this._notify(`Audio enabled: ${this._deviceLabel}`)
+        return true
+    }
+
+    async disable() {
+        if (!this._enabled) return
+        if (this._animationId) {
+            cancelAnimationFrame(this._animationId)
+            this._animationId = null
+        }
+        try { this._source?.disconnect() } catch { /* ignore */ }
+        this._source = null
+        if (this._stream) {
+            for (const t of this._stream.getTracks()) t.stop()
+            this._stream = null
+        }
+        if (this._audioContext) {
+            try { await this._audioContext.close() } catch { /* ignore */ }
+            this._audioContext = null
+        }
+        this._analyser = null
+        this._fftData = null
+        this._timeDomainData = null
+        this._enabled = false
+        if (this._audioState) {
+            this._audioState.low = 0
+            this._audioState.mid = 0
+            this._audioState.high = 0
+            this._audioState.vol = 0
+            this._audioState.spectrum?.fill?.(0)
+            this._audioState.waveform?.fill?.(0.5)
+        }
+        this._notify('Audio disabled')
+    }
+
+    /** Switch to a new device while running. */
+    async switchDevice(deviceId) {
+        if (!this._enabled) {
+            this._deviceId = deviceId
+            return
+        }
+        await this.enable(deviceId)
+    }
+
+    _update() {
+        if (!this._enabled) return
+        this._analyser.getByteFrequencyData(this._fftData)
+        this._audioState.setSpectrum?.(this._fftData)
+        this._analyser.getByteTimeDomainData(this._timeDomainData)
+        this._audioState.setWaveform?.(this._timeDomainData)
+        const f = this._fftData
+        const low = (f[0] + f[1] + f[2] + f[3]) / 4 / 255
+        const mid = (f[4] + f[6] + f[8] + f[10]) / 4 / 255
+        const high = (f[16] + f[20] + f[24] + f[28]) / 4 / 255
+        const vol = (low + mid + high) / 3
+        this._audioState.low = low
+        this._audioState.mid = mid
+        this._audioState.high = high
+        this._audioState.vol = vol
+        this._animationId = requestAnimationFrame(() => this._update())
+    }
+
+    _notify(msg) {
+        if (typeof this._onStatusChange === 'function') this._onStatusChange(msg)
+    }
+}
 
 const STYLES_ID = 'live-inputs-panel-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -275,6 +421,49 @@ if (!document.getElementById(STYLES_ID)) {
             padding: 0 0.25em;
             border-radius: 3px;
         }
+        .live-input-device-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.4rem 0 0.5rem;
+        }
+        .live-input-device-label {
+            font-size: 0.6875rem;
+            color: #888;
+            white-space: nowrap;
+        }
+        .live-input-device-select {
+            flex: 1;
+            min-width: 0;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(165,184,255,0.25);
+            color: #d9deeb;
+            font-family: inherit;
+            font-size: 0.6875rem;
+            padding: 0.25rem 0.4rem;
+            border-radius: 4px;
+            cursor: pointer;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .live-input-device-select:focus {
+            outline: none;
+            border-color: rgba(165,184,255,0.6);
+        }
+        .live-input-device-select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .live-input-device-current {
+            font-size: 0.625rem;
+            color: #4ade80;
+            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            margin-top: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         @media (max-width: 768px) {
             .live-inputs-panel {
                 top: 1rem;
@@ -345,6 +534,13 @@ class LiveInputsPanel {
                         <span class="live-input-section-title">audio (mic)</span>
                         <button class="live-input-toggle" data-id="audio-toggle">enable</button>
                     </div>
+                    <div class="live-input-device-row">
+                        <span class="live-input-device-label">source</span>
+                        <select class="live-input-device-select" data-id="audio-device">
+                            <option value="">default</option>
+                        </select>
+                    </div>
+                    <div class="live-input-device-current" data-id="audio-current"></div>
                     <div class="level-bars"><span>low</span><div class="level-bar-track"><div class="level-bar-fill" data-id="lowFill"></div></div><span class="level-bar-value" data-id="lowVal">0.00</span></div>
                     <div class="level-bars"><span>mid</span><div class="level-bar-track"><div class="level-bar-fill" data-id="midFill"></div></div><span class="level-bar-value" data-id="midVal">0.00</span></div>
                     <div class="level-bars"><span>high</span><div class="level-bar-track"><div class="level-bar-fill" data-id="highFill"></div></div><span class="level-bar-value" data-id="highVal">0.00</span></div>
@@ -398,6 +594,8 @@ class LiveInputsPanel {
         document.body.appendChild(this._panel)
 
         // Cache refs
+        this._audioDeviceSelect = this._panel.querySelector('[data-id=audio-device]')
+        this._audioCurrentLabel = this._panel.querySelector('[data-id=audio-current]')
         this._lowFill = this._panel.querySelector('[data-id=lowFill]')
         this._midFill = this._panel.querySelector('[data-id=midFill]')
         this._highFill = this._panel.querySelector('[data-id=highFill]')
@@ -426,6 +624,26 @@ class LiveInputsPanel {
         this._panel.querySelector('.live-inputs-close').addEventListener('click', () => this.close())
         this._audioToggle.addEventListener('click', () => this._toggleAudio())
         this._midiToggle.addEventListener('click', () => this._toggleMidi())
+
+        // When the user picks a different audio source, hot-swap if the
+        // mic is already running; otherwise we'll honour the choice on
+        // the next "enable" click.
+        this._audioDeviceSelect?.addEventListener('change', async () => {
+            if (this._audioMgr?.enabled) {
+                const id = this._audioDeviceSelect.value || ''
+                await this._audioMgr.switchDevice(id)
+                this._updateAudioDeviceLabel(this._audioMgr.currentDeviceLabel)
+            }
+        })
+
+        // Populate the dropdown up-front so the user sees a list of devices
+        // before they click enable. Labels populate fully once permission
+        // is granted; until then, browsers return generic "(unnamed input)"
+        // strings.
+        this._refreshAudioDevices()
+        navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+            this._refreshAudioDevices()
+        })
         this._panel.querySelectorAll('.live-input-snippet').forEach(el => {
             el.addEventListener('click', () => this._insertSnippet(el.dataset.snippet))
         })
@@ -655,16 +873,69 @@ class LiveInputsPanel {
     async _toggleAudio() {
         if (!this._innerRenderer) return
         if (!this._audioMgr) {
-            this._audioMgr = new AudioInputManager(this._innerRenderer)
+            this._audioMgr = new LocalAudioInput(this._innerRenderer)
             this._audioMgr.onStatusChange(msg => {
                 this._setAudioStatus(msg, this._audioMgr.enabled ? 'connected' : '')
             })
         }
-        const wasEnabled = this._audioMgr.enabled
-        const ok = await this._audioMgr.toggle()
-        const nowEnabled = !wasEnabled && ok
-        this._audioToggle.classList.toggle('active', !!nowEnabled)
-        this._audioToggle.textContent = nowEnabled ? 'disable' : 'enable'
+        if (this._audioMgr.enabled) {
+            await this._audioMgr.disable()
+            this._audioToggle.classList.remove('active')
+            this._audioToggle.textContent = 'enable'
+            this._updateAudioDeviceLabel('')
+            return
+        }
+        const wantedId = this._audioDeviceSelect?.value || ''
+        const ok = await this._audioMgr.enable(wantedId)
+        this._audioToggle.classList.toggle('active', !!ok)
+        this._audioToggle.textContent = ok ? 'disable' : 'enable'
+        if (ok) {
+            // Refresh device list — labels are only available after permission
+            await this._refreshAudioDevices()
+            this._updateAudioDeviceLabel(this._audioMgr.currentDeviceLabel)
+            // Sync the dropdown to the actual chosen device
+            if (this._audioDeviceSelect && this._audioMgr.currentDeviceId) {
+                this._audioDeviceSelect.value = this._audioMgr.currentDeviceId
+            }
+        }
+    }
+
+    /**
+     * Populate the audio device dropdown from enumerateDevices().
+     * Device labels only return real values after the user has granted
+     * mic permission to at least one device.
+     */
+    async _refreshAudioDevices() {
+        if (!this._audioDeviceSelect) return
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices()
+            const inputs = devices.filter(d => d.kind === 'audioinput')
+            const previous = this._audioDeviceSelect.value
+            this._audioDeviceSelect.innerHTML = ''
+            // Always include a "system default" entry
+            const defOpt = document.createElement('option')
+            defOpt.value = ''
+            defOpt.textContent = 'system default'
+            this._audioDeviceSelect.appendChild(defOpt)
+            for (const d of inputs) {
+                const opt = document.createElement('option')
+                opt.value = d.deviceId
+                opt.textContent = d.label || `(unnamed input ${d.deviceId.slice(0, 6)})`
+                this._audioDeviceSelect.appendChild(opt)
+            }
+            // Restore selection if still valid
+            if (previous && [...this._audioDeviceSelect.options].some(o => o.value === previous)) {
+                this._audioDeviceSelect.value = previous
+            }
+        } catch (err) {
+            console.warn('[LiveInputs] enumerateDevices failed:', err)
+        }
+    }
+
+    /** Update the green "current source" label under the dropdown. */
+    _updateAudioDeviceLabel(label) {
+        if (!this._audioCurrentLabel) return
+        this._audioCurrentLabel.textContent = label ? `→ ${label}` : ''
     }
 
     async _toggleMidi() {
