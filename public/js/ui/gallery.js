@@ -422,12 +422,36 @@ class Gallery {
     }
 
     /**
-     * Register a card+canvas+DSL with the visibility observer so the live
-     * preview is started/stopped as the card scrolls in/out of view.
+     * Register a card with the visibility observer so a live preview is
+     * spun up as the card scrolls in/out of view.
+     *
+     * The canvas is *not* persistent — every activation creates a brand-new
+     * <canvas> element inside the supplied thumb container, and every
+     * deactivation snapshots its pixels to a placeholder <img> and removes
+     * the canvas. This is necessary because dispose({ loseContext: true })
+     * leaves the canvas in a broken state (browsers paint a placeholder
+     * "broken canvas" icon over it) and the same canvas can't reliably be
+     * reused for a second WebGL context.
+     *
+     * @param {HTMLElement} card             - the card root, observed for visibility
+     * @param {HTMLElement} thumbContainer   - the slot inside the card that hosts the canvas/img
+     * @param {string} dsl                   - the DSL to compile
+     * @param {object} [opts]
+     * @param {boolean} [opts.absolute=false] - canvas/snapshot stack absolutely
+     *                                          inside the container (used by
+     *                                          blaster cards layered over a
+     *                                          screenshot)
      */
-    _registerPreview(card, canvas, dsl) {
-        if (!card || !canvas || !dsl) return
-        this._previewsByCard.set(card, { dsl, canvas, preview: null })
+    _registerPreview(card, thumbContainer, dsl, opts = {}) {
+        if (!card || !thumbContainer || !dsl) return
+        this._previewsByCard.set(card, {
+            dsl,
+            thumbContainer,
+            preview: null,
+            canvas: null,
+            snapshotImg: null,
+            absolute: !!opts.absolute
+        })
         if (!this._observer) {
             this._observer = new IntersectionObserver((entries) => {
                 for (const entry of entries) {
@@ -450,21 +474,78 @@ class Gallery {
             const evict = this._activeCards.pop()
             this._deactivatePreview(evict)
         }
-        const preview = new LivePreview(entry.canvas, entry.dsl, {
+        // Build a fresh canvas. Old snapshot stays visible until the canvas
+        // mounts, then the canvas covers it. We remove the snapshot only
+        // after the first rendered frame so there's no flash to black.
+        const canvas = document.createElement('canvas')
+        canvas.width = 320
+        canvas.height = 180
+        canvas.className = 'gallery-card-preview-canvas'
+        if (entry.absolute) {
+            canvas.style.position = 'absolute'
+            canvas.style.inset = '0'
+            canvas.style.width = '100%'
+            canvas.style.height = '100%'
+        }
+        entry.thumbContainer.appendChild(canvas)
+        entry.canvas = canvas
+        const preview = new LivePreview(canvas, entry.dsl, {
             onError: (err) => console.debug('[Gallery] preview error:', err?.message || err)
         })
         entry.preview = preview
         await preview.start()
-        if (!this._open) preview.dispose()
+        if (!this._open) {
+            preview.dispose()
+            return
+        }
+        // First frame is up — drop the snapshot placeholder if present.
+        if (entry.snapshotImg) {
+            entry.snapshotImg.remove()
+            entry.snapshotImg = null
+        }
     }
 
     _deactivatePreview(card) {
         const entry = this._previewsByCard.get(card)
         if (!entry || !entry.preview) return
         const p = entry.preview
+        const oldCanvas = entry.canvas
         entry.preview = null
+        entry.canvas = null
         this._activeCards = this._activeCards.filter(c => c !== card)
+
+        // Snapshot the canvas's last frame into an <img> so the thumb stays
+        // visible after the WebGL context is released. dispose() with
+        // loseContext leaves the canvas surface blank/broken; an <img>
+        // snapshot survives intact.
+        try {
+            if (p?._ready && oldCanvas?.width > 0 && oldCanvas?.height > 0) {
+                const dataUrl = oldCanvas.toDataURL('image/jpeg', 0.78)
+                if (dataUrl && dataUrl.length > 64) {
+                    // Replace any earlier snapshot so we never stack two.
+                    if (entry.snapshotImg) entry.snapshotImg.remove()
+                    const img = document.createElement('img')
+                    img.src = dataUrl
+                    img.alt = ''
+                    img.className = 'gallery-card-snapshot'
+                    if (entry.absolute) {
+                        img.style.position = 'absolute'
+                        img.style.inset = '0'
+                        img.style.width = '100%'
+                        img.style.height = '100%'
+                        img.style.objectFit = 'cover'
+                    }
+                    entry.thumbContainer.appendChild(img)
+                    entry.snapshotImg = img
+                }
+            }
+        } catch (err) {
+            console.debug('[Gallery] snapshot capture failed:', err?.message || err)
+        }
+        // Dispose the WebGL context AND remove the canvas element entirely
+        // so the broken-context placeholder never gets a chance to paint.
         p.dispose()
+        oldCanvas?.remove()
     }
 
     _build() {
@@ -575,15 +656,11 @@ class Gallery {
         const card = document.createElement('div')
         card.className = 'gallery-card'
         const tags = (ex.tags || []).map(t => `<span class="gallery-card-tag">${escapeHtml(t)}</span>`).join('')
-        // Each card hosts its own canvas — the visibility observer will
-        // spin up a tiny CanvasRenderer on it once it's in view.
-        const canvas = document.createElement('canvas')
-        canvas.width = 320
-        canvas.height = 180
-        canvas.className = 'gallery-card-preview-canvas'
+        // The thumb container is a slot — _activatePreview mounts a canvas
+        // here when the card scrolls in, _deactivatePreview swaps it for a
+        // static <img> snapshot when it scrolls out.
         const thumbDiv = document.createElement('div')
         thumbDiv.className = 'gallery-card-thumb'
-        thumbDiv.appendChild(canvas)
 
         const body = document.createElement('div')
         body.className = 'gallery-card-body'
@@ -599,7 +676,7 @@ class Gallery {
             this._onLoad(ex)
             this.close()
         })
-        if (ex.dsl) this._registerPreview(card, canvas, ex.dsl)
+        if (ex.dsl) this._registerPreview(card, thumbDiv, ex.dsl)
         return card
     }
 
@@ -660,8 +737,6 @@ class Gallery {
     async _upgradeBlasterCardToLive(card, thumb, item) {
         if (!item?.code) return
         // Defer the loadFromCode fetch until the card scrolls near view.
-        // We piggyback on the existing IntersectionObserver: until the
-        // card is observed we won't bother fetching the DSL.
         const fetchAndAttach = async () => {
             if (card.dataset.liveAttached === '1') return
             card.dataset.liveAttached = '1'
@@ -673,22 +748,12 @@ class Gallery {
                 return
             }
             if (!composition?.dsl) return
-            const canvas = document.createElement('canvas')
-            canvas.width = 320
-            canvas.height = 180
-            canvas.className = 'gallery-card-preview-canvas'
-            // Stack on top of the screenshot. The canvas starts blank;
-            // the screenshot remains visible underneath until the
-            // CanvasRenderer's first frame draws over it.
-            canvas.style.position = 'absolute'
-            canvas.style.inset = '0'
-            canvas.style.width = '100%'
-            canvas.style.height = '100%'
+            // Make the thumb a positioned container so absolute-stacked
+            // canvas/snapshot layers render on top of the screenshot <img>.
             thumb.style.position = 'relative'
-            thumb.appendChild(canvas)
-            this._registerPreview(card, canvas, composition.dsl)
+            this._registerPreview(card, thumb, composition.dsl, { absolute: true })
         }
-        // Trigger the fetch lazily via the same observer mechanism.
+        // Trigger the fetch lazily via a one-shot observer.
         const triggerObs = new IntersectionObserver(async (entries, obs) => {
             for (const e of entries) {
                 if (e.isIntersecting) {
