@@ -63,6 +63,18 @@ if (!document.getElementById(STYLES_ID)) {
             color: #666;
             margin-left: 0.4rem;
         }
+        .bpm-close {
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 0 0.15rem;
+            margin-left: 0.25rem;
+            font-size: 0.875rem;
+            line-height: 1;
+            transition: color 0.12s;
+        }
+        .bpm-close:hover { color: #fff; }
     `
     document.head.appendChild(style)
 }
@@ -133,6 +145,7 @@ class BpmClock {
     show() { this._el?.classList.remove('hidden') }
     hide() { this._el?.classList.add('hidden') }
     toggle() { this._el?.classList.toggle('hidden') }
+    isOpen() { return this._el ? !this._el.classList.contains('hidden') : false }
 
     _applyToRenderer() {
         const inner = this._renderer?.inner
@@ -149,10 +162,16 @@ class BpmClock {
             <span class="bpm-label">bpm</span>
             <span class="bpm-value" data-id="value">120</span>
             <span class="bpm-tap-hint">tap T · scroll · drag</span>
+            <button class="bpm-close" aria-label="Hide BPM indicator">×</button>
         `
         document.body.appendChild(this._el)
         this._pulseEl = this._el.querySelector('[data-id=pulse]')
         this._valueEl = this._el.querySelector('[data-id=value]')
+        const closeBtn = this._el.querySelector('.bpm-close')
+        closeBtn?.addEventListener('click', (e) => {
+            e.stopPropagation()
+            this.hide()
+        })
 
         // Wheel adjust
         this._el.addEventListener('wheel', (e) => {

@@ -10,7 +10,7 @@ const APP_VERSION = '0.9.0-SNAPSHOT'
 import { AboutDialog } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { preloadFontsForDsl } from './fontLoader.js'
-import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback } from './docReader.js'
+import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible } from './docReader.js'
 import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
@@ -1301,6 +1301,8 @@ async function startShader() {
         // Wire recorder state into status row
         recorder.init({
             canvas,
+            fps: 60,
+            videoBitsPerSecond: 16_000_000,
             onChange: ({ recording }) => {
                 recordToggleBtn?.classList.toggle('recording', recording)
                 recordToggleBtn?.setAttribute('data-title', recording ? 'stop recording' : 'record')
@@ -1499,7 +1501,7 @@ function setupMenuBar() {
             aboutDialog.show()
         })
     }
-    
+
     if (docsMenuItem) {
         docsMenuItem.addEventListener('click', () => {
             showDocReader()
@@ -1508,6 +1510,9 @@ function setupMenuBar() {
             }
         })
     }
+
+    // View menu — toggleable panels with checkmark indicators
+    setupViewMenu()
     
     // Right side icon buttons
     if (codeToggleBtn) {
@@ -1696,6 +1701,82 @@ function init() {
 
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()
+}
+
+/**
+ * Wire the View menu — toggle panels and reflect their state with a check.
+ *
+ * Each menu item with a `data-view-toggle` attribute owns a panel-toggle
+ * action. When the menu's parent is opened (click on its title), we refresh
+ * the check states from the actual panel visibility. Clicking an item
+ * toggles the panel and re-syncs.
+ */
+function setupViewMenu() {
+    const menu = document.getElementById('viewMenuTitle')?.closest('.menu')
+    if (!menu) return
+
+    // Map each toggle id to (read state, toggle action) functions.
+    const toggles = {
+        'editor':           { is: () => dslOverlay?.style.display !== 'none', do: () => toggleDslOverlay() },
+        'docs':             { is: () => isDocReaderVisible(),                do: () => {
+            const visible = toggleDocReader()
+            docToggleBtn?.classList.toggle('active', visible)
+        }},
+        'live-inputs':      { is: () => liveInputsPanel.isOpen(),            do: () => {
+            liveInputsPanel.toggle()
+            inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
+        }},
+        'bpm':              { is: () => bpmClock.isOpen(),                   do: () => bpmClock.toggle() },
+        'perf':             { is: () => perfOverlay.isOpen(),                do: () => {
+            perfOverlay.toggle()
+            perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
+        }},
+        'status':           { is: () => statusRow.isOpen(),                  do: () => statusRow.toggle() },
+        'performance-mode': { is: () => document.body.classList.contains('performance-mode'), do: () => togglePerformanceMode() },
+        'fullscreen':       { is: () => !!document.fullscreenElement,        do: () => toggleFullscreen() }
+    }
+
+    function refreshChecks() {
+        for (const [id, { is }] of Object.entries(toggles)) {
+            const item = document.querySelector(`[data-view-toggle="${id}"]`)
+            if (!item) continue
+            item.classList.toggle('checked', !!is())
+            const check = item.querySelector('.view-check')
+            if (check) check.textContent = is() ? '✓' : ''
+        }
+    }
+
+    // Refresh when the View menu opens
+    const title = document.getElementById('viewMenuTitle')
+    title?.addEventListener('click', () => {
+        // Use rAF so the dropdown's `.hide` toggle (handled by the generic
+        // menu-bar listener) has time to apply before we read state.
+        requestAnimationFrame(refreshChecks)
+    })
+
+    // Wire each toggle item
+    for (const [id, { do: action }] of Object.entries(toggles)) {
+        const item = document.querySelector(`[data-view-toggle="${id}"]`)
+        item?.addEventListener('click', () => {
+            action()
+            refreshChecks()
+        })
+    }
+
+    // One-shot actions (gallery, shortcuts) — open and let the generic menu
+    // close-on-click handler dismiss the dropdown.
+    document.getElementById('viewMenuItem-gallery')?.addEventListener('click', () => {
+        gallery.open().catch(err => console.error('[Gallery] open failed:', err))
+    })
+    document.getElementById('viewMenuItem-shortcuts')?.addEventListener('click', () => {
+        shortcutsDialog.open()
+    })
+
+    // Initial state
+    refreshChecks()
+
+    // Listen for fullscreen changes externally so the check stays accurate
+    document.addEventListener('fullscreenchange', refreshChecks)
 }
 
 /**

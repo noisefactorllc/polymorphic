@@ -226,6 +226,21 @@
     margin: 0.25em 0;
 }
 
+/* Menu item with a check indicator (View menu toggles) */
+.menu-items div .view-check {
+    display: inline-block;
+    width: 1em;
+    margin-right: 0.35em;
+    color: var(--menu-accent);
+    font-size: 0.8em;
+}
+
+.menu-items div .view-check:empty::before {
+    content: '';
+    display: inline-block;
+    width: 1em;
+}
+
 /* Menu item with keyboard shortcut */
 .menu-item-with-shortcut {
     display: flex;

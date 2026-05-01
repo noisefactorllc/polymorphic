@@ -60,7 +60,12 @@ class Recorder {
         this._startTime = 0
         this._indicator = null
         this._indicatorRaf = null
-        this._fps = 30
+        // 60 fps captures at the canvas's natural rate; the actual emitted
+        // rate is gated by canvas updates regardless of this hint.
+        this._fps = 60
+        // Bitrate target that keeps fast-moving generative shaders looking
+        // sharp even at 1080p. WebM/VP9 will use this as a ceiling.
+        this._videoBitsPerSecond = 16_000_000  // 16 Mbps
         this._mimeType = null
         this._onChange = () => {}
     }
@@ -69,16 +74,35 @@ class Recorder {
      * @param {object} opts
      * @param {HTMLCanvasElement} opts.canvas
      * @param {(state: {recording:boolean, durationMs:number}) => void} [opts.onChange]
-     * @param {number} [opts.fps]
+     * @param {number} [opts.fps] - default 60
+     * @param {number} [opts.videoBitsPerSecond] - default 16_000_000
      */
     init(opts) {
         this._canvas = opts.canvas
         this._onChange = opts.onChange || (() => {})
-        this._fps = opts.fps || 30
+        if (opts.fps) this._fps = opts.fps
+        if (opts.videoBitsPerSecond) this._videoBitsPerSecond = opts.videoBitsPerSecond
         this._mimeType = pickBestMimeType()
     }
 
+    /** Update recording quality settings before the next start(). */
+    setQuality({ fps, videoBitsPerSecond } = {}) {
+        if (Number.isFinite(fps) && fps > 0) this._fps = fps
+        if (Number.isFinite(videoBitsPerSecond) && videoBitsPerSecond > 0) {
+            this._videoBitsPerSecond = videoBitsPerSecond
+        }
+    }
+
     isRecording() { return this._recording }
+
+    /** Currently-active recording mime type, e.g. 'video/webm;codecs=vp9'. */
+    get mimeType() { return this._mimeType }
+
+    /** Frames-per-second hint passed to canvas.captureStream(). */
+    get fps() { return this._fps }
+
+    /** Target video bitrate in bits/sec. */
+    get videoBitsPerSecond() { return this._videoBitsPerSecond }
 
     start() {
         if (this._recording || !this._canvas) return false
@@ -87,22 +111,39 @@ class Recorder {
             return false
         }
         this._stream = this._canvas.captureStream(this._fps)
+        // Build options. Some browsers throw on unknown bitrate keys, so we
+        // attempt the high-quality config first and fall back if it fails.
+        const buildOptions = (withBitrate) => {
+            const o = {}
+            if (this._mimeType) o.mimeType = this._mimeType
+            if (withBitrate && this._videoBitsPerSecond) o.videoBitsPerSecond = this._videoBitsPerSecond
+            return o
+        }
         try {
-            this._mediaRecorder = new MediaRecorder(this._stream, this._mimeType ? { mimeType: this._mimeType } : undefined)
+            this._mediaRecorder = new MediaRecorder(this._stream, buildOptions(true))
         } catch (err) {
-            console.error('[Recorder] MediaRecorder construction failed:', err)
-            return false
+            console.warn('[Recorder] High-quality config rejected, falling back:', err)
+            try {
+                this._mediaRecorder = new MediaRecorder(this._stream, buildOptions(false))
+            } catch (err2) {
+                console.error('[Recorder] MediaRecorder construction failed:', err2)
+                return false
+            }
         }
         this._chunks = []
         this._mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) this._chunks.push(e.data)
         }
         this._mediaRecorder.onstop = () => this._onStop()
-        this._mediaRecorder.start(1000) // 1s chunks
+        // Emit one big blob at the end — simpler memory pattern, lets the
+        // browser pick optimal chunking, and produces smaller files than
+        // 1-second chunked output for the same quality.
+        this._mediaRecorder.start()
         this._recording = true
         this._startTime = performance.now()
         this._showIndicator()
         this._onChange({ recording: true, durationMs: 0 })
+        console.log(`[Recorder] start mime=${this._mimeType} fps=${this._fps} bps=${this._videoBitsPerSecond}`)
         return true
     }
 
@@ -164,12 +205,17 @@ class Recorder {
 
 function pickBestMimeType() {
     if (!('MediaRecorder' in window) || !MediaRecorder.isTypeSupported) return null
+    // Codec preference, best-quality first. AV1 wins where supported (Chrome
+    // ≥ 113 with hardware support), otherwise VP9 is the modern default.
+    // Avoid Opus audio in the type — we don't capture audio, so keeping the
+    // type pure-video lets the browser pick a leaner muxer.
     const candidates = [
-        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=av01',
+        'video/webm;codecs=av1',
         'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp8',
         'video/webm',
+        'video/mp4;codecs=h264',
         'video/mp4'
     ]
     for (const t of candidates) {
