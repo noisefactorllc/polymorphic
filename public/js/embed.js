@@ -5,7 +5,7 @@
  * Hot reload functionality for live coding experience.
  */
 
-const APP_VERSION = '0.9.0-SNAPSHOT'
+const APP_VERSION = '0.10.0-SNAPSHOT'
 
 import { AboutDialog } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
