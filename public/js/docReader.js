@@ -217,8 +217,14 @@ export function hideDocReader() {
  */
 export function toggleDocReader() {
     if (!docReaderPanel) return false;
-    docReaderPanel.classList.toggle('visible');
-    return docReaderPanel.classList.contains('visible');
+    const visible = docReaderPanel.classList.toggle('visible');
+    // Keep the editor's `.doc-open` class in sync so it narrows/widens
+    // alongside the panel. Without this, closing then re-opening the docs
+    // leaves the editor stuck at full width.
+    if (dslOverlay) {
+        dslOverlay.classList.toggle('doc-open', visible);
+    }
+    return visible;
 }
 
 /**
