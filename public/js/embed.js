@@ -1701,6 +1701,24 @@ function init() {
     // Shortcuts dialog (?)
     shortcutsDialog.init()
 
+    // Debug surface — useful for tests (Playwright reaches in to check
+    // panel state) and for power users poking around in the console.
+    // None of these references prevent GC of anything that matters.
+    if (typeof window !== 'undefined') {
+        window.__poly = {
+            liveInputsPanel,
+            recorder,
+            perfOverlay,
+            bpmClock,
+            statusRow,
+            commandPalette,
+            gallery,
+            snapshotHistory,
+            shortcutsDialog,
+            get renderer() { return renderer }
+        }
+    }
+
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()
 }
