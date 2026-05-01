@@ -1298,11 +1298,13 @@ async function startShader() {
                 fps: () => perfOverlay.toggle()
             }
         })
-        // Wire recorder state into status row
+        // Wire recorder state into status row. "standard" preset records at
+        // 720p/60fps/8Mbps — keeps the encoder happy for fast generative
+        // shaders. Switch via the command palette ("Recording: high quality"
+        // / "Recording: low quality").
         recorder.init({
             canvas,
-            fps: 60,
-            videoBitsPerSecond: 16_000_000,
+            quality: 'standard',
             onChange: ({ recording }) => {
                 recordToggleBtn?.classList.toggle('recording', recording)
                 recordToggleBtn?.setAttribute('data-title', recording ? 'stop recording' : 'record')
@@ -1941,6 +1943,39 @@ function setupCommandPalette() {
         run: () => {
             if (recorder.isRecording()) recorder.stop()
             else recorder.start()
+        }
+    })
+    commandPalette.registerAction({
+        id: 'record-quality-high',
+        title: 'Recording quality: high (1080p / 16Mbps)',
+        subtitle: 'Best quality — may strain the encoder on busy shaders',
+        icon: 'high_quality',
+        keywords: ['record', 'quality', 'high', '1080p'],
+        run: () => {
+            recorder.setQualityPreset('high')
+            showToast('Recording quality: high (1080p / 16Mbps)', 'info')
+        }
+    })
+    commandPalette.registerAction({
+        id: 'record-quality-standard',
+        title: 'Recording quality: standard (720p / 8Mbps)',
+        subtitle: 'Default — smooth on most machines',
+        icon: 'sd',
+        keywords: ['record', 'quality', 'standard', 'medium', '720p'],
+        run: () => {
+            recorder.setQualityPreset('standard')
+            showToast('Recording quality: standard (720p / 8Mbps)', 'info')
+        }
+    })
+    commandPalette.registerAction({
+        id: 'record-quality-low',
+        title: 'Recording quality: low (480p / 3Mbps)',
+        subtitle: 'For slower machines / longer recordings',
+        icon: 'compress',
+        keywords: ['record', 'quality', 'low', '480p', 'small'],
+        run: () => {
+            recorder.setQualityPreset('low')
+            showToast('Recording quality: low (480p / 3Mbps)', 'info')
         }
     })
     commandPalette.registerAction({

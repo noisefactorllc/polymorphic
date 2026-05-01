@@ -50,6 +50,17 @@ if (!document.getElementById(STYLES_ID)) {
     document.head.appendChild(style)
 }
 
+/**
+ * Quality presets — recording-side resolution and bitrate. The app/canvas
+ * runs at full quality regardless; these only constrain what the encoder
+ * sees via the intermediate downscale canvas.
+ */
+const QUALITY_PRESETS = {
+    high:     { maxHeight: 1080, fps: 60, videoBitsPerSecond: 16_000_000 },
+    standard: { maxHeight: 720,  fps: 60, videoBitsPerSecond:  8_000_000 },
+    low:      { maxHeight: 480,  fps: 30, videoBitsPerSecond:  3_000_000 }
+}
+
 class Recorder {
     constructor() {
         this._canvas = null
@@ -60,38 +71,69 @@ class Recorder {
         this._startTime = 0
         this._indicator = null
         this._indicatorRaf = null
-        // 60 fps captures at the canvas's natural rate; the actual emitted
-        // rate is gated by canvas updates regardless of this hint.
-        this._fps = 60
-        // Bitrate target that keeps fast-moving generative shaders looking
-        // sharp even at 1080p. WebM/VP9 will use this as a ceiling.
-        this._videoBitsPerSecond = 16_000_000  // 16 Mbps
+        // Quality defaults — "standard" 720p / 60fps / 8 Mbps. High-res
+        // (1080p+) recording at 60fps frequently chokes the encoder on
+        // generative shaders.
+        this._fps = QUALITY_PRESETS.standard.fps
+        this._videoBitsPerSecond = QUALITY_PRESETS.standard.videoBitsPerSecond
+        this._maxHeight = QUALITY_PRESETS.standard.maxHeight
+        this._qualityName = 'standard'
         this._mimeType = null
         this._onChange = () => {}
+        // Intermediate downscale canvas + its draw loop
+        this._captureCanvas = null
+        this._captureCtx = null
+        this._captureRaf = null
     }
 
     /**
      * @param {object} opts
      * @param {HTMLCanvasElement} opts.canvas
      * @param {(state: {recording:boolean, durationMs:number}) => void} [opts.onChange]
-     * @param {number} [opts.fps] - default 60
-     * @param {number} [opts.videoBitsPerSecond] - default 16_000_000
+     * @param {number} [opts.fps]
+     * @param {number} [opts.videoBitsPerSecond]
+     * @param {number} [opts.maxHeight] - cap recorded height; width preserves aspect
+     * @param {keyof typeof QUALITY_PRESETS} [opts.quality] - preset shorthand
      */
     init(opts) {
         this._canvas = opts.canvas
         this._onChange = opts.onChange || (() => {})
-        if (opts.fps) this._fps = opts.fps
-        if (opts.videoBitsPerSecond) this._videoBitsPerSecond = opts.videoBitsPerSecond
+        if (opts.quality && QUALITY_PRESETS[opts.quality]) {
+            this.setQualityPreset(opts.quality)
+        }
+        if (Number.isFinite(opts.fps)) this._fps = opts.fps
+        if (Number.isFinite(opts.videoBitsPerSecond)) this._videoBitsPerSecond = opts.videoBitsPerSecond
+        if (Number.isFinite(opts.maxHeight)) this._maxHeight = opts.maxHeight
         this._mimeType = pickBestMimeType()
     }
 
-    /** Update recording quality settings before the next start(). */
-    setQuality({ fps, videoBitsPerSecond } = {}) {
+    /** Update individual recording quality settings before the next start(). */
+    setQuality({ fps, videoBitsPerSecond, maxHeight } = {}) {
         if (Number.isFinite(fps) && fps > 0) this._fps = fps
         if (Number.isFinite(videoBitsPerSecond) && videoBitsPerSecond > 0) {
             this._videoBitsPerSecond = videoBitsPerSecond
         }
+        if (Number.isFinite(maxHeight) && maxHeight > 0) this._maxHeight = maxHeight
+        this._qualityName = 'custom'
     }
+
+    /**
+     * Apply a named quality preset.
+     * @param {'high'|'standard'|'low'} name
+     */
+    setQualityPreset(name) {
+        const preset = QUALITY_PRESETS[name]
+        if (!preset) return
+        this._fps = preset.fps
+        this._videoBitsPerSecond = preset.videoBitsPerSecond
+        this._maxHeight = preset.maxHeight
+        this._qualityName = name
+    }
+
+    /** Quality preset name currently active (or 'custom' after setQuality). */
+    get qualityName() { return this._qualityName }
+    /** Maximum recorded height in pixels. */
+    get maxHeight() { return this._maxHeight }
 
     isRecording() { return this._recording }
 
@@ -106,11 +148,40 @@ class Recorder {
 
     start() {
         if (this._recording || !this._canvas) return false
-        if (!('MediaRecorder' in window) || typeof this._canvas.captureStream !== 'function') {
-            console.warn('[Recorder] MediaRecorder or canvas.captureStream unavailable')
+        if (!('MediaRecorder' in window)) {
+            console.warn('[Recorder] MediaRecorder unavailable')
             return false
         }
-        this._stream = this._canvas.captureStream(this._fps)
+
+        // Pick the recording stream source. If the source canvas is taller
+        // than maxHeight, drive an intermediate downscale canvas instead so
+        // the encoder doesn't choke on full-resolution frames.
+        const srcW = this._canvas.width
+        const srcH = this._canvas.height
+        const needsDownscale = srcH > this._maxHeight
+        const recW = needsDownscale ? Math.max(2, Math.round((srcW * this._maxHeight) / srcH)) : srcW
+        const recH = needsDownscale ? this._maxHeight : srcH
+
+        let streamSource
+        if (needsDownscale) {
+            this._captureCanvas = document.createElement('canvas')
+            this._captureCanvas.width = recW
+            this._captureCanvas.height = recH
+            this._captureCtx = this._captureCanvas.getContext('2d', { alpha: false, desynchronized: true })
+            this._captureCtx.imageSmoothingEnabled = true
+            this._captureCtx.imageSmoothingQuality = 'high'
+            streamSource = this._captureCanvas
+            this._startCaptureLoop()
+        } else {
+            streamSource = this._canvas
+        }
+
+        if (typeof streamSource.captureStream !== 'function') {
+            console.warn('[Recorder] captureStream unavailable on stream source')
+            return false
+        }
+
+        this._stream = streamSource.captureStream(this._fps)
         // Build options. Some browsers throw on unknown bitrate keys, so we
         // attempt the high-quality config first and fall back if it fails.
         const buildOptions = (withBitrate) => {
@@ -127,6 +198,7 @@ class Recorder {
                 this._mediaRecorder = new MediaRecorder(this._stream, buildOptions(false))
             } catch (err2) {
                 console.error('[Recorder] MediaRecorder construction failed:', err2)
+                this._stopCaptureLoop()
                 return false
             }
         }
@@ -135,16 +207,43 @@ class Recorder {
             if (e.data && e.data.size > 0) this._chunks.push(e.data)
         }
         this._mediaRecorder.onstop = () => this._onStop()
-        // Emit one big blob at the end — simpler memory pattern, lets the
-        // browser pick optimal chunking, and produces smaller files than
-        // 1-second chunked output for the same quality.
         this._mediaRecorder.start()
         this._recording = true
         this._startTime = performance.now()
         this._showIndicator()
         this._onChange({ recording: true, durationMs: 0 })
-        console.log(`[Recorder] start mime=${this._mimeType} fps=${this._fps} bps=${this._videoBitsPerSecond}`)
+        console.log(`[Recorder] start mime=${this._mimeType} fps=${this._fps} bps=${this._videoBitsPerSecond} src=${srcW}x${srcH} rec=${recW}x${recH} preset=${this._qualityName}`)
         return true
+    }
+
+    /**
+     * Begin the rAF loop that copies the source canvas into the intermediate
+     * downscale canvas. Stops via _stopCaptureLoop() on stop().
+     * @private
+     */
+    _startCaptureLoop() {
+        const tick = () => {
+            this._captureRaf = requestAnimationFrame(tick)
+            if (!this._captureCtx || !this._canvas) return
+            try {
+                this._captureCtx.drawImage(
+                    this._canvas,
+                    0, 0, this._canvas.width, this._canvas.height,
+                    0, 0, this._captureCanvas.width, this._captureCanvas.height
+                )
+            } catch { /* canvas not ready / context lost — skip frame */ }
+        }
+        tick()
+    }
+
+    /** @private */
+    _stopCaptureLoop() {
+        if (this._captureRaf) {
+            cancelAnimationFrame(this._captureRaf)
+            this._captureRaf = null
+        }
+        this._captureCanvas = null
+        this._captureCtx = null
     }
 
     stop() {
@@ -155,6 +254,7 @@ class Recorder {
         }
         this._stream?.getTracks().forEach(t => t.stop())
         this._stream = null
+        this._stopCaptureLoop()
         this._hideIndicator()
         this._onChange({ recording: false, durationMs: performance.now() - this._startTime })
     }
