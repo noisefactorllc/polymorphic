@@ -65,6 +65,12 @@ function handleDocClick(e) {
         applyCodeBlockToEditor(index);
         return;
     }
+
+    // External links — open in a new tab (and harden against tab-nabbing)
+    if (/^https?:\/\//i.test(href)) {
+        link.target = '_blank';
+        if (!link.rel) link.rel = 'noopener noreferrer';
+    }
 }
 
 /**
