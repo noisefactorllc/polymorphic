@@ -12,5 +12,16 @@ const m = await p.evaluate(async () => {
 console.log(JSON.stringify(m, null, 2))
 const ok = m?.name === 'Polymorphic' && m?.start_url === '/'
 console.log(ok ? 'PASS' : 'FAIL')
+const p2 = await ctx.newPage()
+await p2.goto('http://localhost:3000', { waitUntil: 'networkidle' })
+await p2.waitForTimeout(2000)
+const swReg = await p2.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration()
+    return reg ? reg.scope : null
+})
+console.log('sw scope:', swReg)
+const ok2 = !!swReg
+console.log(ok2 ? 'PASS' : 'FAIL')
+if (!ok2) process.exit(1)
 await b.close()
 process.exit(ok ? 0 : 1)
