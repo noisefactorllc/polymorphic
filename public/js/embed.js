@@ -33,6 +33,7 @@ import { outputPicker } from './ui/outputPicker.js'
 import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
+import { parseErrorLocation } from './ui/errorBanner.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -368,8 +369,10 @@ render(o0)`
  */
 function showCompilerError(errorText) {
     if (!compilerErrorEl) return
-    // Wrap entire text in a single span for glyph background
-    const escaped = errorText.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const loc = parseErrorLocation(errorText)
+    let label = errorText
+    if (loc) label = `line ${loc.line}:${loc.col} — ${errorText}`
+    const escaped = label.replace(/</g, '&lt;').replace(/>/g, '&gt;')
     compilerErrorEl.innerHTML = `<span>${escaped}</span>`
     compilerErrorEl.classList.add('visible')
 }
@@ -1778,15 +1781,24 @@ function init() {
         })
     }
     
-    // Set up compiler error click-to-copy
+    // Set up compiler error click-to-jump (or fallback copy)
     if (compilerErrorEl) {
-        compilerErrorEl.addEventListener('click', async () => {
-            const errorText = compilerErrorEl.textContent
-            try {
-                await navigator.clipboard.writeText(errorText)
-                console.log('Error copied to clipboard')
-            } catch (err) {
-                console.error('Failed to copy error:', err)
+        compilerErrorEl.addEventListener('click', () => {
+            const text = compilerErrorEl.textContent
+            const loc = parseErrorLocation(text)
+            if (loc && dslEditor) {
+                const ta = dslEditor.getTextarea?.()
+                if (!ta) return
+                const lines = ta.value.split('\n')
+                let offset = 0
+                for (let i = 0; i < Math.min(loc.line - 1, lines.length); i++) {
+                    offset += lines[i].length + 1
+                }
+                offset += Math.max(0, loc.col - 1)
+                ta.focus()
+                ta.selectionStart = ta.selectionEnd = offset
+            } else {
+                navigator.clipboard?.writeText(text).catch(() => {})
             }
         })
     }
