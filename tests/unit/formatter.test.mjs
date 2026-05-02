@@ -24,3 +24,19 @@ test('formatDsl is idempotent', () => {
     const input = 'search synth, render\n\nnoise(scaleX: 80)\n  .write(o0)\n\nrender(o0)'
     assert.strictEqual(formatDsl(formatDsl(input)), formatDsl(input))
 })
+
+test('formatDsl collapses multi-line argument blocks', () => {
+    const input = 'noise()\n  .adjust(\n    mode: hsv,\n    rotation: 120\n  )\n  .write(o0)\nrender(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('  .adjust(mode: hsv, rotation: 120)'),
+        'multi-line .adjust(...) collapses onto one indented line')
+    assert.ok(!/^[a-z]/m.test(out.split('\n').filter(l => l.includes('mode:')).join('')),
+        'argument-only lines never appear at column 0')
+})
+
+test('formatDsl idempotent across multi-line input', () => {
+    const input = 'search synth, filter, render\n\nnoise()\n  .adjust(\n    mode: hsv,\n    rotation: 120\n  )\n  .write(o0)\n\nrender(o0)'
+    const once = formatDsl(input)
+    const twice = formatDsl(once)
+    assert.strictEqual(twice, once)
+})
