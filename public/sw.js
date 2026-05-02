@@ -8,6 +8,10 @@ const PRECACHE = [
     '/img/polymorphic.png',
     '/manifest.webmanifest'
 ]
+const NETWORK_ONLY = new Set([
+    '/deployment-meta.json',
+    '/data/examples.json'
+])
 
 self.addEventListener('install', (e) => {
     e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()))
@@ -21,8 +25,16 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
     const url = new URL(e.request.url)
-    // Don't intercept the engine bundle / sharing / blaster — they have their own freshness
     if (url.origin !== location.origin) return
+
+    // Always-fresh paths: do not intercept at all
+    if (NETWORK_ONLY.has(url.pathname)) return
+
+    // Respect the request's cache directive
+    if (e.request.cache === 'no-store' || e.request.cache === 'no-cache' || e.request.cache === 'reload') {
+        return
+    }
+
     e.respondWith((async () => {
         const cache = await caches.open(CACHE)
         const cached = await cache.match(e.request)
