@@ -69,6 +69,12 @@ let renderer = null
 // Hot reload state
 let hotReloadTimeout = null
 
+// Single-flight compile gate. Three paths can fire near-simultaneously
+// (forcerecompile / forceevalblock / scheduleHotReload). While a compile is
+// in progress we drop the manual paths and re-arm the debounced one so the
+// GL state never flips mid-compile.
+let _compileInFlight = false
+
 // Original DSL (for reset functionality)
 let originalDsl = ''
 
@@ -1050,28 +1056,37 @@ function setupDslEditor() {
     // Handle force recompile event from Ctrl/Cmd+Enter
     // The code-editor component dispatches 'forcerecompile' events
     dslEditor.addEventListener('forcerecompile', async () => {
+        // Single-flight gate: drop this call if a compile is already running
+        if (_compileInFlight) return
         // Clear pending hot reload
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
             hotReloadTimeout = null
         }
-        const result = await recompileShader()
-        const value = dslEditor.value || ''
-        const lineCount = value ? value.split('\n').length : 1
-        if (!result.success) {
-            console.warn('Manual compile failed:', result.error)
-            showCompilerError(result.error)
-            dslEditor.flashLines?.(1, lineCount, { error: true })
-        } else {
-            hideCompilerError()
-            dslEditor.flashLines?.(1, lineCount)
-            if (value) snapshotHistory.push(value)
-            outputPicker.setDsl(dslEditor.value).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+        try {
+            _compileInFlight = true
+            const result = await recompileShader()
+            const value = dslEditor.value || ''
+            const lineCount = value ? value.split('\n').length : 1
+            if (!result.success) {
+                console.warn('Manual compile failed:', result.error)
+                showCompilerError(result.error)
+                dslEditor.flashLines?.(1, lineCount, { error: true })
+            } else {
+                hideCompilerError()
+                dslEditor.flashLines?.(1, lineCount)
+                if (value) snapshotHistory.push(value)
+                outputPicker.setDsl(dslEditor.value).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+            }
+        } finally {
+            _compileInFlight = false
         }
     })
 
     // Cmd+Shift+Enter / Alt+Enter — evaluate current block (or selection)
     dslEditor.addEventListener('forceevalblock', async () => {
+        // Single-flight gate: drop this call if a compile is already running
+        if (_compileInFlight) return
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
             hotReloadTimeout = null
@@ -1079,24 +1094,34 @@ function setupDslEditor() {
         const sel = getSelectionOrBlock(dslEditor)
         if (!sel || !sel.text.trim()) {
             // Fall through to whole-program eval
-            const result = await recompileShader()
-            if (!result.success) showCompilerError(result.error)
-            else hideCompilerError()
+            try {
+                _compileInFlight = true
+                const result = await recompileShader()
+                if (!result.success) showCompilerError(result.error)
+                else hideCompilerError()
+            } finally {
+                _compileInFlight = false
+            }
             return
         }
 
         const program = buildRunnableProgram(sel.text)
-        const result = await recompileShader(program)
-        const value = dslEditor.value || ''
-        const startLine = lineNumberAt(value, sel.start)
-        const endLine = lineNumberAt(value, Math.max(sel.start, sel.end - 1))
-        if (!result.success) {
-            console.warn('Block eval failed:', result.error)
-            showCompilerError(result.error)
-            dslEditor.flashLines?.(startLine, endLine, { error: true })
-        } else {
-            hideCompilerError()
-            dslEditor.flashLines?.(startLine, endLine)
+        try {
+            _compileInFlight = true
+            const result = await recompileShader(program)
+            const value = dslEditor.value || ''
+            const startLine = lineNumberAt(value, sel.start)
+            const endLine = lineNumberAt(value, Math.max(sel.start, sel.end - 1))
+            if (!result.success) {
+                console.warn('Block eval failed:', result.error)
+                showCompilerError(result.error)
+                dslEditor.flashLines?.(startLine, endLine, { error: true })
+            } else {
+                hideCompilerError()
+                dslEditor.flashLines?.(startLine, endLine)
+            }
+        } finally {
+            _compileInFlight = false
         }
     })
 }
@@ -1113,19 +1138,30 @@ function scheduleHotReload() {
     // Schedule recompile 500ms after typing stops
     hotReloadTimeout = setTimeout(async () => {
         hotReloadTimeout = null
-        const result = await recompileShader()
-        if (!result.success) {
-            console.warn('Hot reload compile failed:', result.error)
-            showCompilerError(result.error)
-        } else {
-            hideCompilerError()
-            // Snapshot the successful program state and stamp the URL so the
-            // current sketch is shareable just by copying the URL.
-            if (dslEditor?.value) {
-                snapshotHistory.push(dslEditor.value)
-                stampUrl(dslEditor.value)
+        // Single-flight gate: if a compile is already in progress, re-arm
+        // this timer for another 500ms instead of stomping on it.
+        if (_compileInFlight) {
+            scheduleHotReload()
+            return
+        }
+        try {
+            _compileInFlight = true
+            const result = await recompileShader()
+            if (!result.success) {
+                console.warn('Hot reload compile failed:', result.error)
+                showCompilerError(result.error)
+            } else {
+                hideCompilerError()
+                // Snapshot the successful program state and stamp the URL so the
+                // current sketch is shareable just by copying the URL.
+                if (dslEditor?.value) {
+                    snapshotHistory.push(dslEditor.value)
+                    stampUrl(dslEditor.value)
+                }
+                outputPicker.setDsl(dslEditor?.value || '').catch(err => console.debug('[outputPicker] setDsl failed:', err))
             }
-            outputPicker.setDsl(dslEditor?.value || '').catch(err => console.debug('[outputPicker] setDsl failed:', err))
+        } finally {
+            _compileInFlight = false
         }
     }, 500)
 }
