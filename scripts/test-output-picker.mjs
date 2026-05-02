@@ -1,6 +1,8 @@
 import { chromium } from 'playwright'
 const b = await chromium.launch()
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } })
+// Surface-pips picker is hidden by default; enable it for this test session
+await ctx.addInitScript(() => localStorage.setItem('polymorphic-output-picker', '1'))
 const p = await ctx.newPage()
 const dsl = 'search synth, render\n\nnoise().write(o0)\ngradient().write(o3)\n\nrender(o0)'
 await p.goto('http://localhost:3000?dsl=' + encodeURIComponent(dsl), { waitUntil: 'networkidle' })

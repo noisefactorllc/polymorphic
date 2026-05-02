@@ -1899,6 +1899,7 @@ function setupViewMenu() {
             liveInputsPanel.toggle()
             inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
         }},
+        'surface-pips':     { is: () => outputPicker.isEnabled(),            do: () => outputPicker.toggle() },
         'bpm':              { is: () => bpmClock.isOpen(),                   do: () => bpmClock.toggle() },
         'perf':             { is: () => perfOverlay.isOpen(),                do: () => {
             perfOverlay.toggle()

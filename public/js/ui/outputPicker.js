@@ -63,14 +63,20 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     document.head.appendChild(s)
 }
 
+const ENABLED_KEY = 'polymorphic-output-picker'
+
 class OutputPicker {
     constructor() {
         this._el = null
-        this._open = false
         this._dsl = ''
         this._activeSurface = null
         this._previews = new Map()  // surface index -> { canvas, renderer, pip }
         this._onSwitch = () => {}
+        let stored = '0'
+        try {
+            if (typeof localStorage !== 'undefined') stored = localStorage.getItem(ENABLED_KEY) || '0'
+        } catch {}
+        this._userEnabled = stored === '1'
     }
 
     init(opts) {
@@ -79,6 +85,25 @@ class OutputPicker {
         this._el = document.createElement('div')
         this._el.className = 'output-picker'
         document.body.appendChild(this._el)
+    }
+
+    isEnabled() { return this._userEnabled }
+
+    setEnabled(on) {
+        this._userEnabled = !!on
+        try {
+            if (typeof localStorage !== 'undefined') localStorage.setItem(ENABLED_KEY, this._userEnabled ? '1' : '0')
+        } catch {}
+        this._refreshVisibility()
+        return this._userEnabled
+    }
+
+    toggle() { return this.setEnabled(!this._userEnabled) }
+
+    _refreshVisibility() {
+        if (!this._el) return
+        const surfaces = surfacesWrittenInDsl(this._dsl)
+        this._el.classList.toggle('visible', this._userEnabled && surfaces.length > 0)
     }
 
     /**
@@ -124,8 +149,8 @@ class OutputPicker {
         for (const [idx, entry] of this._previews) {
             entry.pip.classList.toggle('active', idx === this._activeSurface)
         }
-        // Toggle visibility — hide entirely if 0 or 1 surface (single-output sketches don't need a picker)
-        this._el.classList.toggle('visible', surfaces.length > 1)
+        // Hidden by default; user toggles via View menu (persisted in localStorage)
+        this._el.classList.toggle('visible', this._userEnabled && surfaces.length > 0)
     }
 
     async _createPip(idx) {
