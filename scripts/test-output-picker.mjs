@@ -21,5 +21,15 @@ const ok = pickerInfo.exists && pickerInfo.pipCount === 2
     && pickerInfo.labels.includes('o0') && pickerInfo.labels.includes('o3')
     && pickerInfo.active === '0'
 console.log(ok ? 'PASS' : 'FAIL')
+// Click the o3 pip and assert render target switches
+const p2 = await ctx.newPage()
+await p2.goto('http://localhost:3000?dsl=' + encodeURIComponent(dsl), { waitUntil: 'networkidle' })
+await p2.waitForTimeout(3500)
+await p2.click('.output-pip[data-surface="3"]')
+await p2.waitForTimeout(800)
+const editorAfter = await p2.evaluate(() => document.querySelector('code-editor').value)
+const ok2 = editorAfter.includes('render(o3)') && !editorAfter.includes('render(o0)')
+console.log('click switch:', ok2 ? 'PASS' : 'FAIL')
+if (!ok2) process.exit(1)
 await b.close()
 process.exit(ok ? 0 : 1)
