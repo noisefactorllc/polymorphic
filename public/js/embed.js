@@ -28,6 +28,7 @@ import { bpmClock } from './ui/bpm.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
+import { attachTouchControls } from './ui/touchControls.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -1292,6 +1293,12 @@ async function startShader() {
                 dslEditor.value = next
                 scheduleHotReload()
             }
+        })
+
+        attachTouchControls({
+            canvas,
+            dslEditor,
+            onTogglePerformanceMode: togglePerformanceMode
         })
 
         // Drag-and-drop image/video files anywhere → become a media() source
