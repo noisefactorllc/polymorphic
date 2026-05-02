@@ -18,6 +18,7 @@ import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
 import { buildPaletteActions } from './ui/paletteActions.js'
+import { formatDsl } from './ui/formatter.js'
 import { insertAtCursor, getSelectionOrBlock, blockRangeAt } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
@@ -1126,6 +1127,16 @@ function setupDslEditor() {
             _compileInFlight = false
         }
     })
+
+    // Cmd/Ctrl+Shift+F — format the DSL
+    dslEditor.addEventListener('format', () => {
+        const before = dslEditor.value
+        const after = formatDsl(before)
+        if (after !== before) {
+            dslEditor.value = after
+            scheduleHotReload()
+        }
+    })
 }
 
 /**
@@ -1647,6 +1658,16 @@ function setupMenuBar() {
             e.preventDefault()
             togglePerformanceMode()
         }
+        // Cmd/Ctrl+Shift+F — format the DSL (only when editor is focused so we
+        // don't steal Find from other contexts)
+        if (mod && e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+            const active = document.activeElement
+            const inEditor = active && (active.tagName === 'TEXTAREA' || active.closest?.('code-editor'))
+            if (inEditor) {
+                e.preventDefault()
+                dslEditor?.dispatchEvent(new CustomEvent('format', { bubbles: true, composed: true }))
+            }
+        }
         // Esc exits performance mode
         if (e.key === 'Escape' && document.body.classList.contains('performance-mode')) {
             e.preventDefault()
@@ -1886,6 +1907,7 @@ function setupCommandPalette() {
     const actions = buildPaletteActions({
         forceRecompile: () => dslEditor?.dispatchEvent(new CustomEvent('forcerecompile', { bubbles: true, composed: true })),
         forceEvalBlock: () => dslEditor?.dispatchEvent(new CustomEvent('forceevalblock', { bubbles: true, composed: true })),
+        formatDsl: () => dslEditor?.dispatchEvent(new CustomEvent('format', { bubbles: true, composed: true })),
         resetDsl: () => resetDsl(),
         toggleFullscreen: () => toggleFullscreen(),
         togglePlayPause: () => togglePlayPause(),

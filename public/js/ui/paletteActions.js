@@ -13,6 +13,7 @@
  * @typedef {Object} PaletteActionDeps
  * @property {() => void}   forceRecompile
  * @property {() => void}   forceEvalBlock
+ * @property {() => void}   formatDsl
  * @property {() => void}   resetDsl
  * @property {() => void}   toggleFullscreen
  * @property {() => void}   togglePlayPause
@@ -65,6 +66,14 @@ export function buildPaletteActions(deps) {
             icon: 'play_circle',
             keywords: ['block', 'eval', 'paragraph', 'selection'],
             run: () => deps.forceEvalBlock()
+        },
+        {
+            id: 'format',
+            title: 'Format DSL',
+            subtitle: 'Cmd/Ctrl+Shift+F — pretty-print the current program',
+            icon: 'format_align_left',
+            keywords: ['prettier', 'beautify', 'format'],
+            run: () => deps.formatDsl()
         },
         {
             id: 'reset',
