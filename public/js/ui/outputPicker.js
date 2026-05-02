@@ -173,6 +173,7 @@ class OutputPicker {
     }
 
     async dispose() {
+        this._pending = null
         for (const [, entry] of this._previews) {
             try { await entry.renderer?.dispose({ loseContext: true }) } catch {}
             entry.pip?.remove()
