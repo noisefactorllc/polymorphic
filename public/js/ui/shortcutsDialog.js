@@ -123,6 +123,7 @@ const SECTIONS = [
     {
         title: 'Editor',
         rows: [
+            ['Format DSL',                  ['⌘/Ctrl', '⇧', 'F']],
             ['Scrub a number live',         ['Alt', 'drag']],
             ['Fine scrub (×0.1)',           ['Alt', '⇧', 'drag']],
             ['Coarse scrub (×10)',          ['Alt', '⌘/Ctrl', 'drag']],
