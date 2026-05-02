@@ -2070,9 +2070,8 @@ function switchBackend(target) {
 
 /**
  * Reset surfaces o0..o7 by recompiling. The pipeline reallocates surface
- * textures on each compile, which clears any feedback state — equivalent to
- * Hydra's hush(). We also briefly suspend the renderer to avoid showing a
- * partial frame.
+ * textures on each compile, which clears any feedback state. We also briefly
+ * suspend the renderer to avoid showing a partial frame.
  */
 async function hushSurfaces() {
     if (!renderer || !dslEditor) return

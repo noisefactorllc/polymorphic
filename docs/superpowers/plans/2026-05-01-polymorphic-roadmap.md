@@ -389,7 +389,7 @@ git commit -m "test(outputPicker): clicking a pip rewrites render() to the picke
 
 ## Phase 2: Mobile / touch UX
 
-**Why:** Polymorphic on iPad/iPhone is functional but feels poor — no tap-to-eval, panels overflow, scrubber wants a pointer. Hydra's mobile story is also weak; this is a clear differentiator.
+**Why:** Polymorphic on iPad/iPhone is functional but feels poor — no tap-to-eval, panels overflow, scrubber wants a pointer. Mobile-first live coding is a wide-open niche.
 
 ### Task 2.1: Tap-to-eval gesture
 
