@@ -27,6 +27,7 @@ import { snapshotHistory } from './ui/snapshotHistory.js'
 import { bpmClock } from './ui/bpm.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
+import { outputPicker } from './ui/outputPicker.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -1064,6 +1065,7 @@ function setupDslEditor() {
             hideCompilerError()
             dslEditor.flashLines?.(1, lineCount)
             if (value) snapshotHistory.push(value)
+            outputPicker.setDsl(dslEditor.value).catch(err => console.debug('[outputPicker] setDsl failed:', err))
         }
     })
 
@@ -1122,6 +1124,7 @@ function scheduleHotReload() {
                 snapshotHistory.push(dslEditor.value)
                 stampUrl(dslEditor.value)
             }
+            outputPicker.setDsl(dslEditor?.value || '').catch(err => console.debug('[outputPicker] setDsl failed:', err))
         }
     }, 500)
 }
@@ -1282,6 +1285,15 @@ async function startShader() {
             }
         })
 
+        outputPicker.init({
+            onSwitch: (idx) => {
+                if (!dslEditor) return
+                const next = dslEditor.value.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`)
+                dslEditor.value = next
+                scheduleHotReload()
+            }
+        })
+
         // Drag-and-drop image/video files anywhere → become a media() source
         setupFileDrop(canvas)
         perfOverlay.init({ renderer, canvas })
@@ -1329,6 +1341,8 @@ async function startShader() {
         if (dslEditor) {
             dslEditor.value = dsl
         }
+
+        outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
 
         // Handle resize
         window.addEventListener('resize', () => {
