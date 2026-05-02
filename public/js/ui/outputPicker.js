@@ -71,6 +71,7 @@ class OutputPicker {
 
     init(opts) {
         this._onSwitch = opts.onSwitch || (() => {})
+        if (this._el) return
         this._el = document.createElement('div')
         this._el.className = 'output-picker'
         document.body.appendChild(this._el)
@@ -80,8 +81,18 @@ class OutputPicker {
      * Update the picker to reflect a new DSL: rebuild pips for every surface
      * the program writes to, mark the active one, dispose any pip whose
      * surface is no longer written.
+     *
+     * Serialized via a single-flight queue so overlapping calls from multiple
+     * compile hot paths can't race on _previews / DOM mutations across awaits.
      */
     async setDsl(dsl) {
+        this._pending = (this._pending || Promise.resolve())
+            .then(() => this._setDslImpl(dsl))
+            .catch(err => console.debug('[OutputPicker] setDsl chain:', err))
+        return this._pending
+    }
+
+    async _setDslImpl(dsl) {
         this._dsl = dsl
         const surfaces = surfacesWrittenInDsl(dsl)
         this._activeSurface = currentRenderTarget(dsl)
@@ -128,17 +139,18 @@ class OutputPicker {
         pip.addEventListener('click', () => this._onSwitch(idx))
         // Render the surface in isolation: rewrite the DSL so render() points at this surface
         const surfaceDsl = this._dsl.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`)
-        const renderer = new CanvasRenderer({
-            canvas,
-            width: canvas.width,
-            height: canvas.height,
-            basePath: SHADER_BASE_PATH,
-            preferWebGPU: false,
-            useBundles: true,
-            bundlePath: SHADER_BUNDLE_PATH,
-            onError: () => {}
-        })
+        let renderer = null
         try {
+            renderer = new CanvasRenderer({
+                canvas,
+                width: canvas.width,
+                height: canvas.height,
+                basePath: SHADER_BASE_PATH,
+                preferWebGPU: false,
+                useBundles: true,
+                bundlePath: SHADER_BUNDLE_PATH,
+                onError: () => {}
+            })
             await renderer.loadManifest()
             const effects = extractEffectNamesFromDsl(surfaceDsl, renderer.manifest || {})
             const ids = effects.map(e => e.effectId)
@@ -147,6 +159,10 @@ class OutputPicker {
             renderer.start()
         } catch (err) {
             console.debug('[OutputPicker] pip compile failed:', err?.message || err)
+            if (renderer) {
+                try { await renderer.dispose({ loseContext: true }) } catch {}
+            }
+            renderer = null
         }
         return { pip, canvas, renderer }
     }
