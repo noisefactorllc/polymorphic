@@ -21,6 +21,10 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
         if (now - lastTapTime < 350 && dx < 30 && dy < 30) {
             // Double-tap detected
             dslEditor?.dispatchEvent(new CustomEvent('forcerecompile', { bubbles: true, composed: true }))
+            canvas.classList.remove('canvas-flash')
+            // Force reflow so re-adding the class restarts the animation
+            void canvas.offsetWidth
+            canvas.classList.add('canvas-flash')
             lastTapTime = 0
         } else {
             lastTapTime = now
