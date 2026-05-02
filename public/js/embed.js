@@ -17,6 +17,7 @@ import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
+import { buildPaletteActions } from './ui/paletteActions.js'
 import { insertAtCursor, getSelectionOrBlock, blockRangeAt } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
@@ -1874,234 +1875,74 @@ function setupCommandPalette() {
         }
     })
 
-    // Register top-level actions
-    commandPalette.registerAction({
-        id: 'eval-all',
-        title: 'Evaluate whole program',
-        subtitle: 'Compile and run the entire editor',
-        icon: 'play_arrow',
-        keywords: ['compile', 'run', 'all', 'recompile'],
-        run: () => dslEditor?.dispatchEvent(new CustomEvent('forcerecompile', { bubbles: true, composed: true }))
-    })
-    commandPalette.registerAction({
-        id: 'eval-block',
-        title: 'Evaluate current block',
-        subtitle: 'Run the paragraph under the cursor (or current selection)',
-        icon: 'play_circle',
-        keywords: ['block', 'eval', 'paragraph', 'selection'],
-        run: () => dslEditor?.dispatchEvent(new CustomEvent('forceevalblock', { bubbles: true, composed: true }))
-    })
-    commandPalette.registerAction({
-        id: 'reset',
-        title: 'Reset to original',
-        subtitle: 'Restore the program loaded at startup',
-        icon: 'restart_alt',
-        keywords: ['original', 'undo'],
-        run: () => resetDsl()
-    })
-    commandPalette.registerAction({
-        id: 'fullscreen',
-        title: 'Toggle fullscreen',
-        icon: 'fullscreen',
-        keywords: ['expand', 'large'],
-        run: () => toggleFullscreen()
-    })
-    commandPalette.registerAction({
-        id: 'play-pause',
-        title: 'Play / pause animation',
-        icon: 'pause',
-        keywords: ['stop', 'animate'],
-        run: () => togglePlayPause()
-    })
-    commandPalette.registerAction({
-        id: 'toggle-editor',
-        title: 'Toggle code editor',
-        icon: 'code',
-        keywords: ['hide', 'show', 'visible'],
-        run: () => toggleDslOverlay()
-    })
-    commandPalette.registerAction({
-        id: 'toggle-docs',
-        title: 'Toggle documentation panel',
-        icon: 'menu_book',
-        keywords: ['help', 'reference'],
-        run: () => {
+    // Build the action list with high-level UI hooks. The deps object only
+    // exposes callable verbs — never the underlying singletons — so the
+    // registry stays decoupled from embed.js's internals.
+    const actions = buildPaletteActions({
+        forceRecompile: () => dslEditor?.dispatchEvent(new CustomEvent('forcerecompile', { bubbles: true, composed: true })),
+        forceEvalBlock: () => dslEditor?.dispatchEvent(new CustomEvent('forceevalblock', { bubbles: true, composed: true })),
+        resetDsl: () => resetDsl(),
+        toggleFullscreen: () => toggleFullscreen(),
+        togglePlayPause: () => togglePlayPause(),
+        toggleEditor: () => toggleDslOverlay(),
+        toggleDocs: () => {
             const visible = toggleDocReader()
             if (docToggleBtn) docToggleBtn.classList.toggle('active', visible)
-        }
-    })
-    commandPalette.registerAction({
-        id: 'save-png',
-        title: 'Save canvas as PNG',
-        icon: 'image',
-        keywords: ['screenshot', 'export'],
-        run: () => savePNG?.click?.()
-    })
-    commandPalette.registerAction({
-        id: 'save-jpg',
-        title: 'Save canvas as JPG',
-        icon: 'photo_camera',
-        keywords: ['screenshot', 'export'],
-        run: () => saveJPG?.click?.()
-    })
-    commandPalette.registerAction({
-        id: 'share',
-        title: 'Share program publicly',
-        icon: 'share',
-        keywords: ['link', 'url', 'export'],
-        run: () => shareProgram?.click?.()
-    })
-    commandPalette.registerAction({
-        id: 'load-program',
-        title: 'Load saved program',
-        icon: 'folder_open',
-        run: () => openProgramModal('load')
-    })
-    commandPalette.registerAction({
-        id: 'save-program',
-        title: 'Save program',
-        icon: 'save',
-        run: () => openProgramModal('save')
-    })
-    commandPalette.registerAction({
-        id: 'docs-search',
-        title: 'Open documentation',
-        icon: 'menu_book',
-        run: () => {
+        },
+        savePNG: () => savePNG?.click?.(),
+        saveJPG: () => saveJPG?.click?.(),
+        shareProgram: () => shareProgram?.click?.(),
+        loadProgram: () => openProgramModal('load'),
+        saveProgram: () => openProgramModal('save'),
+        openDocs: () => {
             showDocReader()
             docToggleBtn?.classList.add('active')
-        }
-    })
-    commandPalette.registerAction({
-        id: 'live-inputs',
-        title: 'Toggle live inputs panel',
-        subtitle: 'Audio FFT meters, MIDI CCs, oscillator snippets',
-        icon: 'tune',
-        keywords: ['audio', 'midi', 'mic', 'osc', 'oscillator'],
-        run: () => {
+        },
+        toggleLiveInputs: () => {
             liveInputsPanel.toggle()
             inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
-        }
-    })
-    commandPalette.registerAction({
-        id: 'mic-enable',
-        title: 'Enable microphone (audio FFT)',
-        subtitle: 'Use a.low / a.mid / a.high / a.vol in your DSL',
-        icon: 'mic',
-        keywords: ['audio', 'fft', 'microphone'],
-        run: () => {
+        },
+        enableMic: () => {
             liveInputsPanel.open()
             inputsToggleBtn?.classList.add('active')
             const btn = document.querySelector('.live-inputs-panel [data-id=audio-toggle]')
             if (btn && !btn.classList.contains('active')) btn.click()
-        }
-    })
-    commandPalette.registerAction({
-        id: 'midi-enable',
-        title: 'Connect MIDI device',
-        subtitle: 'Live-map any MIDI CC into your DSL',
-        icon: 'piano',
-        keywords: ['midi', 'controller', 'cc'],
-        run: () => {
+        },
+        connectMidi: () => {
             liveInputsPanel.open()
             inputsToggleBtn?.classList.add('active')
             const btn = document.querySelector('.live-inputs-panel [data-id=midi-toggle]')
             if (btn && !btn.classList.contains('active')) btn.click()
-        }
-    })
-    commandPalette.registerAction({
-        id: 'record',
-        title: 'Start / stop recording',
-        subtitle: 'Capture canvas as WebM video',
-        icon: 'fiber_manual_record',
-        keywords: ['record', 'video', 'webm', 'capture'],
-        run: () => {
+        },
+        toggleRecording: () => {
             if (recorder.isRecording()) recorder.stop()
             else recorder.start()
-        }
-    })
-    commandPalette.registerAction({
-        id: 'record-quality-high',
-        title: 'Recording quality: high (1080p / 16Mbps)',
-        subtitle: 'Best quality — may strain the encoder on busy shaders',
-        icon: 'high_quality',
-        keywords: ['record', 'quality', 'high', '1080p'],
-        run: () => {
-            recorder.setQualityPreset('high')
-            showToast('Recording quality: high (1080p / 16Mbps)', 'info')
-        }
-    })
-    commandPalette.registerAction({
-        id: 'record-quality-standard',
-        title: 'Recording quality: standard (720p / 8Mbps)',
-        subtitle: 'Default — smooth on most machines',
-        icon: 'sd',
-        keywords: ['record', 'quality', 'standard', 'medium', '720p'],
-        run: () => {
-            recorder.setQualityPreset('standard')
-            showToast('Recording quality: standard (720p / 8Mbps)', 'info')
-        }
-    })
-    commandPalette.registerAction({
-        id: 'record-quality-low',
-        title: 'Recording quality: low (480p / 3Mbps)',
-        subtitle: 'For slower machines / longer recordings',
-        icon: 'compress',
-        keywords: ['record', 'quality', 'low', '480p', 'small'],
-        run: () => {
-            recorder.setQualityPreset('low')
-            showToast('Recording quality: low (480p / 3Mbps)', 'info')
-        }
-    })
-    commandPalette.registerAction({
-        id: 'webcam',
-        title: 'Use webcam as media source',
-        subtitle: 'Stream the camera into your sketch',
-        icon: 'videocam',
-        keywords: ['camera', 'video', 'cam'],
-        run: () => {
+        },
+        setRecordingQuality: (preset) => {
+            recorder.setQualityPreset(preset)
+            const labels = {
+                high: 'high (1080p / 16Mbps)',
+                standard: 'standard (720p / 8Mbps)',
+                low: 'low (480p / 3Mbps)'
+            }
+            showToast(`Recording quality: ${labels[preset] ?? preset}`, 'info')
+        },
+        useWebcam: () => {
             liveInputsPanel.open()
             inputsToggleBtn?.classList.add('active')
             document.querySelector('.live-inputs-panel .source-btn[data-source="webcam"]')?.click()
-        }
-    })
-    commandPalette.registerAction({
-        id: 'screen-capture',
-        title: 'Use screen capture as media source',
-        icon: 'screen_share',
-        keywords: ['screen', 'display', 'capture', 'window'],
-        run: () => {
+        },
+        useScreenCapture: () => {
             liveInputsPanel.open()
             inputsToggleBtn?.classList.add('active')
             document.querySelector('.live-inputs-panel .source-btn[data-source="screen"]')?.click()
-        }
-    })
-    commandPalette.registerAction({
-        id: 'perf',
-        title: 'Toggle performance overlay',
-        subtitle: 'FPS, frame time, jitter, render passes',
-        icon: 'speed',
-        keywords: ['fps', 'performance', 'stats', 'profiler'],
-        run: () => {
+        },
+        togglePerfOverlay: () => {
             perfOverlay.toggle()
             perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
-        }
-    })
-    commandPalette.registerAction({
-        id: 'gallery',
-        title: 'Open inspiration gallery',
-        subtitle: 'Browse curated example sketches',
-        icon: 'collections',
-        keywords: ['examples', 'inspiration', 'sketches', 'browse'],
-        run: () => gallery.open()
-    })
-    commandPalette.registerAction({
-        id: 'shuffle',
-        title: 'Shuffle to a random example',
-        subtitle: 'Load a random sketch from the gallery',
-        icon: 'shuffle',
-        keywords: ['random', 'next', 'roll'],
-        run: async () => {
+        },
+        openGallery: () => gallery.open(),
+        shuffleExample: async () => {
             const ex = await pickRandomExample()
             if (ex && dslEditor) {
                 dslEditor.value = ex.dsl
@@ -2109,87 +1950,18 @@ function setupCommandPalette() {
                 scheduleHotReload()
                 dslEditor.focus()
             }
-        }
+        },
+        snapshotBack: () => snapshotBack(),
+        snapshotForward: () => snapshotForward(),
+        tapTempo: () => bpmClock.tap(),
+        toggleBpm: () => bpmClock.toggle(),
+        toggleStatusRow: () => statusRow.toggle(),
+        showShortcuts: () => shortcutsDialog.open(),
+        togglePerformanceMode: () => togglePerformanceMode(),
+        switchBackend: (target) => switchBackend(target),
+        hushSurfaces: () => hushSurfaces()
     })
-    commandPalette.registerAction({
-        id: 'snapshot-back',
-        title: 'Step back through program history',
-        subtitle: 'Cmd/Ctrl+Alt+← — older successful program',
-        icon: 'undo',
-        keywords: ['undo', 'history', 'previous'],
-        run: () => snapshotBack()
-    })
-    commandPalette.registerAction({
-        id: 'snapshot-forward',
-        title: 'Step forward through program history',
-        subtitle: 'Cmd/Ctrl+Alt+→ — newer successful program',
-        icon: 'redo',
-        keywords: ['redo', 'history', 'next'],
-        run: () => snapshotForward()
-    })
-    commandPalette.registerAction({
-        id: 'bpm-tap',
-        title: 'Tap tempo',
-        subtitle: 'Press T to tap, or use this action',
-        icon: 'touch_app',
-        keywords: ['bpm', 'tempo', 'beat', 'clock'],
-        run: () => bpmClock.tap()
-    })
-    commandPalette.registerAction({
-        id: 'bpm-toggle',
-        title: 'Toggle BPM indicator',
-        icon: 'metronome',
-        keywords: ['bpm', 'tempo', 'clock', 'beat'],
-        run: () => bpmClock.toggle()
-    })
-    commandPalette.registerAction({
-        id: 'status-row',
-        title: 'Toggle status row',
-        subtitle: 'Bottom-edge live state strip',
-        icon: 'view_agenda',
-        keywords: ['status', 'bar', 'bottom'],
-        run: () => statusRow.toggle()
-    })
-    commandPalette.registerAction({
-        id: 'shortcuts',
-        title: 'Show keyboard shortcuts',
-        subtitle: 'Press ? to open at any time',
-        icon: 'keyboard',
-        keywords: ['help', 'keys', 'cheatsheet'],
-        run: () => shortcutsDialog.open()
-    })
-    commandPalette.registerAction({
-        id: 'performance-mode',
-        title: 'Toggle performance mode',
-        subtitle: 'Hide all UI for projection / clean recording (⌘⇧H)',
-        icon: 'visibility_off',
-        keywords: ['hide', 'fullscreen', 'projection', 'clean', 'algorave'],
-        run: () => togglePerformanceMode()
-    })
-    commandPalette.registerAction({
-        id: 'backend-webgpu',
-        title: 'Switch to WebGPU backend',
-        subtitle: 'Reload page using the WebGPU pipeline',
-        icon: 'memory',
-        keywords: ['gpu', 'wgsl', 'webgpu', 'backend'],
-        run: () => switchBackend('webgpu')
-    })
-    commandPalette.registerAction({
-        id: 'backend-webgl2',
-        title: 'Switch to WebGL2 backend',
-        subtitle: 'Reload page using the WebGL2 pipeline',
-        icon: 'view_in_ar',
-        keywords: ['gpu', 'glsl', 'webgl', 'backend'],
-        run: () => switchBackend('webgl2')
-    })
-    commandPalette.registerAction({
-        id: 'hush',
-        title: 'Hush — clear surfaces',
-        subtitle: 'Reset all o0..o7 surfaces (clear feedback state)',
-        icon: 'clear_all',
-        keywords: ['stop', 'clear', 'reset', 'hush', 'feedback'],
-        run: () => hushSurfaces()
-    })
+    for (const a of actions) commandPalette.registerAction(a)
 }
 
 /** Switch shader backend by setting a localStorage flag and reloading. */
