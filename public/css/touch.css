@@ -1,0 +1,29 @@
+/* public/css/touch.css */
+
+/* Phones / portrait tablets — collapse right-side panels into a
+   bottom sheet so the canvas can stay full-width. */
+@media (hover: none) and (pointer: coarse), (max-width: 768px) {
+    body { font-size: 15px; }
+    #menu { font-size: 14px; }
+
+    /* Right-side overlays become bottom sheets */
+    .live-inputs-panel,
+    .output-picker {
+        top: auto;
+        right: 0.5rem;
+        left: 0.5rem;
+        bottom: 0.5rem;
+        max-height: 45vh;
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: visible;
+    }
+
+    /* Bigger touch targets — higher specificity to override #menu button */
+    #menu .menu-icon-btn { padding: 0.5em 0.65em; font-size: 1.4em; }
+    .source-btn, .live-input-toggle { min-height: 36px; }
+    .gallery-card { min-height: 44px; }
+
+    /* Hide BPM dragger thumb on touch — replace with explicit + / - buttons in a follow-up */
+    .bpm-tap-hint { display: none; }
+}

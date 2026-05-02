@@ -41,5 +41,20 @@ await p2.touchscreen.tap(editorBox.x + 50, editorBox.y + 50)
 await p2.waitForTimeout(300)
 console.log('touch scrub no errors:', errs2.length === 0 ? 'PASS' : 'FAIL: ' + errs2.join(','))
 if (errs2.length) process.exit(1)
+// Mobile-layout assertion (Task 2.3)
+const p3 = await ctx.newPage()
+await p3.goto('http://localhost:3000', { waitUntil: 'networkidle' })
+await p3.waitForTimeout(3500)
+const layout = await p3.evaluate(() => {
+    const lip = document.querySelector('.live-inputs-panel')
+    return {
+        menuIconFontSize: parseFloat(getComputedStyle(document.querySelector('.menu-icon-btn')).fontSize),
+        liveInputsLeft: lip ? getComputedStyle(lip).left : null
+    }
+})
+console.log(JSON.stringify(layout))
+const ok3 = layout.menuIconFontSize >= 18  // ≥ 1.4em on 14px base
+console.log('touch layout:', ok3 ? 'PASS' : 'FAIL')
+if (!ok3) process.exit(1)
 await b.close()
 process.exit(fired ? 0 : 1)
