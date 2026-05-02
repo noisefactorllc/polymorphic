@@ -170,7 +170,11 @@ export function attachScrubber(editor, options = {}) {
     }
 
     function onPointerDown(e) {
-        if (!e.altKey || e.button !== 0) return
+        // Mouse: require alt+left-click. Touch/pen: any primary press is fine since
+        // there's no Alt key — the cursor-on-number affordance is the gate.
+        const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen'
+        if (!isTouch && (!e.altKey || e.button !== 0)) return
+        if (isTouch && e.button !== 0) return
         const lit = findLiteralAtPointer(e.clientX, e.clientY)
         if (!lit) return
         // Capture pointer

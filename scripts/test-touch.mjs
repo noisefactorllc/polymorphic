@@ -28,5 +28,18 @@ await p.touchscreen.tap(tapX + 2, tapY + 2)
 await p.waitForTimeout(800)
 const fired = await p.evaluate(() => window.__forceRecompileFired)
 console.log(fired ? 'PASS' : 'FAIL')
+// Touch-scrub: long-press a number, drag horizontally
+const p2 = await ctx.newPage()
+await p2.goto('http://localhost:3000', { waitUntil: 'networkidle' })
+await p2.waitForTimeout(3500)
+const editorBox = await (await p2.locator('code-editor').elementHandle()).boundingBox()
+// Find the literal '80' from scaleX:80 by character — approximate by clicking near textarea start
+// (We just verify no JS error happens.)
+const errs2 = []
+p2.on('pageerror', e => errs2.push(e.message))
+await p2.touchscreen.tap(editorBox.x + 50, editorBox.y + 50)
+await p2.waitForTimeout(300)
+console.log('touch scrub no errors:', errs2.length === 0 ? 'PASS' : 'FAIL: ' + errs2.join(','))
+if (errs2.length) process.exit(1)
 await b.close()
 process.exit(fired ? 0 : 1)
