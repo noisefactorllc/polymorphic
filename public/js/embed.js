@@ -30,6 +30,7 @@ import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
 import { attachTouchControls } from './ui/touchControls.js'
+import { applyEmbedMode } from './ui/embedMode.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
 
 // DOM elements
@@ -1678,6 +1679,10 @@ function setupMenuBar() {
  * Initialize the app
  */
 function init() {
+    // Apply embed mode FIRST so panels never get a chance to render visibly
+    // when running in an iframe via ?embed=1
+    applyEmbedMode()
+
     // Initialize doc reader and show by default
     initDocReader()
     setApplyToEditorCallback((code) => {

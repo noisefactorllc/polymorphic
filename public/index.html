@@ -197,6 +197,20 @@
         body.performance-mode .status-row,
         body.performance-mode .recording-indicator { display: none !important; }
         body.performance-mode { cursor: none; }
+
+        /* Embed mode — same effect as performance mode but applied via ?embed=1 */
+        body.embed-mode,
+        body.embed-mode * { cursor: default; }
+        body.embed-mode #menu,
+        body.embed-mode #dsl-overlay,
+        body.embed-mode #doc-reader-panel,
+        body.embed-mode #compiler-error,
+        body.embed-mode .live-inputs-panel,
+        body.embed-mode .perf-overlay,
+        body.embed-mode .bpm-indicator,
+        body.embed-mode .status-row,
+        body.embed-mode .output-picker,
+        body.embed-mode .recording-indicator { display: none !important; }
         
         /* Code editor fills the overlay */
         #dsl-editor {
