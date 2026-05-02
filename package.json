@@ -1,6 +1,6 @@
 {
   "name": "polymorphic",
-  "version": "0.10.0-SNAPSHOT",
+  "version": "0.11",
   "description": "Polymorphic - Live shader coding environment using the Noisemaker DSL",
   "private": true,
   "scripts": {

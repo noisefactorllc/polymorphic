@@ -4,7 +4,7 @@
  * Renders markdown documentation in a side panel.
  */
 
-const APP_VERSION = '0.10.0-SNAPSHOT'
+const APP_VERSION = '0.11'
 
 let docReaderPanel = null;
 let docReaderContent = null;
