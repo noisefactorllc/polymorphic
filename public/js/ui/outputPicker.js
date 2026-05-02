@@ -1,5 +1,3 @@
-import { CanvasRenderer, extractEffectNamesFromDsl } from '../noisemaker/bundle.js'
-
 export function surfacesWrittenInDsl(dsl) {
     if (!dsl) return []
     const matches = [...dsl.matchAll(/\.write\s*\(\s*o([0-7])\s*\)/g)]
@@ -17,8 +15,14 @@ export function currentRenderTarget(dsl) {
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
 const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 
+let _bundlePromise = null
+function loadBundle() {
+    if (!_bundlePromise) _bundlePromise = import('../noisemaker/bundle.js')
+    return _bundlePromise
+}
+
 const STYLES_ID = 'output-picker-styles'
-if (!document.getElementById(STYLES_ID)) {
+if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     const s = document.createElement('style')
     s.id = STYLES_ID
     s.textContent = `
@@ -125,6 +129,7 @@ class OutputPicker {
     }
 
     async _createPip(idx) {
+        const { CanvasRenderer, extractEffectNamesFromDsl } = await loadBundle()
         const pip = document.createElement('div')
         pip.className = 'output-pip'
         pip.dataset.surface = String(idx)
