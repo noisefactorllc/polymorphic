@@ -66,6 +66,9 @@ export function attachScrubber(editor, options = {}) {
     const onScrubEnd = options.onScrubEnd || (() => {})
     const recompile = options.recompile || (() => {})
 
+    const TOUCH_LONG_PRESS_MS = 300
+    const TOUCH_DRAG_THRESHOLD_PX = 10
+
     let hovering = false
     let scrubbing = false
     let startX = 0
@@ -78,6 +81,10 @@ export function attachScrubber(editor, options = {}) {
     let lastChangeTime = 0
     let savedSelectionStart = 0
     let savedSelectionEnd = 0
+    // Touch/pen pending state — wait for long-press or drag before engaging,
+    // so simple taps fall through to native textarea focus/caret placement.
+    let pendingTouch = null
+    let pendingTimer = null
 
     function findLiteralAtPointer(clientX, clientY) {
         // Use the textarea's built-in caret-from-point (if available) or fall
@@ -114,6 +121,18 @@ export function attachScrubber(editor, options = {}) {
     }
 
     function onPointerMove(e) {
+        // Touch/pen pending: promote to engaged once drag exceeds threshold.
+        if (pendingTouch && e.pointerId === pendingTouch.id) {
+            const dx = e.clientX - pendingTouch.x
+            const dy = e.clientY - pendingTouch.y
+            if (Math.hypot(dx, dy) > TOUCH_DRAG_THRESHOLD_PX) {
+                if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
+                const lit = pendingTouch.lit
+                pendingTouch = null
+                engageScrub(e, lit)
+            }
+            return
+        }
         if (scrubbing) {
             // Active scrub
             const dx = e.clientX - startX
@@ -169,14 +188,7 @@ export function attachScrubber(editor, options = {}) {
         tooltip.style.top = (y - 36) + 'px'
     }
 
-    function onPointerDown(e) {
-        // Mouse: require alt+left-click. Touch/pen: any primary press is fine since
-        // there's no Alt key — the cursor-on-number affordance is the gate.
-        const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen'
-        if (!isTouch && (!e.altKey || e.button !== 0)) return
-        if (isTouch && e.button !== 0) return
-        const lit = findLiteralAtPointer(e.clientX, e.clientY)
-        if (!lit) return
+    function engageScrub(e, lit) {
         // Capture pointer
         e.preventDefault()
         e.stopPropagation()
@@ -194,7 +206,42 @@ export function attachScrubber(editor, options = {}) {
         try { ta.setPointerCapture?.(e.pointerId) } catch { /* ignore */ }
     }
 
-    function onPointerUp() {
+    function onPointerDown(e) {
+        // Mouse: engage immediately on alt+left+literal.
+        // Touch/pen: enter pending state — engage only after a 300ms long-press
+        // or 10px drag, so simple taps fall through to native textarea focus.
+        const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen'
+        if (!isTouch) {
+            if (!e.altKey || e.button !== 0) return
+            const lit = findLiteralAtPointer(e.clientX, e.clientY)
+            if (!lit) return
+            engageScrub(e, lit)
+            return
+        }
+        if (e.button !== 0) return
+        const lit = findLiteralAtPointer(e.clientX, e.clientY)
+        if (!lit) return
+        // Pending: do NOT preventDefault, do NOT setPointerCapture.
+        pendingTouch = { id: e.pointerId, x: e.clientX, y: e.clientY, lit }
+        if (pendingTimer) clearTimeout(pendingTimer)
+        pendingTimer = setTimeout(() => {
+            pendingTimer = null
+            if (pendingTouch && pendingTouch.id === e.pointerId) {
+                const heldLit = pendingTouch.lit
+                pendingTouch = null
+                engageScrub(e, heldLit)
+            }
+        }, TOUCH_LONG_PRESS_MS)
+    }
+
+    function onPointerUp(e) {
+        // Touch/pen released without engaging: cancel pending and let the
+        // native tap proceed (focus, caret placement).
+        if (pendingTouch && e && e.pointerId === pendingTouch.id) {
+            if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
+            pendingTouch = null
+            return
+        }
         if (!scrubbing) return
         scrubbing = false
         document.body.classList.remove('scrubber-active-cursor')

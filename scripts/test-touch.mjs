@@ -28,19 +28,51 @@ await p.touchscreen.tap(tapX + 2, tapY + 2)
 await p.waitForTimeout(800)
 const fired = await p.evaluate(() => window.__forceRecompileFired)
 console.log(fired ? 'PASS' : 'FAIL')
-// Touch-scrub: long-press a number, drag horizontally
-const p2 = await ctx.newPage()
-await p2.goto('http://localhost:3000', { waitUntil: 'networkidle' })
-await p2.waitForTimeout(3500)
-const editorBox = await (await p2.locator('code-editor').elementHandle()).boundingBox()
-// Find the literal '80' from scaleX:80 by character — approximate by clicking near textarea start
-// (We just verify no JS error happens.)
-const errs2 = []
-p2.on('pageerror', e => errs2.push(e.message))
-await p2.touchscreen.tap(editorBox.x + 50, editorBox.y + 50)
-await p2.waitForTimeout(300)
-console.log('touch scrub no errors:', errs2.length === 0 ? 'PASS' : 'FAIL: ' + errs2.join(','))
-if (errs2.length) process.exit(1)
+// Touch-tap on a number must focus the textarea, not start scrubbing.
+// The scrubber must require 300ms long-press OR 10px drag — a quick tap
+// should fall through so the textarea gets focus + caret placement.
+const p5 = await ctx.newPage()
+await p5.goto('http://localhost:3000', { waitUntil: 'networkidle' })
+await p5.waitForTimeout(3500)
+await p5.evaluate(() => {
+    const ed = document.querySelector('code-editor')
+    ed.value = 'noise(scaleX: 80).write(o0)\nrender(o0)'
+    ed.getTextarea().dispatchEvent(new Event('input', { bubbles: true }))
+    // Hide the output-picker overlay that floats over the top-right of
+    // the editor on iPad — otherwise it intercepts our touch.
+    const op = document.querySelector('.output-picker')
+    if (op) op.style.display = 'none'
+})
+await p5.waitForTimeout(800)
+// Compute the on-screen position of the '80' literal in the textarea.
+const litCoords = await p5.evaluate(() => {
+    const ta = document.querySelector('code-editor').getTextarea()
+    const idx = ta.value.indexOf('80')
+    const cs = getComputedStyle(ta)
+    const lineH = parseFloat(cs.lineHeight) || 24
+    const charW = parseFloat(cs.fontSize) * 0.6
+    const before = ta.value.slice(0, idx)
+    const lineNum = (before.match(/\n/g) || []).length
+    const lastNL = before.lastIndexOf('\n')
+    const colNum = idx - lastNL - 1
+    const r = ta.getBoundingClientRect()
+    const padTop = parseFloat(cs.paddingTop) || 0
+    const padLeft = parseFloat(cs.paddingLeft) || 0
+    return {
+        x: r.x + padLeft + colNum * charW + 4,
+        y: r.y + padTop + lineNum * lineH + lineH / 2
+    }
+})
+await p5.evaluate(() => document.activeElement?.blur())
+await p5.waitForTimeout(100)
+await p5.touchscreen.tap(litCoords.x, litCoords.y)
+await p5.waitForTimeout(200)
+const focusedTag = await p5.evaluate(() =>
+    document.activeElement?.tagName + '|' + (document.activeElement?.shadowRoot?.activeElement?.tagName || '-')
+)
+const ok5 = focusedTag.startsWith('TEXTAREA')
+console.log('tap focused textarea (not scrubber):', ok5 ? 'PASS' : `FAIL (${focusedTag})`)
+if (!ok5) process.exit(1)
 // Mobile-layout assertion (Task 2.3)
 const p3 = await ctx.newPage()
 await p3.goto('http://localhost:3000', { waitUntil: 'networkidle' })
