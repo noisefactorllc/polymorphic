@@ -18,7 +18,15 @@ const NETWORK_ONLY = new Set([
 ])
 
 self.addEventListener('install', (e) => {
-    e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()))
+    e.waitUntil((async () => {
+        const c = await caches.open(CACHE)
+        for (const url of PRECACHE) {
+            try { await c.add(url) } catch (err) {
+                console.warn('[sw] precache miss:', url, err?.message || err)
+            }
+        }
+        await self.skipWaiting()
+    })())
 })
 
 self.addEventListener('activate', (e) => {
