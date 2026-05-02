@@ -30,6 +30,7 @@ import { bpmClock } from './ui/bpm.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
+import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
@@ -1673,6 +1674,39 @@ function setupMenuBar() {
             e.preventDefault()
             document.body.classList.remove('performance-mode')
             showToast('Performance mode off', 'info')
+        }
+        // Scene shortcuts: 1..9 recalls, Cmd/Ctrl+Shift+1..9 saves.
+        // `e.key` for Shift+Digit1 may be either '1' (Linux/Windows under
+        // Playwright) or '!' (macOS / shifted glyph), so accept both via
+        // `e.code` ('Digit1'..'Digit9') as the canonical signal.
+        const sceneCodeMatch = /^Digit([1-9])$/.exec(e.code || '')
+        if (sceneCodeMatch) {
+            const slot = parseInt(sceneCodeMatch[1], 10)
+            const sceneMod = e.ctrlKey || e.metaKey
+            if (sceneMod && e.shiftKey) {
+                // Save current to slot — works even when editor is focused,
+                // since live coders save mid-edit.
+                const dsl = dslEditor?.value || ''
+                if (dsl.trim()) {
+                    scenes.save(slot, dsl)
+                    showToast(`Saved scene ${slot}`, 'success')
+                }
+                e.preventDefault()
+                return
+            }
+            if (!sceneMod && !e.shiftKey && !e.altKey) {
+                // Bare-digit recall: only fire when no input is focused, so
+                // we don't intercept normal typing.
+                const tag = (e.target?.tagName || '').toUpperCase()
+                if (tag === 'TEXTAREA' || tag === 'INPUT') return
+                const dsl = scenes.load(slot)
+                if (dsl && dslEditor) {
+                    dslEditor.value = dsl
+                    scheduleHotReload()
+                    showToast(`Loaded scene ${slot}`, 'info')
+                }
+                e.preventDefault()
+            }
         }
     })
     gallery.init({

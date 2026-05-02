@@ -154,6 +154,13 @@ const SECTIONS = [
         ]
     },
     {
+        title: 'Scenes',
+        rows: [
+            ['Save current to scene N',     ['⌘/Ctrl', '⇧', '1-9']],
+            ['Recall scene N',              ['1-9']]
+        ]
+    },
+    {
         title: 'Capture',
         rows: [
             ['Record video (toggle)',       ['click ◉']],
