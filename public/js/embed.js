@@ -1064,7 +1064,15 @@ function setupDslEditor() {
     // The code-editor component dispatches 'forcerecompile' events
     dslEditor.addEventListener('forcerecompile', async () => {
         // Single-flight gate: drop this call if a compile is already running
-        if (_compileInFlight) return
+        if (_compileInFlight) {
+            const overlay = document.getElementById('dsl-overlay')
+            if (overlay) {
+                overlay.classList.remove('busy')
+                void overlay.offsetWidth
+                overlay.classList.add('busy')
+            }
+            return
+        }
         // Clear pending hot reload
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
@@ -1093,7 +1101,15 @@ function setupDslEditor() {
     // Cmd+Shift+Enter / Alt+Enter — evaluate current block (or selection)
     dslEditor.addEventListener('forceevalblock', async () => {
         // Single-flight gate: drop this call if a compile is already running
-        if (_compileInFlight) return
+        if (_compileInFlight) {
+            const overlay = document.getElementById('dsl-overlay')
+            if (overlay) {
+                overlay.classList.remove('busy')
+                void overlay.offsetWidth
+                overlay.classList.add('busy')
+            }
+            return
+        }
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
             hotReloadTimeout = null
