@@ -1244,8 +1244,17 @@
 
     <script>
     if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW failed', err))
+        window.addEventListener('load', async () => {
+            let v = 'unknown'
+            try {
+                const r = await fetch('/deployment-meta.json', { cache: 'no-store' })
+                if (r.ok) {
+                    const m = await r.json()
+                    v = m.git_hash || m.deployedAt || 'unknown'
+                }
+            } catch {}
+            navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(v))
+                .catch(err => console.warn('SW failed', err))
         })
     }
     </script>

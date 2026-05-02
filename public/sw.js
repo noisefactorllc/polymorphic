@@ -1,4 +1,8 @@
-const CACHE = 'polymorphic-v1'
+const VERSION = (() => {
+    try { return new URL(self.location.href).searchParams.get('v') || 'dev' }
+    catch { return 'dev' }
+})()
+const CACHE = `polymorphic-${VERSION}`
 const PRECACHE = [
     '/',
     '/index.html',
