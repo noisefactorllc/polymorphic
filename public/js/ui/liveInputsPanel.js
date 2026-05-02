@@ -13,7 +13,36 @@
  * Ctrl/Cmd+I.
  */
 
-import { MidiInputManager } from '../noisemaker/bundle.js'
+let _bundlePromise = null
+function loadBundle() {
+    if (!_bundlePromise) _bundlePromise = import('../noisemaker/bundle.js')
+    return _bundlePromise
+}
+
+/**
+ * Pure helper: walk a noisemaker MidiState and return the active
+ * (channel, controller, value) tuples. Defensive about both the
+ * private (`_channels`/`_cc`) and public (`channels`/`cc`) shapes,
+ * and treats 0/undefined/null as "no signal" so we only surface
+ * controllers the user has actually touched.
+ */
+export function recentCcsFromMidiState(midiState) {
+    if (!midiState || typeof midiState !== 'object') return []
+    const out = []
+    const channels = midiState._channels || midiState.channels || {}
+    for (const [chKey, ch] of Object.entries(channels)) {
+        const cc = ch?._cc || ch?.cc
+        if (!cc) continue
+        for (const [ccKey, value] of Object.entries(cc)) {
+            const ccNum = Number(ccKey)
+            if (!Number.isInteger(ccNum)) continue
+            if (value !== undefined && value !== null && value !== 0) {
+                out.push({ ch: chKey, cc: ccNum, value })
+            }
+        }
+    }
+    return out
+}
 
 /**
  * Local audio input manager that mirrors what the bundled AudioInputManager
@@ -162,7 +191,7 @@ class LocalAudioInput {
 }
 
 const STYLES_ID = 'live-inputs-panel-styles'
-if (!document.getElementById(STYLES_ID)) {
+if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     const style = document.createElement('style')
     style.id = STYLES_ID
     style.textContent = `
@@ -941,6 +970,7 @@ class LiveInputsPanel {
     async _toggleMidi() {
         if (!this._innerRenderer) return
         if (!this._midiMgr) {
+            const { MidiInputManager } = await loadBundle()
             this._midiMgr = new MidiInputManager(this._innerRenderer)
             this._midiMgr.onStatusChange(msg => {
                 this._setMidiStatus(msg, this._midiMgr.enabled ? 'connected' : '')
@@ -1029,20 +1059,9 @@ class LiveInputsPanel {
     }
 
     _scanMidi(midiState) {
-        // The noisemaker MidiState exposes per-channel CC values; structure may
-        // vary, so we defensively poke at common shapes.
         try {
-            const channels = midiState._channels || midiState.channels || {}
-            for (const [chKey, ch] of Object.entries(channels)) {
-                const cc = ch?._cc || ch?.cc
-                if (!cc) continue
-                for (let ccNum = 0; ccNum < 128; ccNum++) {
-                    const v = cc[ccNum]
-                    if (v !== undefined && v !== null && v !== 0) {
-                        const key = `${chKey}:${ccNum}`
-                        this._recentMidi.set(key, { ch: chKey, cc: ccNum, value: v, time: Date.now() })
-                    }
-                }
+            for (const r of recentCcsFromMidiState(midiState)) {
+                this._recentMidi.set(`${r.ch}:${r.cc}`, { ...r, time: Date.now() })
             }
             this._renderMidiList()
         } catch { /* ignore */ }
