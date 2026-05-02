@@ -1136,10 +1136,17 @@ function setupDslEditor() {
     dslEditor.addEventListener('format', () => {
         const before = dslEditor.value
         const after = formatDsl(before)
-        if (after !== before) {
-            dslEditor.value = after
-            scheduleHotReload()
+        if (after === before) return
+        const ta = dslEditor.getTextarea?.()
+        const sel = ta ? { start: ta.selectionStart, end: ta.selectionEnd } : null
+        if (before.trim()) snapshotHistory.push(before)
+        dslEditor.value = after
+        if (ta && sel) {
+            const len = after.length
+            ta.selectionStart = Math.min(sel.start, len)
+            ta.selectionEnd = Math.min(sel.end, len)
         }
+        scheduleHotReload()
     })
 }
 
