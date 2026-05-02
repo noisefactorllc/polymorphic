@@ -2,7 +2,6 @@
  * Touch-only gestures that don't have a desktop equivalent.
  *  - Double-tap on the canvas → force-eval (Cmd+Enter analogue)
  *  - Two-finger tap on the canvas → toggle UI visibility (performance mode)
- *  - Long-press on the BPM indicator → tap-tempo
  */
 
 export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode }) {
