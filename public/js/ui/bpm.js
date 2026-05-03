@@ -186,6 +186,9 @@ class BpmClock {
         let startBpm = 0
         this._el.addEventListener('pointerdown', (e) => {
             if (e.button !== 0) return
+            // Pointer capture would redirect the click off the close button to
+            // this element, so the close handler never fires.
+            if (e.target.closest('.bpm-close')) return
             dragging = true
             startX = e.clientX
             startBpm = this._bpm
