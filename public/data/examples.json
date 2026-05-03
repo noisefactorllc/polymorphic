@@ -6,7 +6,7 @@
       "noise",
       "chromatic"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 75, hueRotation: 59, speed: 29, octaves: 6, refractAmt: 35, ridges: true, type: 10, colorMode: 6, kaleido: 1, xScale: 81, yScale: 81).write(o0)\nnoise(hueRange: 12, hueRotation: 28, speed: 85, refractAmt: 33, ridges: false, wrap: false, xScale: 89, yScale: 92, type: 2, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 8, mix: 100, refractAAmt: 0, refractBAmt: 42).effects(effect: 4, effectAmt: 2, flip: 0, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).lensDistortion(aberration: 100, blendMode: 0, hueRange: 100, hueRotation: 0, blendMode: 1, modulate: true, passthru: 57, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 75, hueRotation: 59, speed: 29, octaves: 6, refractAmt: 35, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 81, yScale: 81).write(o0)\nnoise(hueRange: 12, hueRotation: 28, speed: 85, refractAmt: 33, ridges: false, wrap: false, xScale: 89, yScale: 92, type: hermite, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: hardLight, mix: 100, refractAAmt: 0, refractBAmt: 42).effects(effect: emboss, effectAmt: 2, flip: none, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).lensDistortion(aberration: 100, blendMode: add, hueRange: 100, hueRotation: 0, blendMode: alpha, modulate: true, passthru: 57, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Purple Smear",
@@ -15,7 +15,7 @@
       "noise",
       "mirror"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 11, hueRotation: 100, speed: 32, refractAmt: 7, ridges: true, wrap: true, xScale: 83, yScale: 84, type: 3, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 18, hueRotation: 91, speed: 29, refractAmt: 97, ridges: false, wrap: true, xScale: 95, yScale: 98, type: 2, colorMode: 6, kaleido: 1, octaves: 1).composite(tex: read(o0), blendMode: 1, inputColor: #f8aca5, mix: 68, range: 86).lensDistortion(aberration: 100, blendMode: 1, hueRange: 100, hueRotation: 0, blendMode: 0, modulate: false, passthru: 70, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 11, hueRotation: 100, speed: 32, refractAmt: 7, ridges: true, wrap: true, xScale: 83, yScale: 84, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 18, hueRotation: 91, speed: 29, refractAmt: 97, ridges: false, wrap: true, xScale: 95, yScale: 98, type: hermite, colorMode: hsv, kaleido: 1, octaves: 1).composite(tex: read(o0), blendMode: greenscreenAB, inputColor: #f8aca5, mix: 68, range: 86).lensDistortion(aberration: 100, blendMode: alpha, hueRange: 100, hueRotation: 0, blendMode: add, modulate: false, passthru: 70, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Green Loops",
@@ -23,7 +23,7 @@
     "tags": [
       "cellNoise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: 2, speed: 1, palette: barstow, scale: 17, cellScale: 75, smooth: 50, variation: 0, cyclePalette: 0, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: 410, loopScale: 100, refractAmt: 49, wrap: true, type: 3, colorMode: 6, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: 15, mix: -38).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: palette, speed: 1, palette: barstow, scale: 17, cellScale: 75, smooth: 50, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: sine, loopScale: 100, refractAmt: 49, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: reflect, mix: -38).write(o1)\nrender(o1)"
   },
   {
     "title": "Pink Kaleidoscope",
@@ -31,7 +31,7 @@
     "tags": [
       "kaleido"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRotation: 0, kaleido: 5, metric: 0, palette: eventHorizon, wrap: true, type: 3, colorMode: 4, xScale: 85, yScale: 85, octaves: 1).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRotation: 0, kaleido: 5, metric: circle, palette: eventHorizon, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 85, yScale: 85, octaves: 1).write(o0)\nrender(o0)"
   },
   {
     "title": "Pink Static",
@@ -40,7 +40,7 @@
       "pattern",
       "static"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #8145ab, bgColor: #cc1c2d, rotation: 0, scale: 5, type: 2, speed: 1, animation: 4).write(o0)\nnoise(palette: seventiesShirt, refractAmt: 83, ridges: false, type: 10, colorMode: 5, kaleido: 1, xScale: 4, yScale: 4, octaves: 1).coalesce(tex: read(o0), blendMode: 12, mix: -10).effects(effectAmt: 3, effect: 200).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #8145ab, bgColor: #cc1c2d, rotation: 0, scale: 5, type: dots, speed: 1, animation: panX).write(o0)\nnoise(palette: seventiesShirt, refractAmt: 83, ridges: false, type: simplex, colorMode: palette, kaleido: 1, xScale: 4, yScale: 4, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: -10).effects(effectAmt: 3, effect: cga).write(o1)\nrender(o1)"
   },
   {
     "title": "Red Bubbles",
@@ -48,7 +48,7 @@
     "tags": [
       "composite"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #4a88fb, bgColor: #000000, rotation: 111, scale: 12, type: 2, speed: 1, animation: 4).write(o0)\nnoise(hueRange: 20, hueRotation: 58, speed: 78, loopOffset: 300, loopScale: 100, refractAmt: 68, wrap: true, type: 3, colorMode: 6, kaleido: 1, xScale: 81, yScale: 81, octaves: 1).composite(tex: read(o0), blendMode: 2, inputColor: #000000, mix: 4, range: 71).colorLab(colorMode: 2, dither: 0, hueRange: 154, hueRotation: 0, levels: 0, palette: eventHorizon).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #4a88fb, bgColor: #000000, rotation: 111, scale: 12, type: dots, speed: 1, animation: panY).write(o0)\nnoise(hueRange: 20, hueRotation: 58, speed: 78, loopOffset: noise, loopScale: 100, refractAmt: 68, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 81, yScale: 81, octaves: 1).composite(tex: read(o0), blendMode: greenscreenBA, inputColor: #000000, mix: 4, range: 71).colorLab(colorMode: srgbDefault, dither: none, hueRange: 154, hueRotation: 0, levels: 0, palette: eventHorizon).write(o1)\nrender(o1)"
   },
   {
     "title": "Glitch Field",
@@ -57,7 +57,7 @@
       "noise",
       "feedback"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 83, hueRotation: 81, speed: 100, refractAmt: 90, ridges: true, wrap: true, xScale: 100, yScale: 97, type: 10, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 81, hueRotation: 66, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 99, yScale: 96, type: 10, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 15, mix: -86, refractAAmt: 48, refractBAmt: 60).lensDistortion(aberration: 100, blendMode: 0, hueRange: 100, hueRotation: 0, blendMode: 0, modulate: true, passthru: 33, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 83, hueRotation: 81, speed: 100, refractAmt: 90, ridges: true, wrap: true, xScale: 100, yScale: 97, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 81, hueRotation: 66, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 99, yScale: 96, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: reflect, mix: -86, refractAAmt: 48, refractBAmt: 60).lensDistortion(aberration: 100, blendMode: add, hueRange: 100, hueRotation: 0, blendMode: add, modulate: true, passthru: 33, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Mandelbrot",
@@ -65,7 +65,7 @@
     "tags": [
       "fractal"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nfractal(centerX: 0, centerY: 0, type: 0, offsetX: 44, offsetY: 57, palette: skykissed, rotation: 0, speed: 32, zoomAmt: 0, cyclePalette: 1, rotatePalette: 0).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nfractal(centerX: 0, centerY: 0, type: julia, offsetX: 44, offsetY: 57, palette: skykissed, rotation: 0, speed: 32, zoomAmt: 0, cyclePalette: forward, rotatePalette: 0).write(o0)\nrender(o0)"
   },
   {
     "title": "Pink Magma",
@@ -73,7 +73,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 31, hueRotation: 81, speed: 70, refractAmt: 90, ridges: true, wrap: true, xScale: 100, yScale: 97, type: 10, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 18, hueRotation: 66, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 99, yScale: 96, type: 10, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 15, mix: -66, refractAAmt: 5, refractBAmt: 100).lensDistortion(aberration: 100, blendMode: 0, hueRange: 100, hueRotation: 0, blendMode: 1, modulate: true, passthru: 41, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 31, hueRotation: 81, speed: 70, refractAmt: 90, ridges: true, wrap: true, xScale: 100, yScale: 97, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 18, hueRotation: 66, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 99, yScale: 96, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: reflect, mix: -66, refractAAmt: 5, refractBAmt: 100).lensDistortion(aberration: 100, blendMode: add, hueRange: 100, hueRotation: 0, blendMode: alpha, modulate: true, passthru: 41, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Blue Mandala",
@@ -81,7 +81,7 @@
     "tags": [
       "kaleido"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRotation: 74, kaleido: 25, metric: 0, palette: royal, wrap: true, type: 3, colorMode: 4, xScale: 98, yScale: 98, octaves: 1).write(o0)\nnoise(hueRotation: 83, kaleido: 5, metric: 0, palette: skykissed, wrap: true, type: 1, colorMode: 4, xScale: 92, yScale: 92, octaves: 1).coalesce(tex: read(o0), blendMode: 5, mix: -21, refractAAmt: 40, refractBAmt: 42).kaleido(direction: 1, effectWidth: 0, sides: 5, kernel: 0, speed: 2, loopOffset: 50, loopScale: 34, metric: 0, wrap: true).colorLab(colorMode: 2, dither: 0, hueRange: 100, hueRotation: 58, levels: 0, palette: sulphur).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRotation: 74, kaleido: 25, metric: circle, palette: royal, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 98, yScale: 98, octaves: 1).write(o0)\nnoise(hueRotation: 83, kaleido: 5, metric: circle, palette: skykissed, wrap: true, type: linear, colorMode: palette, xScale: 92, yScale: 92, octaves: 1).coalesce(tex: read(o0), blendMode: difference, mix: -21, refractAAmt: 40, refractBAmt: 42).kaleido(direction: clockwise, effectWidth: 0, sides: 5, kernel: none, speed: 2, loopOffset: pentagon, loopScale: 34, metric: circle, wrap: true).colorLab(colorMode: srgbDefault, dither: none, hueRange: 100, hueRotation: 58, levels: 0, palette: sulphur).write(o1)\nrender(o1)"
   },
   {
     "title": "Mirror Eyes",
@@ -90,7 +90,7 @@
       "noise",
       "mirror"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 33, hueRotation: 66, speed: 100, refractAmt: 31, ridges: true, wrap: true, xScale: 97, yScale: 99, type: 3, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 33, hueRotation: 66, speed: 100, refractAmt: 31, ridges: true, wrap: true, xScale: 97, yScale: 99, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
   },
   {
     "title": "Red Pixel Mosaic",
@@ -99,7 +99,7 @@
       "noise",
       "mirror"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 23, hueRotation: 31, speed: 18, refractAmt: 96, ridges: false, wrap: false, xScale: 100, yScale: 93, type: 3, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 44, hueRotation: 63, speed: 26, refractAmt: 97, ridges: false, wrap: false, xScale: 98, yScale: 91, type: 0, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 2, mix: 51, refractAAmt: 100, refractBAmt: 100).lensDistortion(aberration: 16, distortion: -12, speed: -7, loopScale: 56, alpha: 14, shape: 0, tint: #ebd93b, vignetteAmt: -100).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 23, hueRotation: 31, speed: 18, refractAmt: 96, ridges: false, wrap: false, xScale: 100, yScale: 93, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 44, hueRotation: 63, speed: 26, refractAmt: 97, ridges: false, wrap: false, xScale: 98, yScale: 91, type: constant, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: colorBurn, mix: 51, refractAAmt: 100, refractBAmt: 100).lensDistortion(aberration: 16, distortion: -12, speed: -7, loopScale: 56, alpha: 14, shape: circle, tint: #ebd93b, vignetteAmt: -100).write(o1)\nrender(o1)"
   },
   {
     "title": "Rainbow Mirror",
@@ -107,7 +107,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 37, hueRotation: 0, speed: 26, octaves: 5, refractAmt: 100, ridges: false, type: 10, colorMode: 6, kaleido: 1, xScale: 98, yScale: 98).write(o0)\nnoise(hueRange: 100, hueRotation: 28, speed: 98, refractAmt: 0, ridges: false, wrap: false, xScale: 98, yScale: 98, type: 2, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 8, mix: -72, refractAAmt: 0, refractBAmt: 100).lensDistortion(aberration: 0, distortion: -22, speed: 10, loopScale: 71, alpha: 0, shape: 2, tint: #8a47ae, vignetteAmt: -73).lensDistortion(aberration: 100, blendMode: 0, hueRange: 12, hueRotation: 15, blendMode: 1, modulate: false, passthru: 76, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 37, hueRotation: 0, speed: 26, octaves: 5, refractAmt: 100, ridges: false, type: simplex, colorMode: hsv, kaleido: 1, xScale: 98, yScale: 98).write(o0)\nnoise(hueRange: 100, hueRotation: 28, speed: 98, refractAmt: 0, ridges: false, wrap: false, xScale: 98, yScale: 98, type: hermite, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: hardLight, mix: -72, refractAAmt: 0, refractBAmt: 100).lensDistortion(aberration: 0, distortion: -22, speed: 10, loopScale: 71, alpha: 0, shape: hexagon, tint: #8a47ae, vignetteAmt: -73).lensDistortion(aberration: 100, blendMode: add, hueRange: 12, hueRotation: 15, blendMode: alpha, modulate: false, passthru: 76, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Oil Slick",
@@ -115,7 +115,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 100, hueRotation: 64, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 100, yScale: 100, type: 10, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 100, hueRotation: 64, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 100, yScale: 100, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
   },
   {
     "title": "Red Chaos",
@@ -123,7 +123,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 23, hueRotation: 70, speed: 19, refractAmt: 100, ridges: true, wrap: false, xScale: 98, yScale: 98, type: 3, colorMode: 6, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 46, hueRotation: 65, speed: 21, refractAmt: 100, ridges: true, wrap: false, xScale: 98, yScale: 98, type: 3, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 11, mix: 55, refractAAmt: 100, refractBAmt: 100).lensDistortion(aberration: 16, distortion: -49, speed: 0, loopScale: 60, alpha: 11, shape: 0, tint: #4986bc, vignetteAmt: -100).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 23, hueRotation: 70, speed: 19, refractAmt: 100, ridges: true, wrap: false, xScale: 98, yScale: 98, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 46, hueRotation: 65, speed: 21, refractAmt: 100, ridges: true, wrap: false, xScale: 98, yScale: 98, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: multiply, mix: 55, refractAAmt: 100, refractBAmt: 100).lensDistortion(aberration: 16, distortion: -49, speed: 0, loopScale: 60, alpha: 11, shape: circle, tint: #4986bc, vignetteAmt: -100).write(o1)\nrender(o1)"
   },
   {
     "title": "Bumpy Red",
@@ -131,7 +131,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(palette: vaporwave, refractAmt: 100, ridges: false, type: 10, colorMode: 4, kaleido: 1, xScale: 5, yScale: 5, octaves: 1).write(o0)\nnoise(hueRange: 13, hueRotation: 25, speed: 83, refractAmt: 28, ridges: false, wrap: false, xScale: 84, yScale: 89, type: 3, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 4, mix: -21, refractAAmt: 0, refractBAmt: 100).effects(effect: 4, effectAmt: 2, flip: 0, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).lensDistortion(aberration: 100, blendMode: 0, hueRange: 100, hueRotation: 0, blendMode: 1, modulate: false, passthru: 57, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(palette: vaporwave, refractAmt: 100, ridges: false, type: simplex, colorMode: palette, kaleido: 1, xScale: 5, yScale: 5, octaves: 1).write(o0)\nnoise(hueRange: 13, hueRotation: 25, speed: 83, refractAmt: 28, ridges: false, wrap: false, xScale: 84, yScale: 89, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: darken, mix: -21, refractAAmt: 0, refractBAmt: 100).effects(effect: emboss, effectAmt: 2, flip: none, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).lensDistortion(aberration: 100, blendMode: add, hueRange: 100, hueRotation: 0, blendMode: alpha, modulate: false, passthru: 57, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Soft Glow",
@@ -139,7 +139,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 34, hueRotation: 0, speed: 17, octaves: 3, refractAmt: 0, ridges: true, type: 10, colorMode: 6, kaleido: 1, xScale: 100, yScale: 100).colorLab(colorMode: 2, dither: 0, hueRange: 100, hueRotation: 0, levels: 0, palette: royal).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 34, hueRotation: 0, speed: 17, octaves: 3, refractAmt: 0, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 100, yScale: 100).colorLab(colorMode: srgbDefault, dither: none, hueRange: 100, hueRotation: 0, levels: 0, palette: royal).write(o1)\nrender(o1)"
   },
   {
     "title": "Fire Eyes",
@@ -148,7 +148,7 @@
       "shapes",
       "mirror"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nshapes(speedA: -31, loopAOffset: 20, loopAScale: 100, speedB: 23, loopBOffset: 30, loopBScale: 100, palette: grayscale, wrap: true, cyclePalette: 0, rotatePalette: 0).write(o0)\nnoise(hueRange: 34, hueRotation: 78, speed: 100, refractAmt: 47, ridges: true, wrap: true, xScale: 99, yScale: 96, type: 3, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 100, mix: 71, refractAAmt: 73, refractBAmt: 83).lensDistortion(aberration: 47, distortion: 14, speed: -78, loopScale: 67, alpha: 16, saturation: -15, shape: 6, tint: #c45f95, vignetteAmt: -100).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nshapes(speedA: -31, loopAOffset: triangle, loopAScale: 100, speedB: 23, loopBOffset: diamond, loopBScale: 100, palette: grayscale, wrap: true, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 34, hueRotation: 78, speed: 100, refractAmt: 47, ridges: true, wrap: true, xScale: 99, yScale: 96, type: catmullRom3x3, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: cloak, mix: 71, refractAAmt: 73, refractBAmt: 83).lensDistortion(aberration: 47, distortion: 14, speed: -78, loopScale: 67, alpha: 16, saturation: -15, shape: triangle, tint: #c45f95, vignetteAmt: -100).write(o1)\nrender(o1)"
   },
   {
     "title": "Red Reflection",
@@ -157,7 +157,7 @@
       "noise",
       "mirror"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 25, hueRotation: 98, speed: 65, octaves: 6, refractAmt: 13, ridges: true, type: 10, colorMode: 6, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nnoise(hueRange: 27, hueRotation: 90, speed: 63, refractAmt: 24, ridges: false, wrap: false, xScale: 86, yScale: 92, type: 10, colorMode: 6, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: 11, mix: -25, refractAAmt: 31, refractBAmt: 34).effects(effect: 0, effectAmt: 2, flip: 15, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 25, hueRotation: 98, speed: 65, octaves: 6, refractAmt: 13, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nnoise(hueRange: 27, hueRotation: 90, speed: 63, refractAmt: 24, ridges: false, wrap: false, xScale: 86, yScale: 92, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: multiply, mix: -25, refractAAmt: 31, refractBAmt: 34).effects(effect: none, effectAmt: 2, flip: lrUd, offsetX: 0, offsetY: 0, rotation: 0, scaleAmt: 100).write(o1)\nrender(o1)"
   },
   {
     "title": "Rainbow Target",
@@ -165,7 +165,7 @@
     "tags": [
       "shapes"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 37, hueRotation: 88, speed: 95, octaves: 3, refractAmt: 0, ridges: true, type: 10, colorMode: 6, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nshapes(speedA: -51, loopAOffset: 10, loopAScale: 49, speedB: 71, loopBOffset: 70, loopBScale: 69, palette: solaris, wrap: true, cyclePalette: 0, rotatePalette: 0).coalesce(tex: read(o0), blendMode: 15, mix: -37, refractAAmt: 6, refractBAmt: 0).lensDistortion(aberration: 100, blendMode: 0, hueRange: 54, hueRotation: 0, blendMode: 1, modulate: true, passthru: 100, alpha: 0, speed: 0, distortion: 0).effects(effect: 0, effectAmt: 2, flip: 16, offsetX: -13, offsetY: 1, rotation: 125, scaleAmt: 142).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 37, hueRotation: 88, speed: 95, octaves: 3, refractAmt: 0, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nshapes(speedA: -51, loopAOffset: circle, loopAScale: 49, speedB: 71, loopBOffset: heptagon, loopBScale: 69, palette: solaris, wrap: true, cyclePalette: off, rotatePalette: 0).coalesce(tex: read(o0), blendMode: reflect, mix: -37, refractAAmt: 6, refractBAmt: 0).lensDistortion(aberration: 100, blendMode: add, hueRange: 54, hueRotation: 0, blendMode: alpha, modulate: true, passthru: 100, alpha: 0, speed: 0, distortion: 0).effects(effect: none, effectAmt: 2, flip: lrDu, offsetX: -13, offsetY: 1, rotation: 125, scaleAmt: 142).write(o1)\nrender(o1)"
   },
   {
     "title": "Red Green Specks",
@@ -174,7 +174,7 @@
       "noise",
       "specks"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: 1, speed: 1, palette: solaris, scale: 1, cellScale: 75, smooth: 0, variation: 0, cyclePalette: 0, rotatePalette: 0).write(o0)\nnoise(palette: santaCruz, type: 10, colorMode: 4, kaleido: 1, xScale: 9, yScale: 9, octaves: 1).composite(tex: read(o0), blendMode: 1, inputColor: #666666, mix: 60, range: 84).lensDistortion(aberration: 38, blendMode: 0, hueRange: 100, hueRotation: 36, blendMode: 1, modulate: true, passthru: 40, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: monoInverse, speed: 1, palette: solaris, scale: 1, cellScale: 75, smooth: 0, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(palette: santaCruz, type: simplex, colorMode: palette, kaleido: 1, xScale: 9, yScale: 9, octaves: 1).composite(tex: read(o0), blendMode: greenscreenAB, inputColor: #666666, mix: 60, range: 84).lensDistortion(aberration: 38, blendMode: add, hueRange: 100, hueRotation: 36, blendMode: alpha, modulate: true, passthru: 40, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Cyan Wash",
@@ -182,7 +182,7 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: 1, speed: 2, palette: jester, scale: 1, cellScale: 75, smooth: 0, variation: 0, cyclePalette: 1, rotatePalette: 0).write(o0)\nshapes(speedA: -2, loopAOffset: 330, loopAScale: 10, speedB: -5, loopBOffset: 330, loopBScale: 39, palette: justBlue, wrap: true, cyclePalette: 0, rotatePalette: 0).composite(tex: read(o0), blendMode: 1, inputColor: #636363, mix: 0, range: 100).lensDistortion(aberration: 2, distortion: -17, speed: 0, loopScale: 100, alpha: 48, saturation: 60, shape: 0, tint: #422d53, vignetteAmt: -8).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: monoInverse, speed: 2, palette: jester, scale: 1, cellScale: 75, smooth: 0, variation: 0, cyclePalette: forward, rotatePalette: 0).write(o0)\nshapes(speedA: -2, loopAOffset: noiseCatmullRom3x3, loopAScale: 10, speedB: -5, loopBOffset: noiseCatmullRom3x3, loopBScale: 39, palette: justBlue, wrap: true, cyclePalette: off, rotatePalette: 0).composite(tex: read(o0), blendMode: greenscreenAB, inputColor: #636363, mix: 0, range: 100).lensDistortion(aberration: 2, distortion: -17, speed: 0, loopScale: 100, alpha: 48, saturation: 60, shape: circle, tint: #422d53, vignetteAmt: -8).write(o1)\nrender(o1)"
   },
   {
     "title": "Muddy Swirls",
@@ -190,6 +190,6 @@
     "tags": [
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 27, hueRotation: 17, speed: 100, octaves: 4, refractAmt: 100, ridges: true, type: 10, colorMode: 6, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nnoise(hueRange: 27, hueRotation: 17, speed: 100, octaves: 4, refractAmt: 100, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nrender(o0)"
   }
 ]
