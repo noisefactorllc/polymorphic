@@ -23,7 +23,7 @@
     "tags": [
       "cellNoise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: palette, speed: 1, palette: barstow, scale: 17, cellScale: 75, smooth: 50, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: sine, loopScale: 100, refractAmt: 49, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: reflect, mix: -38).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\ncellNoise(colorMode: palette, speed: 1, palette: justGreen, scale: 17, cellScale: 75, smooth: 50, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: sine, loopScale: 100, refractAmt: 49, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: 0).write(o1)\nrender(o1)"
   },
   {
     "title": "Pink Kaleidoscope",
