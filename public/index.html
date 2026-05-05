@@ -240,10 +240,14 @@
             min-height: 0;
         }
 
-        /* Per-effect parameter controls panel (lives below the editor) */
+        /* Per-effect parameter controls panel (lives below the editor).
+           Capped width so on wide viewports it doesn't sprawl across the
+           whole canvas; stays left-aligned with the editor. */
         #effect-controls-panel {
             flex: 0 0 auto;
             max-height: min(40vh, 24rem);
+            width: min(100%, 720px);
+            align-self: flex-start;
         }
 
         #dsl-overlay.controls-open #dsl-editor {
