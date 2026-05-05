@@ -247,13 +247,15 @@
         }
 
         /* Per-effect parameter controls panel (lives below the editor).
-           Width matches noisedeck's #left-panel (500px) so the inner
-           controls grid lays out identically. Stays left-aligned with
-           the editor; shrinks to 100% on viewports narrower than that. */
+           Right edge aligns with the menu bar's right edge: the menu is
+           `calc(590px - 0.5em)` wide from the viewport's left edge, and the
+           overlay's left inset is 1rem, so the panel's width is
+           `590px - 0.5em - 1rem`. Stays left-aligned with the editor;
+           shrinks to 100% on viewports narrower than that. */
         #effect-controls-panel {
             flex: 0 0 auto;
             max-height: min(40vh, 24rem);
-            width: min(100%, 500px);
+            width: min(100%, calc(590px - 0.5em - 1rem));
             align-self: flex-start;
         }
 
