@@ -1590,7 +1590,6 @@ async function startShader() {
         setupFileDrop(canvas)
         perfOverlay.init({ renderer, canvas })
         bpmClock.init({ renderer, bpm: 120 })
-        bpmClock.onChange((bpm) => statusRow.set('bpm', { on: true, label: `${Math.round(bpm)} bpm` }))
         statusRow.init({
             renderer,
             hooks: {
@@ -1598,10 +1597,32 @@ async function startShader() {
                 midi: () => commandPalette.open(),
                 source: () => liveInputsPanel.open(),
                 recording: () => recorder.toggle(),
-                bpm: () => bpmClock.tap(),
+                // Click the bpm chip to toggle clock source (manual ↔ midi),
+                // matching the standalone BPM indicator's old behaviour.
+                bpm: () => bpmClock.toggleSource(),
                 fps: () => perfOverlay.toggle()
             }
         })
+
+        // The bpm chip in the status row is the live BPM indicator. Wire
+        // value, source, and beat updates through it.
+        const renderBpmChip = () => {
+            const bpm = Math.round(bpmClock.getBpm())
+            const source = bpmClock.getSource()
+            const midiStatus = bpmClock.getMidiStatus()
+            const label = source === 'midi'
+                ? (midiStatus === 'synced' || midiStatus === 'no-clock' || midiStatus === 'stopped'
+                    ? `${bpm} midi`
+                    : `midi: ${midiStatus}`)
+                : `${bpm} bpm`
+            statusRow.set('bpm', { on: true, label, icon: source === 'midi' ? 'piano' : 'metronome' })
+            statusRow.setModifier('bpm', 'midi', source === 'midi')
+        }
+        bpmClock.onChange(renderBpmChip)
+        bpmClock.onSourceChange(renderBpmChip)
+        bpmClock.onMidiStatusChange(renderBpmChip)
+        bpmClock.onBeat(() => statusRow.pulse('bpm'))
+        renderBpmChip()
         // Wire recorder state into status row. "standard" preset records at
         // 720p/60fps/8Mbps — keeps the encoder happy for fast generative
         // shaders. Switch via the command palette ("Recording: high quality"
@@ -2112,7 +2133,6 @@ function setupViewMenu() {
             inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
         }},
         'surface-pips':     { is: () => outputPicker.isEnabled(),            do: () => outputPicker.toggle() },
-        'bpm':              { is: () => bpmClock.isOpen(),                   do: () => bpmClock.toggle() },
         'perf':             { is: () => perfOverlay.isOpen(),                do: () => {
             perfOverlay.toggle()
             perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
@@ -2263,7 +2283,7 @@ function setupCommandPalette() {
         snapshotBack: () => snapshotBack(),
         snapshotForward: () => snapshotForward(),
         tapTempo: () => bpmClock.tap(),
-        toggleBpm: () => bpmClock.toggle(),
+        toggleBpmSource: () => bpmClock.toggleSource(),
         toggleStatusRow: () => statusRow.toggle(),
         showShortcuts: () => shortcutsDialog.open(),
         togglePerformanceMode: () => togglePerformanceMode(),

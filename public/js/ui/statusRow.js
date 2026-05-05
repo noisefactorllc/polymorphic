@@ -72,6 +72,21 @@ if (!document.getElementById(STYLES_ID)) {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.45; }
         }
+
+        /* MIDI-driven BPM chip uses an amber accent so it's distinguishable
+           from manual at a glance. */
+        .status-chip.midi {
+            border-color: rgba(255, 176, 112, 0.45);
+            color: #ffd0a0;
+        }
+        .status-chip.midi .status-chip-dot { background: #ffb070; }
+
+        /* Beat pulse for the bpm chip's dot. */
+        .status-chip-dot.beat {
+            transform: scale(1.6);
+            background: #fff;
+            transition: transform 0.08s, background 0.15s;
+        }
     `
     document.head.appendChild(style)
 }
@@ -90,15 +105,25 @@ class StatusRow {
         this._renderer = opts.renderer
         this._hooks = opts.hooks || {}
         this._build()
-        // Hidden by default; toggle via Cmd+;
-        this._el.classList.add('hidden')
-        this._open = false
+        // Visible by default — the bpm chip lives here now and was previously
+        // shown by default as a standalone indicator.
+        const initiallyOpen = opts.initiallyOpen !== false
+        if (initiallyOpen) {
+            this._open = true
+            this._el?.classList.remove('hidden')
+            document.body.classList.add('status-row-open')
+            this._loop()
+        } else {
+            this._el.classList.add('hidden')
+            this._open = false
+        }
     }
 
     show() {
         if (this._open) return
         this._open = true
         this._el?.classList.remove('hidden')
+        document.body.classList.add('status-row-open')
         this._loop()
     }
 
@@ -106,12 +131,38 @@ class StatusRow {
         if (!this._open) return
         this._open = false
         this._el?.classList.add('hidden')
+        document.body.classList.remove('status-row-open')
         if (this._raf) cancelAnimationFrame(this._raf)
         this._raf = null
     }
 
     toggle() { this._open ? this.hide() : this.show() }
     isOpen() { return this._open }
+
+    /**
+     * Briefly highlight a chip's dot. Used by the bpm chip to pulse on each
+     * beat so the BPM indication stays visually live.
+     */
+    pulse(chipId) {
+        const chip = this._chips[chipId]
+        if (!chip) return
+        const dot = chip.querySelector('.status-chip-dot')
+        if (!dot) return
+        dot.classList.add('beat')
+        // Use timeout, not animation events, to keep the pulse cheap.
+        clearTimeout(dot._pulseTimer)
+        dot._pulseTimer = setTimeout(() => dot.classList.remove('beat'), 80)
+    }
+
+    /**
+     * Toggle a chip-level modifier class (e.g. 'midi' for the bpm chip
+     * when sourced from MIDI). Multiple modifiers are space-separated.
+     */
+    setModifier(chipId, modifier, on) {
+        const chip = this._chips[chipId]
+        if (!chip) return
+        chip.classList.toggle(modifier, !!on)
+    }
 
     /** Update a chip's state. */
     set(chipId, { on = false, warn = false, err = false, label = null, icon = null } = {}) {

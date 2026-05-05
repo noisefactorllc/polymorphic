@@ -38,7 +38,7 @@
  * @property {() => void}   snapshotBack
  * @property {() => void}   snapshotForward
  * @property {() => void}   tapTempo
- * @property {() => void}   toggleBpm
+ * @property {() => void}   toggleBpmSource
  * @property {() => void}   toggleStatusRow
  * @property {() => void}   showShortcuts
  * @property {() => void}   togglePerformanceMode
@@ -270,11 +270,11 @@ export function buildPaletteActions(deps) {
             run: () => deps.tapTempo()
         },
         {
-            id: 'bpm-toggle',
-            title: 'Toggle BPM indicator',
+            id: 'bpm-source',
+            title: 'Toggle BPM source (manual ↔ midi)',
             icon: 'metronome',
-            keywords: ['bpm', 'tempo', 'clock', 'beat'],
-            run: () => deps.toggleBpm()
+            keywords: ['bpm', 'tempo', 'clock', 'beat', 'midi', 'sync', 'source'],
+            run: () => deps.toggleBpmSource()
         },
         {
             id: 'status-row',
