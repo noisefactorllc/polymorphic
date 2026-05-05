@@ -9,8 +9,9 @@ const APP_VERSION = '0.11'
 
 import { AboutDialog } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
+import { ProgramState, getEffect } from './noisemaker/bundle.js'
 import { preloadFontsForDsl } from './fontLoader.js'
-import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible } from './docReader.js'
+import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
@@ -35,6 +36,8 @@ import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import { parseErrorLocation } from './ui/errorBanner.js'
 import './ui/codeEditor.js'  // Register <code-editor> custom element
+import './ui/effectControls.js' // Register <effect-controls> custom element
+import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
 
 // DOM elements
 const canvas = document.getElementById('canvas')
@@ -70,6 +73,18 @@ const docsMenuItem = document.getElementById('docsMenuItem')
 
 // Renderer reference (set after initialization)
 let renderer = null
+
+// ProgramState (single source of truth for effect parameter values)
+let programState = null
+
+// Effect controls panel element (created on-demand and inserted in #dsl-overlay)
+let controlsPanel = null
+
+// The currently-open call site (when controlsPanel is showing)
+let activeCallSite = null
+
+// Flag to suppress reactive sync while we mutate the DSL programmatically
+let suppressDslReact = false
 
 // Hot reload state
 let hotReloadTimeout = null
@@ -996,6 +1011,10 @@ async function recompileShader(overrideDsl) {
         await preloadFontsForDsl(dsl)
 
         const result = await renderer.compile(dsl)
+        if (result.success) {
+            syncProgramStateFromDsl(dsl)
+            refreshControlsPanelAfterDslChange(dsl)
+        }
         return result
     } catch (err) {
         console.error('Recompile error:', err)
@@ -1045,21 +1064,136 @@ function lineNumberAt(text, index) {
 }
 
 /**
+ * Push the current DSL into ProgramState. Suppresses reactive DSL writes
+ * while the load is in progress.
+ */
+function syncProgramStateFromDsl(dsl) {
+    if (!programState) return
+    suppressDslReact = true
+    try {
+        programState.fromDsl(dsl)
+    } catch (err) {
+        console.warn('[Polymorphic] programState.fromDsl failed:', err)
+    } finally {
+        suppressDslReact = false
+    }
+}
+
+/**
+ * After a DSL change, re-resolve the panel's call site so its stepIndex stays
+ * valid. Closes the panel if the effect can no longer be located.
+ */
+function refreshControlsPanelAfterDslChange(dsl) {
+    if (!controlsPanel || !activeCallSite) return
+    if (controlsPanel.hasAttribute('hidden')) return
+    const next = reresolveCallSite(dsl, activeCallSite)
+    if (!next) {
+        closeControlsPanel()
+        return
+    }
+    activeCallSite = next
+    if (controlsPanel.effectInfo) {
+        controlsPanel.updateEffectInfo(next.effect)
+    }
+}
+
+/**
+ * Resolve an effect definition for a given effect info object. Tries several
+ * key forms because effects can be looked up by `namespace/name`, `namespace.name`,
+ * or just `name` depending on how they were registered.
+ */
+function lookupEffectDef(effectInfo) {
+    if (!effectInfo) return null
+    const tryKey = (k) => (k ? getEffect(k) : null)
+    let def = tryKey(effectInfo.fullName)
+    if (def) return def
+    if (effectInfo.fullName?.includes('/')) {
+        def = tryKey(effectInfo.fullName.replace('/', '.'))
+        if (def) return def
+    }
+    if (effectInfo.fullName?.includes('.')) {
+        def = tryKey(effectInfo.fullName.replace('.', '/'))
+        if (def) return def
+    }
+    if (effectInfo.namespace && effectInfo.name) {
+        def = tryKey(`${effectInfo.namespace}/${effectInfo.name}`)
+        if (def) return def
+        def = tryKey(`${effectInfo.namespace}.${effectInfo.name}`)
+        if (def) return def
+    }
+    def = tryKey(effectInfo.name)
+    return def || null
+}
+
+/**
+ * Build (lazily) the effect controls panel and append it to #dsl-overlay.
+ */
+function ensureControlsPanel() {
+    if (controlsPanel) return controlsPanel
+    if (!dslOverlay) return null
+
+    controlsPanel = document.createElement('effect-controls')
+    controlsPanel.id = 'effect-controls-panel'
+    controlsPanel.programState = programState
+    controlsPanel.docCallback = (effectId) => {
+        loadEffectHelp(effectId)
+        showDocReader()
+        if (docToggleBtn) docToggleBtn.classList.add('active')
+    }
+    controlsPanel.enums = renderer?.canvasRenderer?.enums || {}
+
+    controlsPanel.addEventListener('panelclose', () => closeControlsPanel())
+    dslOverlay.appendChild(controlsPanel)
+    return controlsPanel
+}
+
+function closeControlsPanel() {
+    if (!controlsPanel) return
+    controlsPanel.hide()
+    activeCallSite = null
+    if (dslOverlay) dslOverlay.classList.remove('controls-open')
+}
+
+/**
+ * Open the controls panel for the call site found at the click caret offset.
+ */
+function handleEffectClick(detail) {
+    const dsl = detail?.dsl ?? dslEditor?.value ?? ''
+    const caret = typeof detail?.caretOffset === 'number' ? detail.caretOffset : 0
+    const site = findCallSiteAtOffset(dsl, caret)
+    if (!site) return
+
+    const def = lookupEffectDef(site.effect)
+    if (!def) {
+        // Effect schema not (yet) loaded; do nothing rather than show an empty panel.
+        return
+    }
+
+    const panel = ensureControlsPanel()
+    if (!panel) return
+
+    activeCallSite = site
+    panel.enums = renderer?.canvasRenderer?.enums || {}
+    panel.show({ effectInfo: site.effect, effectDef: def })
+    if (dslOverlay) dslOverlay.classList.add('controls-open')
+}
+
+/**
  * Set up DSL editor with hot reload
  */
 function setupDslEditor() {
     if (!dslEditor) return
-    
+
     // Hot reload: recompile DSL 500ms after user stops typing
     // The code-editor component dispatches 'input' events when content changes
     dslEditor.addEventListener('input', () => {
         // Update reset button visibility
         updateResetButtonVisibility()
-        
+
         // Schedule hot reload
         scheduleHotReload()
     })
-    
+
     // Handle force recompile event from Ctrl/Cmd+Enter
     // The code-editor component dispatches 'forcerecompile' events
     dslEditor.addEventListener('forcerecompile', async () => {
@@ -1163,6 +1297,77 @@ function setupDslEditor() {
             ta.selectionEnd = Math.min(sel.end, len)
         }
         scheduleHotReload()
+    })
+
+    // Open the controls panel when the user clicks on an effect call name.
+    // The 'effectclick' event is for synthetic dispatch (tests/external code);
+    // for real mouse clicks we listen to the textarea directly because the
+    // active <code-editor> implementation may come from the handfish bundle
+    // and not include the polymorphic-local click handler.
+    dslEditor.addEventListener('effectclick', (e) => {
+        handleEffectClick(e.detail)
+    })
+    const clickTextarea = typeof dslEditor.getTextarea === 'function' ? dslEditor.getTextarea() : null
+    if (clickTextarea) {
+        clickTextarea.addEventListener('click', () => {
+            handleEffectClick({
+                caretOffset: clickTextarea.selectionStart,
+                dsl: dslEditor.value
+            })
+        })
+    }
+}
+
+/**
+ * Initialize ProgramState and wire it to push DSL/recompile updates.
+ */
+function setupProgramState() {
+    if (!renderer) return
+    programState = new ProgramState({ renderer: renderer.canvasRenderer })
+
+    // When a parameter changes (via the panel), regenerate DSL and write it
+    // back to the editor so the user sees their edit reflected. The renderer's
+    // pipeline already received the live uniform update from ProgramState
+    // itself, so non-`define` params update without recompile — feedback
+    // surfaces and particle state are preserved.
+    programState.on('change', () => {
+        if (suppressDslReact) return
+        if (!dslEditor || !programState) return
+        let newDsl
+        try {
+            newDsl = programState.toDsl()
+        } catch (err) {
+            console.warn('[Polymorphic] programState.toDsl failed:', err)
+            return
+        }
+        if (!newDsl) return
+        if (newDsl === dslEditor.value) return
+        suppressDslReact = true
+        try {
+            dslEditor.value = newDsl
+            if (renderer?.canvasRenderer) {
+                renderer.canvasRenderer.currentDsl = newDsl
+            }
+        } finally {
+            suppressDslReact = false
+        }
+    })
+
+    // For `define` params (those that affect shader compilation), ProgramState
+    // emits 'recompileNeeded'. Honour it by triggering a recompile.
+    programState.on('recompileNeeded', () => {
+        if (suppressDslReact) return
+        if (hotReloadTimeout) {
+            clearTimeout(hotReloadTimeout)
+            hotReloadTimeout = null
+        }
+        recompileShader().then((result) => {
+            if (!result.success) {
+                showCompilerError(result.error)
+            } else {
+                hideCompilerError()
+            }
+        })
     })
 }
 
@@ -1353,6 +1558,10 @@ async function startShader() {
         // Initialize the renderer
         await renderer.init()
 
+        // ProgramState needs the underlying CanvasRenderer (with manifest/enums).
+        // Set it up before any compile so we can populate state from the result.
+        setupProgramState()
+
         // Initialize panels that depend on the renderer
         liveInputsPanel.init({
             renderer,
@@ -1414,6 +1623,9 @@ async function startShader() {
             showError(`Shader error: ${result.error}`)
             return
         }
+
+        // Initialize ProgramState from the compiled DSL
+        syncProgramStateFromDsl(dsl)
 
         // Show canvas and start rendering
         showCanvas()

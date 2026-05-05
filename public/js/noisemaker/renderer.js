@@ -194,6 +194,13 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * @returns {CanvasRenderer} Underlying CanvasRenderer (for ProgramState integration)
+     */
+    get canvasRenderer() {
+        return this._renderer
+    }
+
+    /**
      * @returns {boolean} Whether the render loop is running
      */
     get isRunning() {

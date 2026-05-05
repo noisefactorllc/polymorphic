@@ -96,6 +96,10 @@
             font-display: swap;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Restore the user-agent default for modal dialogs so they center
+           in the viewport. The universal reset above otherwise zeros the
+           UA's `margin: auto` and pins dialogs to the top-left corner. */
+        dialog:modal { margin: auto; }
         html, body { 
             width: 100%; 
             height: 100%; 
@@ -172,21 +176,30 @@
             border-radius: 8px;
         }
         
-        /* DSL Editor Overlay */
+        /* DSL Editor Overlay — 1rem inset all around so the bottom edge
+           aligns with the doc reader and live-inputs panels. */
         #dsl-overlay {
             position: fixed;
-            top: calc(2.25em + 0.75rem);
-            bottom: 0.75rem;
-            left: 0.75rem;
-            right: 0.75rem;
+            top: calc(2.25em + 1rem);
+            bottom: 1rem;
+            left: 1rem;
+            right: 1rem;
             overflow: hidden;
             z-index: 150;
             transition: right 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-height: 0;
         }
-        
-        /* Reduce editor width when doc reader is open */
+
+        /* When the doc reader is open, the overlay's right edge sits flush
+           against the doc reader's left edge (with a 0.5em gap). This mirrors
+           the doc reader's own sizing — `min(50%, 100% - 590px - 1rem)` —
+           so on narrow windows we don't leave a wasted gap between the
+           editor and the doc reader. */
         #dsl-overlay.doc-open {
-            right: calc(50% + 1em + 0.5em);
+            right: calc(1rem + min(50%, 100% - 590px - 1rem) + 0.5em);
         }
 
         /* Push editor over when live inputs panel is open */
@@ -218,11 +231,24 @@
         body.embed-mode .status-row,
         body.embed-mode .output-picker,
         body.embed-mode .recording-indicator { display: none !important; }
-        
-        /* Code editor fills the overlay */
+
+        /* Code editor fills available vertical space; the per-effect controls
+           panel sits below it without burying the input. */
         #dsl-editor {
-            position: absolute;
-            inset: 0;
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        /* Per-effect parameter controls panel (lives below the editor) */
+        #effect-controls-panel {
+            flex: 0 0 auto;
+            max-height: min(40vh, 24rem);
+        }
+
+        #dsl-overlay.controls-open #dsl-editor {
+            flex: 1 1 0;
+            min-height: 6rem;
         }
         
         /* Compiler Error Display
@@ -418,16 +444,19 @@
             border-radius: 4px;
             padding: 0.75rem;
             margin: 0 0 0.75rem;
-            overflow-x: auto;
-            white-space: pre;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
-        
+
         #doc-reader-content pre code {
             background: transparent;
             padding: 0;
             font-size: 0.75rem;
             line-height: 1.5;
-            white-space: pre;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         
         #doc-reader-content ul,

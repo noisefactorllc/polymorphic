@@ -77,7 +77,7 @@ function handleDocClick(e) {
  * Load and display help for a specific effect by dynamically importing its bundle
  * @param {string} effectPath - e.g., 'synth/noise'
  */
-async function loadEffectHelp(effectPath) {
+export async function loadEffectHelp(effectPath) {
     const [namespace, effectName] = effectPath.split('/');
     const moduleUrl = `${EFFECTS_BASE_URL}/${namespace}/${effectName}.js`;
     
