@@ -671,15 +671,11 @@ class Gallery {
         const card = document.createElement('div')
         card.className = 'gallery-card'
 
-        // Phase 1: no per-card preview rendering. Phase 2 will lazy-fetch
-        // the .dsl on scroll-in and register a LivePreview, mirroring the
-        // Curated tab's behavior.
+        // Empty thumb — a LivePreview canvas mounts here when the card
+        // scrolls into view, after we lazy-fetch the .dsl. The fallback
+        // is only shown if the DSL fetch fails.
         const thumb = document.createElement('div')
         thumb.className = 'gallery-card-thumb'
-        const fb = document.createElement('div')
-        fb.className = 'gallery-card-thumb-fallback'
-        fb.textContent = '(no preview)'
-        thumb.appendChild(fb)
 
         const bodyEl = document.createElement('div')
         bodyEl.className = 'gallery-card-body'
@@ -693,13 +689,50 @@ class Gallery {
         card.addEventListener('click', async () => {
             await this._loadNoisedeckExample(listing, file, card)
         })
+
+        // Lazy-fetch the DSL once the card nears view, then register a
+        // live preview canvas. Mirrors _upgradeBlasterCardToLive but with
+        // no screenshot underneath, so the canvas mounts directly.
+        this._upgradeNoisedeckExampleCardToLive(card, thumb, listing, file).catch(err => {
+            console.debug('[Gallery] noisedeck-examples live upgrade skipped:', err?.message || err)
+        })
         return card
+    }
+
+    async _upgradeNoisedeckExampleCardToLive(card, thumb, listing, file) {
+        const fetchAndAttach = async () => {
+            if (card.dataset.liveAttached === '1') return
+            card.dataset.liveAttached = '1'
+            let dsl
+            try {
+                dsl = await fetchNoisedeckExampleSource(listing, file.file)
+            } catch (err) {
+                console.debug('[Gallery] could not load noisedeck-example DSL:', err?.message || err)
+                const fb = document.createElement('div')
+                fb.className = 'gallery-card-thumb-fallback'
+                fb.textContent = '(no preview)'
+                thumb.appendChild(fb)
+                return
+            }
+            // Cache on the file object so the click handler avoids a second fetch.
+            file._cachedDsl = dsl
+            this._registerPreview(card, thumb, dsl)
+        }
+        const triggerObs = new IntersectionObserver(async (entries, obs) => {
+            for (const e of entries) {
+                if (e.isIntersecting) {
+                    obs.disconnect()
+                    await fetchAndAttach()
+                }
+            }
+        }, { root: null, threshold: 0.1 })
+        triggerObs.observe(card)
     }
 
     async _loadNoisedeckExample(listing, file, card) {
         if (card) card.classList.add('loading')
         try {
-            const dsl = await fetchNoisedeckExampleSource(listing, file.file)
+            const dsl = file._cachedDsl || await fetchNoisedeckExampleSource(listing, file.file)
             this._onLoad({
                 title: file.title || file.file,
                 dsl,
