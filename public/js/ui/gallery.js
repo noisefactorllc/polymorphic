@@ -2,14 +2,16 @@
  * Program Browser
  *
  * Modal browser for example programs and community-published compositions.
- * Two tabs:
+ * Three tabs:
  *
- *   - Curated     — static /data/examples.json roster shipped with the app.
- *   - NoiseBLASTER — live feed pulled from blaster.noisedeck.app/api/feed,
- *                    showing the latest published compositions across the
- *                    Noisemaker ecosystem. These are ephemeral and rotate
- *                    daily; clicking a card resolves the composition via
- *                    sharing.noisedeck.app and loads it into the editor.
+ *   - Curated            — static /data/examples.json roster shipped with the app.
+ *   - Noisedeck Examples — live JSON listing from shuffleset's product-examples
+ *                          gallery; .dsl files fetched on click.
+ *   - NoiseBLASTER       — live feed pulled from blaster.noisedeck.app/api/feed,
+ *                          showing the latest published compositions across the
+ *                          Noisemaker ecosystem. These are ephemeral and rotate
+ *                          daily; clicking a card resolves the composition via
+ *                          sharing.noisedeck.app and loads it into the editor.
  *
  * On a fresh visit (no ?dsl, no ?code), we boot a random Curated example so
  * the landing page feels welcoming.
@@ -17,6 +19,10 @@
 
 import { loadFromCode } from '../sharingLoader.js'
 import { CanvasRenderer, extractEffectNamesFromDsl } from '../noisemaker/bundle.js'
+import {
+    loadNoisedeckExamples,
+    fetchNoisedeckExampleSource,
+} from './noisedeckExamples.js'
 
 const STYLES_ID = 'gallery-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -368,7 +374,7 @@ class Gallery {
         this._open = false
         this._onLoad = () => {}
         this._escHandler = null
-        this._activeTab = 'curated'  // 'curated' | 'blaster'
+        this._activeTab = 'curated'  // 'curated' | 'noisedeck-examples' | 'blaster'
         // Live preview bookkeeping. Each entry: { dsl, preview, canvas, started }.
         // Cards get a LivePreview instance when their canvas scrolls into view
         // and dispose it when out of view, capped at PREVIEW_MAX_LIVE
@@ -563,6 +569,7 @@ class Gallery {
                 </div>
                 <div class="gallery-tabs">
                     <button class="gallery-tab" data-tab="curated">Curated</button>
+                    <button class="gallery-tab" data-tab="noisedeck-examples">Noisedeck Examples</button>
                     <button class="gallery-tab" data-tab="blaster">NoiseBLASTER!</button>
                 </div>
                 <div class="gallery-body" data-id="body"></div>
@@ -591,6 +598,8 @@ class Gallery {
         if (!body) return
         if (tab === 'curated') {
             await this._renderCurated(body)
+        } else if (tab === 'noisedeck-examples') {
+            await this._renderNoisedeckExamples(body)
         } else if (tab === 'blaster') {
             await this._renderBlaster(body)
         }
@@ -635,6 +644,81 @@ class Gallery {
         body.appendChild(grid)
     }
 
+    async _renderNoisedeckExamples(body) {
+        body.innerHTML = `<div class="gallery-loading">Loading Noisedeck Examples…</div>`
+        let listing
+        try {
+            listing = await loadNoisedeckExamples()
+        } catch (err) {
+            console.warn('[Gallery] Noisedeck Examples listing failed:', err)
+            body.innerHTML = `<div class="gallery-error">Couldn't reach Noisedeck Examples. Try again in a moment.</div>`
+            return
+        }
+        if (!listing?.files?.length) {
+            body.innerHTML = `<div class="gallery-empty">No Noisedeck Examples found.</div>`
+            return
+        }
+        const grid = document.createElement('div')
+        grid.className = 'gallery-grid'
+        for (const file of listing.files) {
+            grid.appendChild(this._buildNoisedeckExampleCard(listing, file))
+        }
+        body.innerHTML = ''
+        body.appendChild(grid)
+    }
+
+    _buildNoisedeckExampleCard(listing, file) {
+        const card = document.createElement('div')
+        card.className = 'gallery-card'
+
+        // Phase 1: no per-card preview rendering. Phase 2 will lazy-fetch
+        // the .dsl on scroll-in and register a LivePreview, mirroring the
+        // Curated tab's behavior.
+        const thumb = document.createElement('div')
+        thumb.className = 'gallery-card-thumb'
+        const fb = document.createElement('div')
+        fb.className = 'gallery-card-thumb-fallback'
+        fb.textContent = '(no preview)'
+        thumb.appendChild(fb)
+
+        const bodyEl = document.createElement('div')
+        bodyEl.className = 'gallery-card-body'
+        bodyEl.innerHTML = `
+            <div class="gallery-card-title">${escapeHtml(file.title || file.file)}</div>
+            <div class="gallery-card-meta"><span class="gallery-card-meta-app">noisedeck</span></div>
+        `
+        card.appendChild(thumb)
+        card.appendChild(bodyEl)
+
+        card.addEventListener('click', async () => {
+            await this._loadNoisedeckExample(listing, file, card)
+        })
+        return card
+    }
+
+    async _loadNoisedeckExample(listing, file, card) {
+        if (card) card.classList.add('loading')
+        try {
+            const dsl = await fetchNoisedeckExampleSource(listing, file.file)
+            this._onLoad({
+                title: file.title || file.file,
+                dsl,
+                tagline: '',
+                tags: ['noisedeck'],
+            })
+            this.close()
+        } catch (err) {
+            console.error('[Gallery] Failed to load Noisedeck Example:', err)
+            if (card) {
+                card.classList.remove('loading')
+                card.querySelector('.gallery-card-meta')?.insertAdjacentHTML(
+                    'beforeend',
+                    `<span style="color:#ff7b72">load failed</span>`
+                )
+            }
+        }
+    }
+
     _shuffle() {
         if (this._activeTab === 'curated') {
             loadExamples().then(list => {
@@ -643,6 +727,12 @@ class Gallery {
                 this._onLoad(ex)
                 this.close()
             })
+        } else if (this._activeTab === 'noisedeck-examples') {
+            loadNoisedeckExamples().then(async (listing) => {
+                if (!listing?.files?.length) return
+                const file = listing.files[Math.floor(Math.random() * listing.files.length)]
+                await this._loadNoisedeckExample(listing, file)
+            }).catch(err => console.warn('[Gallery] shuffle failed:', err))
         } else if (this._activeTab === 'blaster') {
             loadBlasterFeed().then(async (feed) => {
                 if (!feed?.length) return
