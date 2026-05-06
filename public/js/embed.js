@@ -7,7 +7,7 @@
 
 const APP_VERSION = '0.11'
 
-import { AboutDialog } from 'handfish'
+import { AboutDialog, dslTokenizer } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { ProgramState, getEffect } from './noisemaker/bundle.js'
 import { preloadFontsForDsl } from './fontLoader.js'
@@ -45,6 +45,7 @@ const loadingEl = document.getElementById('loading')
 const errorEl = document.getElementById('error')
 const dslOverlay = document.getElementById('dsl-overlay')
 const dslEditor = document.getElementById('dsl-editor')
+dslEditor?.setTokenizer?.(dslTokenizer)
 const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
