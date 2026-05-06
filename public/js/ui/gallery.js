@@ -53,7 +53,7 @@ if (!document.getElementById(STYLES_ID)) {
             border-radius: 14px;
             box-shadow: 0 20px 60px -10px rgba(0,0,0,0.6);
             width: min(900px, calc(100vw - 2rem));
-            max-height: calc(100vh - 7vh);
+            max-height: calc(100vh - 5vh - 2rem);
             display: flex;
             flex-direction: column;
             color: #e3e3e3;
