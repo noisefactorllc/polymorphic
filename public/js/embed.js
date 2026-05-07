@@ -35,7 +35,7 @@ import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import { parseErrorLocation } from './ui/errorBanner.js'
-import './ui/codeEditor.js'  // Register <code-editor> custom element
+import { enhanceCodeEditor } from './ui/codeEditor.js'  // CSS + polymorphic-specific helpers (handfish registers the element)
 import './ui/effectControls.js' // Register <effect-controls> custom element
 import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
 
@@ -46,6 +46,7 @@ const errorEl = document.getElementById('error')
 const dslOverlay = document.getElementById('dsl-overlay')
 const dslEditor = document.getElementById('dsl-editor')
 dslEditor?.setTokenizer?.(dslTokenizer)
+enhanceCodeEditor(dslEditor)
 const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
