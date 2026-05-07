@@ -1607,24 +1607,46 @@ async function startShader() {
         })
 
         // The bpm chip in the status row is the live BPM indicator. Wire
-        // value, source, and beat updates through it.
+        // value, source, and beat updates through it; the chip also exposes
+        // a double-click-to-edit value and an on-screen Tap (T) button.
         const renderBpmChip = () => {
-            const bpm = Math.round(bpmClock.getBpm())
-            const source = bpmClock.getSource()
-            const midiStatus = bpmClock.getMidiStatus()
-            const label = source === 'midi'
-                ? (midiStatus === 'synced' || midiStatus === 'no-clock' || midiStatus === 'stopped'
-                    ? `${bpm} midi`
-                    : `midi: ${midiStatus}`)
-                : `${bpm} bpm`
-            statusRow.set('bpm', { on: true, label, icon: source === 'midi' ? 'piano' : 'metronome' })
-            statusRow.setModifier('bpm', 'midi', source === 'midi')
+            statusRow.setBpmDisplay({
+                value: Math.round(bpmClock.getBpm()),
+                source: bpmClock.getSource(),
+                midiStatus: bpmClock.getMidiStatus(),
+            })
         }
         bpmClock.onChange(renderBpmChip)
         bpmClock.onSourceChange(renderBpmChip)
         bpmClock.onMidiStatusChange(renderBpmChip)
         bpmClock.onBeat(() => statusRow.pulse('bpm'))
+        bpmClock.onTap(() => statusRow.flashBpmTap())
+        statusRow.onBpmEdit((bpm) => bpmClock.setBpm(bpm))
+        statusRow.onBpmTap(() => bpmClock.tap())
         renderBpmChip()
+
+        // Tap (T) button mirrors whether the T-key shortcut would actually
+        // register: dimmed while an input/editor is focused or while the
+        // clock is sourced from MIDI. The user reads its state at a glance.
+        const isEditingFocus = () => {
+            const el = document.activeElement
+            if (!el || el === document.body) return false
+            const tag = (el.tagName || '').toUpperCase()
+            if (tag === 'TEXTAREA' || tag === 'INPUT') return true
+            if (el.isContentEditable) return true
+            // handfish's <code-editor> wraps a contenteditable shadow root.
+            if (typeof el.closest === 'function' && el.closest('code-editor')) return true
+            return false
+        }
+        const updateBpmTapActive = () => {
+            statusRow.setBpmTapActive(!isEditingFocus() && bpmClock.getSource() !== 'midi')
+        }
+        document.addEventListener('focusin', updateBpmTapActive)
+        // focusout fires before activeElement settles on the next focus
+        // target — defer one microtask so we read the post-transition state.
+        document.addEventListener('focusout', () => queueMicrotask(updateBpmTapActive))
+        bpmClock.onSourceChange(updateBpmTapActive)
+        updateBpmTapActive()
         // Wire recorder state into status row. "standard" preset records at
         // 720p/60fps/8Mbps — keeps the encoder happy for fast generative
         // shaders. Switch via the command palette ("Recording: high quality"

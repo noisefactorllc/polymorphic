@@ -30,6 +30,7 @@ class BpmClock {
         this._beatListeners = []
         this._sourceListeners = []
         this._midiStatusListeners = []
+        this._tapListeners = []
         this._source = 'manual'   // 'manual' | 'midi'
         this._midiClock = null
         this._midiStatus = 'no-device'
@@ -68,6 +69,12 @@ class BpmClock {
     onBeat(cb) { this._beatListeners.push(cb) }
     onSourceChange(cb) { this._sourceListeners.push(cb) }
     onMidiStatusChange(cb) { this._midiStatusListeners.push(cb) }
+    /**
+     * Fires every time `tap()` is accepted (manual source). Lets the UI
+     * flash a confirmation regardless of whether the tap came from the T
+     * key or a click on the on-screen Tap button.
+     */
+    onTap(cb) { this._tapListeners.push(cb) }
 
     /**
      * Returns loopDuration (seconds) such that osc(speed: 1) cycles once per
@@ -93,6 +100,7 @@ class BpmClock {
             const bpm = 60_000 / avgMs
             this.setBpm(bpm)
         }
+        for (const cb of this._tapListeners) cb()
     }
 
     /**
