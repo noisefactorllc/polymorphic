@@ -258,14 +258,23 @@ const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 // and reacquire when they come back.
 const PREVIEW_MAX_LIVE = 8
 
+// Cards animate only while the user is hovering (mouse) or long-pressing
+// (touch). Long-press threshold is the standard 500ms; if the finger
+// drifts past the tolerance before the timer fires, treat it as a scroll
+// and cancel.
+const LONG_PRESS_MS = 500
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10
+
 /**
  * Live mini-preview of a Noisemaker DSL program rendered into a small
  * canvas inside a gallery card. Mirrors shuffleset's NoisemakerRenderer
  * pattern: per-canvas CanvasRenderer instance, compile DSL, start loop.
  *
- * Visibility-gated via IntersectionObserver: a preview only spins up its
- * WebGL context when its card is on screen, and tears it down when it
- * scrolls away. This keeps the simultaneous-context count bounded.
+ * Activation is gated on hover (mouse) and long-press (touch); a brief
+ * one-shot warm-up runs when the card first scrolls into view to capture
+ * a still snapshot for the default thumbnail. The IntersectionObserver
+ * also tears down any active preview when a card scrolls off so we stay
+ * under the browser's WebGL context cap.
  */
 class LivePreview {
     constructor(canvas, dsl, opts = {}) {
@@ -375,10 +384,11 @@ class Gallery {
         this._onLoad = () => {}
         this._escHandler = null
         this._activeTab = 'curated'  // 'curated' | 'noisedeck-examples' | 'blaster'
-        // Live preview bookkeeping. Each entry: { dsl, preview, canvas, started }.
-        // Cards get a LivePreview instance when their canvas scrolls into view
-        // and dispose it when out of view, capped at PREVIEW_MAX_LIVE
-        // simultaneous renderers to stay under the WebGL context limit.
+        // Live preview bookkeeping. Cards get a LivePreview instance only
+        // while the user hovers or long-presses; a one-shot warm-up render
+        // on first viewport entry captures a still snapshot. Capped at
+        // PREVIEW_MAX_LIVE simultaneous renderers to stay under the
+        // browser's WebGL context limit.
         this._previewsByCard = new Map()
         this._observer = null
         this._activeCards = []  // most-recently-visible first (LRU eviction)
@@ -428,8 +438,11 @@ class Gallery {
     }
 
     /**
-     * Register a card with the visibility observer so a live preview is
-     * spun up as the card scrolls in/out of view.
+     * Register a card so a live preview spins up while the user hovers
+     * (mouse) or long-presses (touch). The IntersectionObserver runs a
+     * one-shot warm-up render on first viewport entry to capture a still
+     * snapshot, then tears down any active preview if the card scrolls
+     * off so we stay under the browser's WebGL context cap.
      *
      * The canvas is *not* persistent — every activation creates a brand-new
      * <canvas> element inside the supplied thumb container, and every
@@ -446,7 +459,9 @@ class Gallery {
      * @param {boolean} [opts.absolute=false] - canvas/snapshot stack absolutely
      *                                          inside the container (used by
      *                                          blaster cards layered over a
-     *                                          screenshot)
+     *                                          screenshot); also skips warm-up
+     *                                          since the underlying screenshot
+     *                                          already serves as the still
      */
     _registerPreview(card, thumbContainer, dsl, opts = {}) {
         if (!card || !thumbContainer || !dsl) return
@@ -456,17 +471,151 @@ class Gallery {
             preview: null,
             canvas: null,
             snapshotImg: null,
-            absolute: !!opts.absolute
+            absolute: !!opts.absolute,
+            // Blaster cards already show a static screenshot underneath, so
+            // they don't need a one-shot warm-up render to populate a still
+            // thumbnail — the screenshot serves that role until hover.
+            skipWarmUp: !!opts.absolute,
+            warmedUp: false,
+            hovered: false,
+            longPressed: false,
         })
+        // Animation is now driven by hover/long-press, not visibility. The
+        // observer's only jobs are to (a) trigger a one-time warm-up render
+        // so curated/noisedeck cards have a still thumbnail to show, and
+        // (b) tear down any active live preview if the card scrolls off.
         if (!this._observer) {
             this._observer = new IntersectionObserver((entries) => {
                 for (const entry of entries) {
-                    if (entry.isIntersecting) this._activatePreview(entry.target)
-                    else this._deactivatePreview(entry.target)
+                    if (entry.isIntersecting) {
+                        this._warmUpPreview(entry.target)
+                    } else {
+                        const e = this._previewsByCard.get(entry.target)
+                        if (e?.preview) this._deactivatePreview(entry.target)
+                    }
                 }
             }, { root: null, threshold: 0.1 })
         }
         this._observer.observe(card)
+        this._bindInteractionHandlers(card)
+    }
+
+    /**
+     * Wire mouse-hover and touch-long-press listeners on a card so the
+     * live preview only spins up while the user is actively interacting.
+     */
+    _bindInteractionHandlers(card) {
+        if (card._previewHandlersAttached) return
+        card._previewHandlersAttached = true
+
+        card.addEventListener('mouseenter', () => {
+            const entry = this._previewsByCard.get(card)
+            if (!entry) return
+            entry.hovered = true
+            this._activatePreview(card)
+        })
+        card.addEventListener('mouseleave', () => {
+            const entry = this._previewsByCard.get(card)
+            if (!entry) return
+            entry.hovered = false
+            if (!entry.longPressed) this._deactivatePreview(card)
+        })
+
+        let longPressTimer = null
+        let startX = 0
+        let startY = 0
+        const cancelTimer = () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer)
+                longPressTimer = null
+            }
+        }
+        card.addEventListener('touchstart', (e) => {
+            const t = e.touches[0]
+            if (!t) return
+            startX = t.clientX
+            startY = t.clientY
+            // Each fresh touch starts clean — never inherit a stale
+            // suppression flag from a previous interaction.
+            card._suppressNextClick = false
+            cancelTimer()
+            longPressTimer = setTimeout(() => {
+                longPressTimer = null
+                const entry = this._previewsByCard.get(card)
+                if (!entry) return
+                entry.longPressed = true
+                card._suppressNextClick = true
+                this._activatePreview(card)
+            }, LONG_PRESS_MS)
+        }, { passive: true })
+        card.addEventListener('touchmove', (e) => {
+            const t = e.touches[0]
+            if (!t) return
+            if (Math.abs(t.clientX - startX) > LONG_PRESS_MOVE_TOLERANCE_PX
+                || Math.abs(t.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+                cancelTimer()
+            }
+        }, { passive: true })
+        const onTouchEnd = () => {
+            cancelTimer()
+            const entry = this._previewsByCard.get(card)
+            if (!entry) return
+            if (entry.longPressed) {
+                entry.longPressed = false
+                if (!entry.hovered) this._deactivatePreview(card)
+            }
+        }
+        card.addEventListener('touchend', onTouchEnd, { passive: true })
+        card.addEventListener('touchcancel', onTouchEnd, { passive: true })
+
+        // The synthetic click that follows a long-press release would
+        // otherwise load the program. Capture-phase handler runs ahead of
+        // the per-tab click handlers and stops them when the flag is set.
+        card.addEventListener('click', (e) => {
+            if (card._suppressNextClick) {
+                card._suppressNextClick = false
+                e.stopImmediatePropagation()
+                e.preventDefault()
+            }
+        }, { capture: true })
+    }
+
+    /**
+     * One-shot render → snapshot → dispose so a card that has just
+     * scrolled into view ends up displaying a still thumbnail. After this
+     * the card stays static until the user hovers or long-presses.
+     *
+     * The warm-up canvas is mounted hidden so the user never sees the
+     * brief animation that runs while we wait for the first frame — they
+     * just see the still snapshot appear once it's ready.
+     */
+    async _warmUpPreview(card) {
+        const entry = this._previewsByCard.get(card)
+        if (!entry || entry.warmedUp) return
+        entry.warmedUp = true
+        if (entry.skipWarmUp) return
+        if (entry.preview || entry.hovered || entry.longPressed) return
+
+        entry.warmingUp = true
+        await this._activatePreview(card)
+        // Two rAFs so the GL pipeline has actually painted a frame before
+        // we capture; one rAF only gets the first compositing tick.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+        const after = this._previewsByCard.get(card)
+        if (!after) {
+            entry.warmingUp = false
+            return
+        }
+        // User started interacting during the warm-up — promote it to a
+        // visible animation by clearing the hidden flag on the live canvas.
+        if (after.hovered || after.longPressed) {
+            after.warmingUp = false
+            if (after.canvas) after.canvas.style.visibility = ''
+            return
+        }
+        if (after.preview) this._deactivatePreview(card)
+        after.warmingUp = false
     }
 
     async _activatePreview(card) {
@@ -493,6 +642,11 @@ class Gallery {
             canvas.style.width = '100%'
             canvas.style.height = '100%'
         }
+        // During warm-up the canvas is mounted but hidden — the snapshot
+        // capture works off the GL drawing buffer regardless of CSS, so
+        // the user sees only the resulting still, never the brief frames
+        // that run while we wait for first paint.
+        if (entry.warmingUp) canvas.style.visibility = 'hidden'
         entry.thumbContainer.appendChild(canvas)
         entry.canvas = canvas
         const preview = new LivePreview(canvas, entry.dsl, {
@@ -504,6 +658,11 @@ class Gallery {
             preview.dispose()
             return
         }
+        // If a deactivation ran while we were awaiting (e.g. card scrolled
+        // out, hover ended), entry.preview will have been cleared and a
+        // fresh snapshotImg added — leave it alone.
+        const stillActive = this._previewsByCard.get(card)
+        if (!stillActive || stillActive.preview !== preview) return
         // First frame is up — drop the snapshot placeholder if present.
         if (entry.snapshotImg) {
             entry.snapshotImg.remove()
@@ -779,9 +938,10 @@ class Gallery {
         const card = document.createElement('div')
         card.className = 'gallery-card'
         const tags = (ex.tags || []).map(t => `<span class="gallery-card-tag">${escapeHtml(t)}</span>`).join('')
-        // The thumb container is a slot — _activatePreview mounts a canvas
-        // here when the card scrolls in, _deactivatePreview swaps it for a
-        // static <img> snapshot when it scrolls out.
+        // The thumb container is a slot — a one-shot warm-up render
+        // captures a still snapshot when the card first enters view; live
+        // animation only mounts a canvas while the user hovers (mouse) or
+        // long-presses (touch).
         const thumbDiv = document.createElement('div')
         thumbDiv.className = 'gallery-card-thumb'
 
