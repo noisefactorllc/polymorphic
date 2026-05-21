@@ -40,7 +40,7 @@
       "pattern",
       "static"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #8145ab, bgColor: #cc1c2d, rotation: 0, scale: 5, type: dots, speed: 1, animation: panX).write(o0)\nnoise(palette: seventiesShirt, refractAmt: 83, ridges: false, type: simplex, colorMode: palette, kaleido: 1, xScale: 4, yScale: 4, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: -10).effects(effectAmt: 3, effect: cga).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #8145ab, bgColor: #cc1c2d, rotation: 0, scale: 5, type: dots, speed: 1, animation: pan).write(o0)\nnoise(palette: seventiesShirt, refractAmt: 83, ridges: false, type: simplex, colorMode: palette, kaleido: 1, xScale: 4, yScale: 4, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: -10).effects(effectAmt: 3, effect: cga).write(o1)\nrender(o1)"
   },
   {
     "title": "Red Bubbles",
@@ -48,7 +48,7 @@
     "tags": [
       "composite"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #4a88fb, bgColor: #000000, rotation: 111, scale: 12, type: dots, speed: 1, animation: panY).write(o0)\nnoise(hueRange: 20, hueRotation: 58, speed: 78, loopOffset: noise, loopScale: 100, refractAmt: 68, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 81, yScale: 81, octaves: 1).composite(tex: read(o0), blendMode: greenscreenBA, inputColor: #000000, mix: 4, range: 71).colorLab(colorMode: srgbDefault, dither: none, hueRange: 154, hueRotation: 0, levels: 0, palette: eventHorizon).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\npattern(fgColor: #4a88fb, bgColor: #000000, rotation: 111, scale: 12, type: dots, speed: 1, animation: pan).write(o0)\nnoise(hueRange: 20, hueRotation: 58, speed: 78, loopOffset: noise, loopScale: 100, refractAmt: 68, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 81, yScale: 81, octaves: 1).composite(tex: read(o0), blendMode: greenscreenBA, inputColor: #000000, mix: 4, range: 71).colorLab(colorMode: srgbDefault, dither: none, hueRange: 154, hueRotation: 0, levels: 0, palette: eventHorizon).write(o1)\nrender(o1)"
   },
   {
     "title": "Glitch Field",
