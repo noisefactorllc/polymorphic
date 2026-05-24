@@ -134,6 +134,41 @@ if (!document.getElementById(STYLES_ID)) {
             transition: opacity 0.15s, background 0.10s, border-color 0.10s, color 0.10s;
             user-select: none;
         }
+        /* Tempo divider — slows the renderer's loop to a fraction of the
+           current BPM so animations don't blur past at standard tempos.
+           Sized to match the Tap button for a consistent chip rhythm. */
+        .status-chip-bpm-divider {
+            margin: 0 0.15em;
+            padding: 0.05rem 0.85rem 0.05rem 0.35rem;
+            background: rgba(165, 184, 255, 0.10);
+            border: 1px solid rgba(165, 184, 255, 0.20);
+            color: #d9deeb;
+            font: inherit;
+            font-size: 0.625rem;
+            line-height: 1.4;
+            border-radius: 4px;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='%23a5b8ff'%3E%3Cpath d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.25rem center;
+            background-size: 0.45rem;
+            transition: background-color 0.10s, border-color 0.10s;
+        }
+        .status-chip-bpm-divider:hover {
+            background-color: rgba(165, 184, 255, 0.22);
+            border-color: rgba(165, 184, 255, 0.55);
+        }
+        .status-chip-bpm-divider:focus {
+            border-color: rgba(165, 184, 255, 0.55);
+        }
+        .status-chip-bpm-divider option {
+            background: #0a0c11;
+            color: #d9deeb;
+        }
         .status-chip-bpm-tap.active {
             opacity: 1;
             color: #d9deeb;
@@ -300,6 +335,14 @@ class StatusRow {
             <span class="status-chip-dot"></span>
             <span class="icon-material">${def.icon}</span>
             <span class="status-chip-bpm-value" title="double-click to edit">120</span>
+            <select class="status-chip-bpm-divider" title="slow the animation by a fraction of BPM" tabindex="-1">
+                <option value="1">/1</option>
+                <option value="2">/2</option>
+                <option value="4">/4</option>
+                <option value="8">/8</option>
+                <option value="16">/16</option>
+                <option value="32">/32</option>
+            </select>
             <span class="status-chip-bpm-unit">bpm</span>
             <button class="status-chip-bpm-tap" type="button" tabindex="-1"
                     title="press T to tap tempo">Tap<span class="status-chip-bpm-tap-key">(T)</span></button>
@@ -327,6 +370,18 @@ class StatusRow {
             // grayed-out look already telegraphs that, but be defensive.
             if (!tapBtn.classList.contains('active')) return
             if (typeof this._bpmTapHandler === 'function') this._bpmTapHandler()
+        })
+
+        const dividerEl = chip.querySelector('.status-chip-bpm-divider')
+        // Block the chip's MIDI-toggle click so opening the menu doesn't
+        // also flip the clock source.
+        dividerEl.addEventListener('click', (e) => e.stopPropagation())
+        dividerEl.addEventListener('mousedown', (e) => e.stopPropagation())
+        dividerEl.addEventListener('change', () => {
+            const n = parseInt(dividerEl.value, 10)
+            if (Number.isFinite(n) && typeof this._bpmDividerCb === 'function') {
+                this._bpmDividerCb(n)
+            }
         })
     }
 
@@ -390,6 +445,16 @@ class StatusRow {
     onBpmEdit(cb) { this._bpmEditCb = cb }
     /** Register a callback fired when the user clicks the Tap (T) button. */
     onBpmTap(cb) { this._bpmTapHandler = cb }
+    /** Register a callback fired when the user picks a new BPM divider. */
+    onBpmDividerChange(cb) { this._bpmDividerCb = cb }
+
+    /** Sync the divider <select> to the clock's current value. */
+    setBpmDividerDisplay(divider) {
+        const chip = this._chips.bpm
+        if (!chip) return
+        const sel = chip.querySelector('.status-chip-bpm-divider')
+        if (sel) sel.value = String(divider)
+    }
 
     _beginBpmEdit() {
         const chip = this._chips.bpm

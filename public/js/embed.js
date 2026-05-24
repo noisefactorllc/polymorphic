@@ -1615,14 +1615,17 @@ async function startShader() {
                 source: bpmClock.getSource(),
                 midiStatus: bpmClock.getMidiStatus(),
             })
+            statusRow.setBpmDividerDisplay(bpmClock.getDivider())
         }
         bpmClock.onChange(renderBpmChip)
         bpmClock.onSourceChange(renderBpmChip)
         bpmClock.onMidiStatusChange(renderBpmChip)
+        bpmClock.onDividerChange(renderBpmChip)
         bpmClock.onBeat(() => statusRow.pulse('bpm'))
         bpmClock.onTap(() => statusRow.flashBpmTap())
         statusRow.onBpmEdit((bpm) => bpmClock.setBpm(bpm))
         statusRow.onBpmTap(() => bpmClock.tap())
+        statusRow.onBpmDividerChange((divider) => bpmClock.setDivider(divider))
         renderBpmChip()
 
         // Tap (T) button mirrors whether the T-key shortcut would actually

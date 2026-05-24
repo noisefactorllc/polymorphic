@@ -19,6 +19,19 @@
 import { MidiClock } from './midiClock.js'
 
 const SOURCE_STORAGE_KEY = 'polymorphic.bpm.source'
+const DIVIDER_STORAGE_KEY = 'polymorphic.bpm.divider'
+
+export const DIVIDER_OPTIONS = [1, 2, 4, 8, 16, 32]
+
+/**
+ * Pure helper for the bar-seconds calculation so it can be unit-tested
+ * without instantiating the clock. One bar = four beats, scaled by an
+ * integer divider (1, 2, 4, 8, 16, 32) so users can slow animations to
+ * a fraction of standard tempo.
+ */
+export function computeBarSeconds(bpm, divider = 1) {
+    return (60 / bpm) * 4 * divider
+}
 
 class BpmClock {
     constructor() {
@@ -31,7 +44,9 @@ class BpmClock {
         this._sourceListeners = []
         this._midiStatusListeners = []
         this._tapListeners = []
+        this._dividerListeners = []
         this._source = 'manual'   // 'manual' | 'midi'
+        this._divider = 4         // 1, 2, 4, 8, 16, 32 (default /4 — standard BPMs render too fast for these animations)
         this._midiClock = null
         this._midiStatus = 'no-device'
     }
@@ -45,11 +60,13 @@ class BpmClock {
         this._renderer = opts.renderer
         this._bpm = opts.bpm || 120
         this._source = this._loadSource()
+        this._divider = this._loadDivider()
         this._applyToRenderer()
         this._loop()
         this._installShortcuts()
         // Re-emit source so subscribers can render the initial state.
         for (const cb of this._sourceListeners) cb(this._source)
+        for (const cb of this._dividerListeners) cb(this._divider)
         if (this._source === 'midi') {
             this._enableMidi()
         }
@@ -69,6 +86,7 @@ class BpmClock {
     onBeat(cb) { this._beatListeners.push(cb) }
     onSourceChange(cb) { this._sourceListeners.push(cb) }
     onMidiStatusChange(cb) { this._midiStatusListeners.push(cb) }
+    onDividerChange(cb) { this._dividerListeners.push(cb) }
     /**
      * Fires every time `tap()` is accepted (manual source). Lets the UI
      * flash a confirmation regardless of whether the tap came from the T
@@ -78,11 +96,29 @@ class BpmClock {
 
     /**
      * Returns loopDuration (seconds) such that osc(speed: 1) cycles once per
-     * bar (4 beats).
+     * bar (4 beats), stretched by the user-selected divider so animations
+     * can run at a fraction of standard tempo.
      */
     barSeconds() {
-        return (60 / this._bpm) * 4
+        return computeBarSeconds(this._bpm, this._divider)
     }
+
+    /**
+     * Slows the loop by an integer factor (1, 2, 4, 8, 16, 32). The
+     * displayed BPM is unchanged — only the renderer's loopDuration is
+     * stretched, which is what users actually see in the animation.
+     */
+    setDivider(divider) {
+        const n = Number(divider)
+        if (!DIVIDER_OPTIONS.includes(n)) return
+        if (this._divider === n) return
+        this._divider = n
+        this._saveDivider(n)
+        this._applyToRenderer()
+        for (const cb of this._dividerListeners) cb(this._divider)
+    }
+
+    getDivider() { return this._divider }
 
     tap() {
         if (this._source !== 'manual') return
@@ -202,6 +238,17 @@ class BpmClock {
 
     _saveSource(source) {
         try { localStorage.setItem(SOURCE_STORAGE_KEY, source) } catch { /* ignore */ }
+    }
+
+    _loadDivider() {
+        try {
+            const n = parseInt(localStorage.getItem(DIVIDER_STORAGE_KEY), 10)
+            return DIVIDER_OPTIONS.includes(n) ? n : 4
+        } catch { return 4 }
+    }
+
+    _saveDivider(divider) {
+        try { localStorage.setItem(DIVIDER_STORAGE_KEY, String(divider)) } catch { /* ignore */ }
     }
 
     _loop() {
