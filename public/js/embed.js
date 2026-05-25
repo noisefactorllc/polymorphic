@@ -31,6 +31,7 @@ import { bpmClock } from './ui/bpm.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
+import { configureViewportWindow, openViewportWindow } from './ui/viewportWindow.js'
 import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
@@ -2203,6 +2204,13 @@ function setupViewMenu() {
     })
     document.getElementById('viewMenuItem-shortcuts')?.addEventListener('click', () => {
         shortcutsDialog.open()
+    })
+
+    // Viewport window: opens a popup mirror of the canvas for full-screen
+    // display on a secondary monitor. Idempotent — focuses an existing popup.
+    configureViewportWindow({ canvas })
+    document.getElementById('viewMenuItem-open-viewport-window')?.addEventListener('click', () => {
+        openViewportWindow()
     })
 
     // Initial state
