@@ -4,5 +4,5 @@
     "licenseProductId": "polymorphic",
     "version": "0.11",
     "appRootSubdir": "public",
-    "debug": true
+    "debug": false
 }
