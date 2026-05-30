@@ -249,7 +249,9 @@ if (!document.getElementById(STYLES_ID)) {
 }
 
 const BLASTER_FEED_URL = 'https://blaster.noisedeck.app/api/feed'
-const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
+const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://polymorphic/vendor/noisemaker/0.8.0'
+    : 'https://shaders.noisedeck.app/1'
 const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 
 // Caps on simultaneous live preview renderers — each one consumes a WebGL

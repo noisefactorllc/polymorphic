@@ -1,0 +1,8 @@
+{
+    "name": "Polymorphic",
+    "appId": "app.polymorphic.desktop",
+    "licenseProductId": "polymorphic",
+    "version": "0.11",
+    "appRootSubdir": "public",
+    "debug": true
+}

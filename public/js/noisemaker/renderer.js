@@ -7,6 +7,11 @@
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
 
+// Shader assets served from CDN, or vendored locally in Electron
+const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://polymorphic/vendor/noisemaker/0.8.0'
+    : 'https://shaders.noisedeck.app/1'
+
 /**
  * Default text parameters for text effects
  */
@@ -172,10 +177,10 @@ export class PolymorphicRenderer {
             canvas: this.canvas,
             width: this.width,
             height: this.height,
-            basePath: 'https://shaders.noisedeck.app/1',
+            basePath: SHADER_BASE_PATH,
             preferWebGPU: this.preferWebGPU,
             useBundles: true,
-            bundlePath: 'https://shaders.noisedeck.app/1/effects',
+            bundlePath: `${SHADER_BASE_PATH}/effects`,
             onError: options.onError
         })
 

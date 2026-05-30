@@ -7,7 +7,9 @@
  * exist.
  */
 
-const MANIFEST_URL = 'https://shaders.noisedeck.app/1/effects/manifest.json'
+const MANIFEST_URL = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://polymorphic/vendor/noisemaker/0.8.0/effects/manifest.json'
+    : 'https://shaders.noisedeck.app/1/effects/manifest.json'
 
 let manifestPromise = null
 let manifest = null

@@ -17,3 +17,8 @@ public/js/noisemaker/vendor/effects/
 # Environment
 .env
 .env.local
+
+# Desktop build artifacts
+/public/vendor/
+/dist-desktop/
+/desktop/node_modules/

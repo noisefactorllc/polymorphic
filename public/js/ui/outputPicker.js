@@ -12,7 +12,9 @@ export function currentRenderTarget(dsl) {
     return parseInt(matches[matches.length - 1][1], 10)
 }
 
-const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
+const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://polymorphic/vendor/noisemaker/0.8.0'
+    : 'https://shaders.noisedeck.app/1'
 const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 
 let _bundlePromise = null

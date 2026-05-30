@@ -6,7 +6,9 @@
  * - Minified for production
  */
 
-const SHADER_CDN = 'https://shaders.noisedeck.app/1'
+const SHADER_CDN = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://polymorphic/vendor/noisemaker/0.8.0'
+    : 'https://shaders.noisedeck.app/1'
 
 // Detect if we're in local development
 const isLocalDev = typeof window !== 'undefined' && (
