@@ -9,7 +9,7 @@ import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from
 
 // Shader assets served from CDN, or vendored locally in Electron
 const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? 'app://polymorphic/vendor/noisemaker/0.8.0'
+    ? 'app://polymorphic/vendor/noisemaker/1.0.60'
     : 'https://shaders.noisedeck.app/1'
 
 /**
