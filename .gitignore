@@ -14,11 +14,12 @@ public/js/noisemaker/vendor/effects/
 *.swo
 *~
 
+# Desktop build output
+/dist-desktop/
+/desktop/node_modules/
+/vendor/
+/public/vendor/
+
 # Environment
 .env
 .env.local
-
-# Desktop build artifacts
-/public/vendor/
-/dist-desktop/
-/desktop/node_modules/
