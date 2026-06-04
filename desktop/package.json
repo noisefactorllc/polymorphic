@@ -21,7 +21,7 @@
     },
     "build": {
         "appId": "app.polymorphic.desktop",
-        "productName": "Polymorphic",
+        "productName": "Noisedeck Polymorphic",
         "directories": {
             "output": "../dist-desktop",
             "buildResources": "build-resources"
