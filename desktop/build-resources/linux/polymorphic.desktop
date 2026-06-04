@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Polymorphic
+Comment=Generative art creation and publishing tool
+Exec=AppRun %U
+Icon=polymorphic
+Type=Application
+Categories=Graphics;
+StartupWMClass=polymorphic
