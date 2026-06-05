@@ -12,10 +12,8 @@ let dslOverlay = null;
 let effectManifest = null;
 let applyToEditorCallback = null;
 
-// Base URL for fetching effect help files — CDN, or vendored locally in Electron
-const EFFECTS_BASE_URL = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? 'app://polymorphic/vendor/noisemaker/1.0.60/effects'
-    : 'https://shaders.noisedeck.app/1/effects';
+// Base URL for fetching effect help files from the shaders CDN.
+const EFFECTS_BASE_URL = 'https://shaders.noisedeck.app/1/effects';
 
 /**
  * Set the callback for applying code to editor

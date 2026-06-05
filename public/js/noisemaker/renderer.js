@@ -7,10 +7,8 @@
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
 
-// Shader assets served from CDN, or vendored locally in Electron
-const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? 'app://polymorphic/vendor/noisemaker/1.0.60'
-    : 'https://shaders.noisedeck.app/1'
+// Shader assets served from the shaders CDN.
+const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
 
 /**
  * Default text parameters for text effects

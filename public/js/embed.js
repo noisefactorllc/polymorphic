@@ -581,10 +581,7 @@ fetch('./deployment-meta.json', { cache: 'no-store' }).then(async (res) => {
     aboutDialog.setBuild({ hash, deployed })
 }).catch(() => {})
 
-// In Electron, deployment-meta.json is not vendored — skip the fetch.
-if (!(typeof window !== 'undefined' && window.electronAPI?.isElectron)) {
-    aboutDialog.setNoisemakerFromUrl('https://shaders.noisedeck.app/1/deployment-meta.json')
-}
+aboutDialog.setNoisemakerFromUrl('https://shaders.noisedeck.app/1/deployment-meta.json')
 
 /**
  * Show error message
