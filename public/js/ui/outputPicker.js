@@ -13,7 +13,7 @@ export function currentRenderTarget(dsl) {
 }
 
 const SHADER_BASE_PATH = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? 'app://polymorphic/vendor/noisemaker/1.0.60'
+    ? 'app://polymorphic/vendor/noisemaker/1.0.61'
     : 'https://shaders.noisedeck.app/1'
 const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 
