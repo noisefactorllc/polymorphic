@@ -24,6 +24,9 @@
             "provider": "generic",
             "url": "https://downloads.noisefactor.io/updates/polymorphic"
         },
+        "dmg": {
+            "writeUpdateInfo": false
+        },
         "appId": "app.polymorphic.desktop",
         "productName": "Noisedeck Polymorphic",
         "directories": {
