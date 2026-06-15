@@ -1998,10 +1998,14 @@ function setupMenuBar() {
                 return
             }
             if (!sceneMod && !e.shiftKey && !e.altKey) {
-                // Bare-digit recall: only fire when no input is focused, so
-                // we don't intercept normal typing.
-                const tag = (e.target?.tagName || '').toUpperCase()
-                if (tag === 'TEXTAREA' || tag === 'INPUT') return
+                // Bare-digit recall: only fire when the user isn't typing, so
+                // we don't intercept a digit headed for a text field or the code
+                // editor. Use the same robust focus check as elsewhere — handfish's
+                // <code-editor> exposes a light-DOM textarea today, but guard the
+                // host and contenteditable too so this stays correct if that changes.
+                const el = e.target
+                if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ||
+                           el.isContentEditable || el.closest?.('code-editor'))) return
                 const dsl = scenes.load(slot)
                 if (dsl && dslEditor) {
                     dslEditor.value = dsl
