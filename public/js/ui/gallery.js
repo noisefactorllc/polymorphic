@@ -19,6 +19,7 @@
 
 import { loadFromCode } from '../sharingLoader.js'
 import { CanvasRenderer, extractEffectNamesFromDsl } from '../noisemaker/bundle.js'
+import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
 import {
     loadNoisedeckExamples,
     fetchNoisedeckExampleSource,
@@ -306,10 +307,12 @@ class LivePreview {
         })
         try {
             await this._renderer.loadManifest()
-            const effects = extractEffectNamesFromDsl(this._dsl, this._renderer.manifest || {})
+            // Strip media() urls the engine rejects (matches the main renderer).
+            const engineDsl = stripMediaUrlArg(this._dsl)
+            const effects = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
             const ids = effects.map(e => e.effectId)
             if (ids.length > 0) await this._renderer.loadEffects(ids)
-            await this._renderer.compile(this._dsl)
+            await this._renderer.compile(engineDsl)
             if (this._disposed) return
             this._renderer.start()
             this._ready = true

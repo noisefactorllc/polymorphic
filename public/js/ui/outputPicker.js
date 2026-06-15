@@ -1,3 +1,5 @@
+import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
+
 export function surfacesWrittenInDsl(dsl) {
     if (!dsl) return []
     const matches = [...dsl.matchAll(/\.write\s*\(\s*o([0-7])\s*\)/g)]
@@ -167,8 +169,9 @@ class OutputPicker {
         label.textContent = `o${idx}`
         pip.appendChild(label)
         pip.addEventListener('click', () => this._onSwitch(idx))
-        // Render the surface in isolation: rewrite the DSL so render() points at this surface
-        const surfaceDsl = this._dsl.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`)
+        // Render the surface in isolation: rewrite the DSL so render() points at this
+        // surface, and strip media() urls the engine rejects (matches the main renderer).
+        const surfaceDsl = stripMediaUrlArg(this._dsl.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`))
         let renderer = null
         try {
             renderer = new CanvasRenderer({
