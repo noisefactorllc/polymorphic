@@ -39,8 +39,10 @@ const MEDIA_DEFAULTS = {
  * @returns {Object|null} Media parameters or null if no media effect
  */
 function extractMediaParams(dsl) {
-    // Match media(...) calls
-    const mediaCallRegex = /media\s*\(([^)]*)\)/i
+    // Match media(...) calls. The inner pattern tolerates one level of nested
+    // parens so URLs that contain them (e.g. ".../File_(1).png" or signed query
+    // strings) aren't truncated at the first ')' — mirrors extractAllTextParams.
+    const mediaCallRegex = /media\s*\(((?:[^()]*|\([^()]*\))*)\)/i
     const match = dsl.match(mediaCallRegex)
     if (!match) return null
 
