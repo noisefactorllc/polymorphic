@@ -1042,7 +1042,7 @@ function buildRunnableProgram(snippet) {
     // Ensure something will be rendered. If the snippet writes to o0..o7 but
     // doesn't render, append a render(o0). We don't add render if the snippet
     // already has one (renders multiple outputs is rare but allowed).
-    const hasRender = /^|\n\s*render\s*\(/.test(program) && /(^|\n)\s*render\s*\(/.test(program)
+    const hasRender = /(^|\n)\s*render\s*\(/.test(program)
     const writesO = /\.write\s*\(\s*o[0-7]/.test(program)
     if (!hasRender) {
         // Pick the lowest output index that's written to, default o0
