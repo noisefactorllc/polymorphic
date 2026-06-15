@@ -178,6 +178,7 @@ class Recorder {
 
         if (typeof streamSource.captureStream !== 'function') {
             console.warn('[Recorder] captureStream unavailable on stream source')
+            this._stopCaptureLoop() // may have started above; don't leak the rAF/canvas
             return false
         }
 
