@@ -1114,21 +1114,25 @@ class LiveInputsPanel {
     }
 }
 
-/** Open a hidden file picker and resolve with the chosen File. */
+/** Open a hidden file picker and resolve with the chosen File (or null if dismissed). */
 function pickFile(accept) {
     return new Promise((resolve) => {
         const input = document.createElement('input')
         input.type = 'file'
         input.accept = accept
         input.style.display = 'none'
-        input.addEventListener('change', () => {
-            const f = input.files?.[0] || null
+        let settled = false
+        const finish = (file) => {
+            if (settled) return
+            settled = true
             input.remove()
-            resolve(f)
-        })
-        // If the dialog is dismissed without selection, no event fires — clean
-        // up after a generous delay (the input element is detached so it's a
-        // soft leak at worst, but better safe).
+            resolve(file)
+        }
+        input.addEventListener('change', () => finish(input.files?.[0] || null))
+        // Dismissing the dialog fires `cancel` (not `change`). Without handling it
+        // the promise would never settle — _activateSource would hang and the
+        // detached input would leak — so resolve null on cancel.
+        input.addEventListener('cancel', () => finish(null))
         document.body.appendChild(input)
         input.click()
     })
