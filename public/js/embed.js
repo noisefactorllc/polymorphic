@@ -1688,10 +1688,20 @@ async function startShader() {
 
         outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
 
-        // Handle resize
+        // Handle resize — coalesce bursts of resize events into at most one
+        // canvas resize per frame. Dragging a window edge fires `resize` many
+        // times a second, and each renderer.resize() reallocates GPU buffers
+        // and re-renders text/media textures; collapsing to one-per-frame keeps
+        // dragging smooth. The rAF reads the latest size, so the settled
+        // dimensions are always applied.
+        let resizeRaf = null
         window.addEventListener('resize', () => {
-            const { width, height } = resizeCanvas()
-            renderer.resize(width, height)
+            if (resizeRaf) return
+            resizeRaf = requestAnimationFrame(() => {
+                resizeRaf = null
+                const { width, height } = resizeCanvas()
+                renderer.resize(width, height)
+            })
         })
 
         // Clean up on page unload

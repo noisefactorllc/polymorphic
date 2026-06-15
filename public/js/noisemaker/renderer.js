@@ -384,7 +384,6 @@ export class PolymorphicRenderer {
                     // Use effect.temp which matches the pipeline's texture binding
                     // (pass.stepIndex = step.temp), NOT effect.stepIndex (globalStepIndex)
                     const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
-                    console.log('Found text effect at step', stepIndex, 'temp:', effect.temp)
                     indices.push(stepIndex)
                 }
             }
@@ -411,7 +410,6 @@ export class PolymorphicRenderer {
                 if (effect.name === 'media' || effect.fullName === 'synth.media' || effect.effectKey === 'media') {
                     // Use effect.temp which matches the pipeline's texture binding
                     const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
-                    console.log('Found media effect at step', stepIndex, 'temp:', effect.temp)
                     return stepIndex
                 }
             }
@@ -500,7 +498,6 @@ export class PolymorphicRenderer {
         // Upload to texture with step-indexed ID
         const textureId = `imageTex_step_${stepIndex}`
         this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
-        console.log('Media texture rendered to', textureId)
     }
 
     /**
@@ -574,7 +571,6 @@ export class PolymorphicRenderer {
         // Upload to texture with step-indexed ID
         const textureId = `textTex_step_${stepIndex}`
         this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
-        console.log('Text texture rendered:', params.text, params.font, 'to', textureId)
     }
 
     /**
