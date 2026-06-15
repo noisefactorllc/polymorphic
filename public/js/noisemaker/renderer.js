@@ -186,8 +186,7 @@ export class PolymorphicRenderer {
         })
 
         this._initialized = false
-        this._currentDsl = ''
-        
+
         // Text texture canvas (created on demand)
         this._textCanvas = null
     }
@@ -300,7 +299,6 @@ export class PolymorphicRenderer {
 
             // Compile the DSL
             await this._renderer.compile(engineDsl)
-            this._currentDsl = dsl
 
             // Normalize color uniforms: DSL defaults may be hex strings
             // which the WebGL uniform setter can't parse as vec3
