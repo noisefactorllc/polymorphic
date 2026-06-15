@@ -5,11 +5,15 @@
   "private": true,
   "scripts": {
     "start": "npx serve public -l 3000",
-    "dev": "npx serve public -l 3000"
+    "dev": "npx serve public -l 3000",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test": "node --test tests/unit/*.test.mjs"
   },
   "author": "Noise Factor",
   "license": "UNLICENSED",
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "playwright": "^1.60.0",
     "serve": "^14.2.0"
   }

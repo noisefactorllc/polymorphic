@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Playwright test artifacts
+test-results/
+playwright-report/
+
 # Vendor files (no longer used — shaders loaded from CDN)
 public/js/noisemaker/vendor/noisemaker-shaders-core.esm.js
 public/js/noisemaker/vendor/noisemaker-shaders-core.esm.min.js

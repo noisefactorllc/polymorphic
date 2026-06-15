@@ -81,116 +81,25 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .status-chip.midi .status-chip-dot { background: #ffb070; }
 
-        /* Beat pulse for the bpm chip's dot. */
-        .status-chip-dot.beat {
-            transform: scale(1.6);
-            background: #fff;
-            transition: transform 0.08s, background 0.15s;
+        /* The shared <tempo-bar> component lives in the status row (mounted via
+           statusRow.mount). It carries the same chrome as the other chips so it
+           reads as part of the row, and is scaled to the row's compact size. */
+        .status-row tempo-bar {
+            background: rgba(10, 12, 17, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.6875rem;
+            transition: box-shadow 0.18s ease;
         }
-
-        /* The BPM chip is the only one with structured sub-controls: an
-           editable value, a unit label, and a Tap (T) button. Hover on the
-           value hints at double-click-to-edit; the Tap button is grayed
-           out unless the T key would actually fire (no editor focus and
-           manual source). */
-        .status-chip-bpm-value {
-            cursor: text;
-            padding: 0 0.2em;
-            border-radius: 3px;
-            transition: background 0.12s;
+        /* Downbeat flash — keeps the BPM indication visually live, replacing the
+           old bpm-chip dot pulse. Re-triggered per downbeat from the 'beat'
+           event in embed.js. */
+        .status-row tempo-bar.tempo-beat {
+            box-shadow: 0 0 0 1px rgba(165, 184, 255, 0.55), 0 0 10px rgba(165, 184, 255, 0.35);
         }
-        .status-chip-bpm-value:hover {
-            background: rgba(255, 255, 255, 0.08);
-        }
-        .status-chip-bpm-edit {
-            width: 3.6em;
-            background: rgba(255, 255, 255, 0.10);
-            border: 1px solid rgba(165, 184, 255, 0.55);
-            color: inherit;
-            font: inherit;
-            padding: 0 0.25em;
-            border-radius: 3px;
-            text-align: center;
-            outline: none;
-            -moz-appearance: textfield;
-        }
-        .status-chip-bpm-edit::-webkit-inner-spin-button,
-        .status-chip-bpm-edit::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .status-chip-bpm-tap {
-            margin-left: 0.45em;
-            padding: 0.05rem 0.45rem;
-            background: rgba(165, 184, 255, 0.10);
-            border: 1px solid rgba(165, 184, 255, 0.20);
-            color: #888;
-            font: inherit;
-            font-size: 0.625rem;
-            line-height: 1.4;
-            border-radius: 4px;
-            cursor: not-allowed;
-            opacity: 0.45;
-            transition: opacity 0.15s, background 0.10s, border-color 0.10s, color 0.10s;
-            user-select: none;
-        }
-        /* Tempo divider — slows the renderer's loop to a fraction of the
-           current BPM so animations don't blur past at standard tempos.
-           Sized to match the Tap button for a consistent chip rhythm. */
-        .status-chip-bpm-divider {
-            margin: 0 0.15em;
-            padding: 0.05rem 0.85rem 0.05rem 0.35rem;
-            background: rgba(165, 184, 255, 0.10);
-            border: 1px solid rgba(165, 184, 255, 0.20);
-            color: #d9deeb;
-            font: inherit;
-            font-size: 0.625rem;
-            line-height: 1.4;
-            border-radius: 4px;
-            cursor: pointer;
-            outline: none;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='%23a5b8ff'%3E%3Cpath d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 0.25rem center;
-            background-size: 0.45rem;
-            transition: background-color 0.10s, border-color 0.10s;
-        }
-        .status-chip-bpm-divider:hover {
-            background-color: rgba(165, 184, 255, 0.22);
-            border-color: rgba(165, 184, 255, 0.55);
-        }
-        .status-chip-bpm-divider:focus {
-            border-color: rgba(165, 184, 255, 0.55);
-        }
-        .status-chip-bpm-divider option {
-            background: #0a0c11;
-            color: #d9deeb;
-        }
-        .status-chip-bpm-tap.active {
-            opacity: 1;
-            color: #d9deeb;
-            border-color: rgba(165, 184, 255, 0.55);
-            cursor: pointer;
-        }
-        .status-chip-bpm-tap.active:hover {
-            background: rgba(165, 184, 255, 0.22);
-        }
-        .status-chip-bpm-tap-key {
-            opacity: 0.65;
-            margin-left: 0.25em;
-        }
-        .status-chip-bpm-tap.flash {
-            background: rgba(74, 222, 128, 0.55);
-            border-color: rgba(74, 222, 128, 0.7);
-            color: #fff;
-        }
-        /* In MIDI mode the BPM follows external clock — hide manual taps. */
-        .status-chip.midi .status-chip-bpm-tap { display: none; }
-        .status-chip.midi .status-chip-bpm-value { cursor: default; }
-        .status-chip.midi .status-chip-bpm-value:hover { background: transparent; }
     `
     document.head.appendChild(style)
 }
@@ -303,195 +212,38 @@ class StatusRow {
             { id: 'midi',      icon: 'piano',                label: 'midi' },
             { id: 'source',    icon: 'videocam',             label: 'source' },
             { id: 'recording', icon: 'fiber_manual_record',  label: 'rec' },
-            { id: 'bpm',       icon: 'metronome',            label: '120 bpm' },
             { id: 'fps',       icon: 'speed',                label: '— fps' }
         ]
         for (const def of chipDefs) {
             const chip = document.createElement('span')
             chip.className = 'status-chip'
             chip.dataset.id = def.id
-            if (def.id === 'bpm') {
-                this._buildBpmChip(chip, def)
-            } else {
-                chip.innerHTML = `
-                    <span class="status-chip-dot"></span>
-                    <span class="icon-material">${def.icon}</span>
-                    <span class="status-chip-label">${def.label}</span>
-                `
-                chip.addEventListener('click', () => {
-                    const fn = this._hooks[def.id]
-                    if (typeof fn === 'function') fn()
-                })
-            }
+            chip.innerHTML = `
+                <span class="status-chip-dot"></span>
+                <span class="icon-material">${def.icon}</span>
+                <span class="status-chip-label">${def.label}</span>
+            `
+            chip.addEventListener('click', () => {
+                const fn = this._hooks[def.id]
+                if (typeof fn === 'function') fn()
+            })
             this._el.appendChild(chip)
             this._chips[def.id] = chip
         }
         document.body.appendChild(this._el)
     }
 
-    _buildBpmChip(chip, def) {
-        chip.title = 'click to toggle MIDI sync · double-click value to edit · T to tap'
-        chip.innerHTML = `
-            <span class="status-chip-dot"></span>
-            <span class="icon-material">${def.icon}</span>
-            <span class="status-chip-bpm-value" title="double-click to edit">120</span>
-            <select class="status-chip-bpm-divider" title="slow the animation by a fraction of BPM" tabindex="-1">
-                <option value="1">/1</option>
-                <option value="2">/2</option>
-                <option value="4">/4</option>
-                <option value="8">/8</option>
-                <option value="16">/16</option>
-                <option value="32">/32</option>
-            </select>
-            <span class="status-chip-bpm-unit">bpm</span>
-            <button class="status-chip-bpm-tap" type="button" tabindex="-1"
-                    title="press T to tap tempo">Tap<span class="status-chip-bpm-tap-key">(T)</span></button>
-        `
-        // Anywhere on the chip outside the sub-controls toggles MIDI sync,
-        // preserving the existing single-click gesture.
-        chip.addEventListener('click', () => {
-            const fn = this._hooks[def.id]
-            if (typeof fn === 'function') fn()
-        })
-
-        const valueEl = chip.querySelector('.status-chip-bpm-value')
-        // Eat single-click on the value so it doesn't toggle MIDI; double-click
-        // promotes the span to an editable number input.
-        valueEl.addEventListener('click', (e) => e.stopPropagation())
-        valueEl.addEventListener('dblclick', (e) => {
-            e.stopPropagation()
-            this._beginBpmEdit()
-        })
-
-        const tapBtn = chip.querySelector('.status-chip-bpm-tap')
-        tapBtn.addEventListener('click', (e) => {
-            e.stopPropagation()
-            // Inactive button (editor focused or MIDI mode) is a no-op — its
-            // grayed-out look already telegraphs that, but be defensive.
-            if (!tapBtn.classList.contains('active')) return
-            if (typeof this._bpmTapHandler === 'function') this._bpmTapHandler()
-        })
-
-        const dividerEl = chip.querySelector('.status-chip-bpm-divider')
-        // Block the chip's MIDI-toggle click so opening the menu doesn't
-        // also flip the clock source.
-        dividerEl.addEventListener('click', (e) => e.stopPropagation())
-        dividerEl.addEventListener('mousedown', (e) => e.stopPropagation())
-        dividerEl.addEventListener('change', () => {
-            const n = parseInt(dividerEl.value, 10)
-            if (Number.isFinite(n) && typeof this._bpmDividerCb === 'function') {
-                this._bpmDividerCb(n)
-            }
-        })
-    }
-
     /**
-     * Render the BPM chip from structured state. Replaces the generic
-     * `set('bpm', { label })` call, which was lossy now that the chip has
-     * a separately-editable value.
+     * Host an arbitrary element inside the status row (used for the shared
+     * <tempo-bar> component, which replaces the old bpm chip). Mounted elements
+     * sit alongside the chips and inherit the row's show/hide behaviour. They
+     * need their own pointer events since the row itself is pointer-transparent.
      */
-    setBpmDisplay({ value, source, midiStatus }) {
-        const chip = this._chips.bpm
-        if (!chip) return
-        const iconEl = chip.querySelector('.icon-material')
-        const valueEl = chip.querySelector('.status-chip-bpm-value')
-        const unitEl = chip.querySelector('.status-chip-bpm-unit')
-        chip.classList.toggle('midi', source === 'midi')
-        chip.classList.add('on')
-        if (iconEl) iconEl.textContent = source === 'midi' ? 'piano' : 'metronome'
-        const showStatus = source === 'midi'
-            && midiStatus
-            && midiStatus !== 'synced'
-            && midiStatus !== 'no-clock'
-            && midiStatus !== 'stopped'
-        if (showStatus) {
-            if (valueEl) valueEl.style.display = 'none'
-            if (unitEl) unitEl.textContent = `midi: ${midiStatus}`
-        } else {
-            // Don't clobber the input element while the user is editing.
-            if (valueEl) {
-                valueEl.style.display = ''
-                valueEl.textContent = String(value)
-            }
-            if (unitEl) unitEl.textContent = source === 'midi' ? 'midi' : 'bpm'
-        }
-    }
-
-    /**
-     * Mark the on-screen Tap (T) button as visually active or grayed-out.
-     * Active means the T-key shortcut would actually fire (no editor focus,
-     * manual source) — the button mirrors that state so users can see at a
-     * glance whether tapping will register.
-     */
-    setBpmTapActive(active) {
-        const chip = this._chips.bpm
-        if (!chip) return
-        const btn = chip.querySelector('.status-chip-bpm-tap')
-        if (btn) btn.classList.toggle('active', !!active)
-    }
-
-    /** Brief color flash on the Tap button so the user gets feedback per tap. */
-    flashBpmTap() {
-        const chip = this._chips.bpm
-        if (!chip) return
-        const btn = chip.querySelector('.status-chip-bpm-tap')
-        if (!btn) return
-        btn.classList.add('flash')
-        clearTimeout(btn._flashTimer)
-        btn._flashTimer = setTimeout(() => btn.classList.remove('flash'), 180)
-    }
-
-    /** Register a callback fired when the user commits a new BPM via edit. */
-    onBpmEdit(cb) { this._bpmEditCb = cb }
-    /** Register a callback fired when the user clicks the Tap (T) button. */
-    onBpmTap(cb) { this._bpmTapHandler = cb }
-    /** Register a callback fired when the user picks a new BPM divider. */
-    onBpmDividerChange(cb) { this._bpmDividerCb = cb }
-
-    /** Sync the divider <select> to the clock's current value. */
-    setBpmDividerDisplay(divider) {
-        const chip = this._chips.bpm
-        if (!chip) return
-        const sel = chip.querySelector('.status-chip-bpm-divider')
-        if (sel) sel.value = String(divider)
-    }
-
-    _beginBpmEdit() {
-        const chip = this._chips.bpm
-        if (!chip || chip.classList.contains('midi')) return
-        const valueEl = chip.querySelector('.status-chip-bpm-value')
-        if (!valueEl) return
-        const input = document.createElement('input')
-        input.type = 'number'
-        input.min = '20'
-        input.max = '400'
-        input.step = '1'
-        input.value = valueEl.textContent
-        input.className = 'status-chip-bpm-edit'
-        input.addEventListener('click', (e) => e.stopPropagation())
-        valueEl.replaceWith(input)
-        input.focus()
-        input.select()
-        let done = false
-        const finish = (commit) => {
-            if (done) return
-            done = true
-            const raw = input.value
-            // Restore the span first so any onChange-driven re-render
-            // triggered by setBpm can update its textContent.
-            input.replaceWith(valueEl)
-            if (commit) {
-                const n = parseFloat(raw)
-                if (Number.isFinite(n) && typeof this._bpmEditCb === 'function') {
-                    this._bpmEditCb(n)
-                }
-            }
-        }
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); finish(true) }
-            else if (e.key === 'Escape') { e.preventDefault(); finish(false) }
-        })
-        input.addEventListener('blur', () => finish(true))
+    mount(el) {
+        if (!this._el || !el) return
+        el.style.pointerEvents = 'auto'
+        this._el.appendChild(el)
+        return el
     }
 
     _loop() {

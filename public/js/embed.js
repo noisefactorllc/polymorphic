@@ -28,7 +28,7 @@ import { recorder } from './ui/recorder.js'
 import { perfOverlay } from './ui/perfOverlay.js'
 import { gallery, pickRandomExample } from './ui/gallery.js'
 import { snapshotHistory } from './ui/snapshotHistory.js'
-import { bpmClock } from './ui/bpm.js'
+import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
@@ -1598,7 +1598,6 @@ async function startShader() {
         // Drag-and-drop image/video files anywhere → become a media() source
         setupFileDrop(canvas)
         perfOverlay.init({ renderer, canvas })
-        bpmClock.init({ renderer, bpm: 120 })
         statusRow.init({
             renderer,
             hooks: {
@@ -1606,38 +1605,40 @@ async function startShader() {
                 midi: () => commandPalette.open(),
                 source: () => liveInputsPanel.open(),
                 recording: () => recorder.toggle(),
-                // Click the bpm chip to toggle clock source (manual ↔ midi),
-                // matching the standalone BPM indicator's old behaviour.
-                bpm: () => bpmClock.toggleSource(),
                 fps: () => perfOverlay.toggle()
             }
         })
 
-        // The bpm chip in the status row is the live BPM indicator. Wire
-        // value, source, and beat updates through it; the chip also exposes
-        // a double-click-to-edit value and an on-screen Tap (T) button.
-        const renderBpmChip = () => {
-            statusRow.setBpmDisplay({
-                value: Math.round(bpmClock.getBpm()),
-                source: bpmClock.getSource(),
-                midiStatus: bpmClock.getMidiStatus(),
-            })
-            statusRow.setBpmDividerDisplay(bpmClock.getDivider())
-        }
-        bpmClock.onChange(renderBpmChip)
-        bpmClock.onSourceChange(renderBpmChip)
-        bpmClock.onMidiStatusChange(renderBpmChip)
-        bpmClock.onDividerChange(renderBpmChip)
-        bpmClock.onBeat(() => statusRow.pulse('bpm'))
-        bpmClock.onTap(() => statusRow.flashBpmTap())
-        statusRow.onBpmEdit((bpm) => bpmClock.setBpm(bpm))
-        statusRow.onBpmTap(() => bpmClock.tap())
-        statusRow.onBpmDividerChange((divider) => bpmClock.setDivider(divider))
-        renderBpmChip()
+        // Tempo is the shared handfish <tempo-bar> component: tap, BPM, divider,
+        // four beat dots, phase reset + slider all live in the element, and its
+        // BeatScheduler runs the beat clock. We host it inside the status row so
+        // it inherits the row's show/hide (performance/embed mode) behaviour.
+        // The divider persists under polymorphic's existing localStorage key.
+        const tempoBar = document.createElement('tempo-bar')
+        tempoBar.id = 'tempo-bar'
+        tempoBar.setAttribute('bpm', '120')
+        tempoBar.setAttribute('divider', '4')
+        tempoBar.setAttribute('storage-key', 'polymorphic.bpm.divider')
+        tempoBar.setAttribute('min-bpm', '20') // polymorphic's range (shared default is 40–300)
+        tempoBar.setAttribute('max-bpm', '400')
+        statusRow.mount(tempoBar)
 
-        // Tap (T) button mirrors whether the T-key shortcut would actually
-        // register: dimmed while an input/editor is focused or while the
-        // clock is sourced from MIDI. The user reads its state at a glance.
+        // The controller keeps the two things <tempo-bar> doesn't own:
+        // renderer loopDuration sync, and MIDI-clock follow (source manual↔midi).
+        tempoController.init({ tempoBar, renderer })
+
+        // Beat-pulse visual: flash the tempo-bar on each downbeat so the BPM
+        // indication stays visually live (replaces the old bpm-chip dot pulse).
+        tempoBar.addEventListener('beat', (e) => {
+            if (!e.detail?.isDownbeat) return
+            tempoBar.classList.remove('tempo-beat')
+            void tempoBar.offsetWidth
+            tempoBar.classList.add('tempo-beat')
+        })
+
+        // Keep Polymorphic's T-key tap-tempo shortcut. The component has its own
+        // Tap button, but the keyboard shortcut must still fire — gated to
+        // manual source and suppressed while an editor/input is focused.
         const isEditingFocus = () => {
             const el = document.activeElement
             if (!el || el === document.body) return false
@@ -1648,15 +1649,12 @@ async function startShader() {
             if (typeof el.closest === 'function' && el.closest('code-editor')) return true
             return false
         }
-        const updateBpmTapActive = () => {
-            statusRow.setBpmTapActive(!isEditingFocus() && bpmClock.getSource() !== 'midi')
-        }
-        document.addEventListener('focusin', updateBpmTapActive)
-        // focusout fires before activeElement settles on the next focus
-        // target — defer one microtask so we read the post-transition state.
-        document.addEventListener('focusout', () => queueMicrotask(updateBpmTapActive))
-        bpmClock.onSourceChange(updateBpmTapActive)
-        updateBpmTapActive()
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+            if (e.key !== 't' && e.key !== 'T') return
+            if (isEditingFocus()) return
+            tempoController.tap()
+        })
         // Wire recorder state into status row. "standard" preset records at
         // 720p/60fps/8Mbps — keeps the encoder happy for fast generative
         // shaders. Switch via the command palette ("Recording: high quality"
@@ -2143,7 +2141,8 @@ function init() {
             liveInputsPanel,
             recorder,
             perfOverlay,
-            bpmClock,
+            tempoController,
+            get tempoBar() { return document.getElementById('tempo-bar') },
             statusRow,
             commandPalette,
             gallery,
@@ -2338,8 +2337,8 @@ function setupCommandPalette() {
         },
         snapshotBack: () => snapshotBack(),
         snapshotForward: () => snapshotForward(),
-        tapTempo: () => bpmClock.tap(),
-        toggleBpmSource: () => bpmClock.toggleSource(),
+        tapTempo: () => tempoController.tap(),
+        toggleBpmSource: () => tempoController.toggleSource(),
         toggleStatusRow: () => statusRow.toggle(),
         showShortcuts: () => shortcutsDialog.open(),
         togglePerformanceMode: () => togglePerformanceMode(),

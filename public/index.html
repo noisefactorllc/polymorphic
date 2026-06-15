@@ -42,6 +42,13 @@
     </script>
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
+    <!-- Chrome for the shared <tempo-bar> component: forms.css styles its
+         .hf-number BPM input; menus-and-toolbars.css styles its .hf-icon-btn
+         tap/reset buttons. Both are .hf-*-scoped (additive) so they do not
+         restyle Polymorphic's own Nunito UI. (No index.css — that sets global
+         body styles; no industrial.css — Polymorphic keeps its friendly look.) -->
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/forms.css">
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/menus-and-toolbars.css">
     <!-- CDN preconnect -->
     <link rel="preconnect" href="https://fonts.noisefactor.io" crossorigin>
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
@@ -96,6 +103,26 @@
             font-display: swap;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* The shared <tempo-bar> component renders its tap/reset glyphs in
+           .hf-icon spans (Material Symbols ligatures). handfish's full index.css
+           owns that rule, but we only pull the focused stylesheets, so map
+           .hf-icon to the Material Symbols Outlined face Polymorphic already
+           loads (see css/menu.css). Without this, the ligature text would show
+           literally ("touch_app"/"restart_alt"). */
+        .hf-icon {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 1.25em;
+            line-height: 1;
+            display: inline-block;
+            text-transform: none;
+            letter-spacing: normal;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            font-variation-settings: 'FILL' 0;
+        }
         /* Restore the user-agent default for modal dialogs so they center
            in the viewport. The universal reset above otherwise zeros the
            UA's `margin: auto` and pins dialogs to the top-left corner. */
