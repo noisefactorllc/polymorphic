@@ -57,6 +57,30 @@ function extractMediaParams(dsl) {
 }
 
 /**
+ * Remove the `url:"..."` argument from media() calls.
+ *
+ * The /1 engine's synth.media has no `url` argument — it sources its image from
+ * an external texture (uploaded via updateTextureFromSource as `imageTex_step_N`).
+ * The app, however, writes `media(url: "<data-url|http|live>")` (drag-drop,
+ * camera, video), which the engine rejects with "Unknown argument 'url'". We
+ * read the URL ourselves via extractMediaParams, so strip it before the engine
+ * sees the DSL. Other media args (if any) and all non-media code are preserved.
+ *
+ * @param {string} dsl - DSL source code
+ * @returns {string} DSL with media() url arguments removed
+ */
+function stripMediaUrlArg(dsl) {
+    return dsl.replace(/\bmedia\s*\(((?:[^()]*|\([^()]*\))*)\)/gi, (_full, args) => {
+        const cleaned = args
+            .replace(/\burl\s*:\s*(?:"[^"]*"|'[^']*')\s*,?/i, '') // drop url:"..." (+ optional trailing comma)
+            .replace(/,\s*$/, '')    // dangling comma if url was last
+            .replace(/^\s*,\s*/, '') // dangling comma if url was first
+            .trim()
+        return `media(${cleaned})`
+    })
+}
+
+/**
  * Extract text effect parameters from DSL
  * @param {string} dsl - DSL source code
  * @returns {Object|null} Text parameters or null if no text effect
@@ -282,18 +306,23 @@ export class PolymorphicRenderer {
         }
 
         try {
+            // The engine never sees media() url args (it rejects them); strip
+            // them for every engine/parser call. Param extraction below still
+            // reads url/text from the original `dsl`.
+            const engineDsl = stripMediaUrlArg(dsl)
+
             // Extract effect names and load them if needed
-            const effectData = extractEffectNamesFromDsl(dsl, this._renderer.manifest || {})
-            
+            const effectData = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
+
             // Get effect IDs
             const effectIds = effectData.map(e => e.effectId)
-            
+
             if (effectIds.length > 0) {
                 await this._renderer.loadEffects(effectIds)
             }
 
             // Compile the DSL
-            await this._renderer.compile(dsl)
+            await this._renderer.compile(engineDsl)
             this._currentDsl = dsl
 
             // Normalize color uniforms: DSL defaults may be hex strings
@@ -302,7 +331,7 @@ export class PolymorphicRenderer {
 
             // Check for text effects and render text textures (supports multiple)
             const allTextParams = extractAllTextParams(dsl)
-            const textStepIndices = this._findAllTextStepIndices(dsl)
+            const textStepIndices = this._findAllTextStepIndices(engineDsl)
             
             if (allTextParams.length > 0) {
                 // Store for re-rendering on resize
@@ -329,7 +358,7 @@ export class PolymorphicRenderer {
                 // Store for re-rendering on resize
                 this._lastMediaParams = mediaParams
                 // Find the step index for the media effect
-                const mediaStepIndex = this._findMediaStepIndex(dsl)
+                const mediaStepIndex = this._findMediaStepIndex(engineDsl)
                 this._lastMediaStepIndex = mediaStepIndex
                 // Wait until the pipeline backend can accept the media texture
                 await this._waitForPipeline()
