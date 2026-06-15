@@ -308,9 +308,9 @@ export class PolymorphicRenderer {
                 // Store for re-rendering on resize
                 this._lastAllTextParams = []
                 
-                // Wait a short moment for pipeline to be ready
-                await new Promise(resolve => setTimeout(resolve, 100))
-                
+                // Wait until the pipeline backend can accept the text texture
+                await this._waitForPipeline()
+
                 // Render each text effect
                 for (let i = 0; i < allTextParams.length; i++) {
                     const { params } = allTextParams[i]
@@ -331,8 +331,8 @@ export class PolymorphicRenderer {
                 // Find the step index for the media effect
                 const mediaStepIndex = this._findMediaStepIndex(dsl)
                 this._lastMediaStepIndex = mediaStepIndex
-                // Wait a short moment for pipeline to be ready
-                await new Promise(resolve => setTimeout(resolve, 100))
+                // Wait until the pipeline backend can accept the media texture
+                await this._waitForPipeline()
                 await this._loadAndRenderMediaTexture(mediaParams, mediaStepIndex)
             } else {
                 this._lastMediaParams = null
@@ -354,6 +354,31 @@ export class PolymorphicRenderer {
             
             return { success: false, error: errorMessage }
         }
+    }
+
+    /**
+     * Resolve once the pipeline backend is ready to accept texture uploads.
+     *
+     * The engine assigns `_pipeline` (and its backend) synchronously inside the
+     * awaited `compile()`, so in practice this returns on the very first check.
+     * It replaces a fixed `setTimeout(…, 100)` that added blind latency to every
+     * recompile carrying a text/media effect. Polling (rather than removing the
+     * wait outright) keeps a deterministic, self-healing guard: if a future
+     * engine ever defers pipeline setup, we wait exactly as long as needed up to
+     * the cap instead of firing too early — `updateTextureFromSource` itself
+     * no-ops with a "Pipeline not ready" warning when the backend is absent.
+     *
+     * @param {number} [maxMs=500] - upper bound before giving up
+     * @returns {Promise<boolean>} true if the backend became ready in time
+     * @private
+     */
+    async _waitForPipeline(maxMs = 500) {
+        const deadline = Date.now() + maxMs
+        while (!(this._renderer._pipeline && this._renderer._pipeline.backend)) {
+            if (Date.now() >= deadline) return false
+            await new Promise(resolve => setTimeout(resolve, 8))
+        }
+        return true
     }
 
     /**
