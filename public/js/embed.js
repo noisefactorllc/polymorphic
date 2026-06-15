@@ -10,6 +10,7 @@ const APP_VERSION = '0.11'
 import { AboutDialog, dslTokenizer } from 'handfish'
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { ProgramState, getEffect } from './noisemaker/bundle.js'
+import { restoreMediaUrls } from './noisemaker/dslSanitize.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
@@ -1344,10 +1345,15 @@ function setupProgramState() {
             return
         }
         if (!newDsl) return
-        if (newDsl === dslEditor.value) return
+        // toDsl() regenerates from the engine's media-url-stripped DSL, so it
+        // drops media() urls. Carry them back from the current editor text so a
+        // parameter tweak doesn't silently strip the image on save/share/re-run.
+        // The engine's currentDsl stays the stripped version (what it compiled).
+        const editorDsl = restoreMediaUrls(dslEditor.value, newDsl)
+        if (editorDsl === dslEditor.value) return
         suppressDslReact = true
         try {
-            dslEditor.value = newDsl
+            dslEditor.value = editorDsl
             if (renderer?.canvasRenderer) {
                 renderer.canvasRenderer.currentDsl = newDsl
             }
@@ -2139,7 +2145,8 @@ function init() {
             gallery,
             snapshotHistory,
             shortcutsDialog,
-            get renderer() { return renderer }
+            get renderer() { return renderer },
+            get programState() { return programState }
         }
     }
 

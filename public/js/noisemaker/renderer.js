@@ -6,6 +6,7 @@
  */
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
+import { stripMediaUrlArg } from './dslSanitize.js'
 
 // Shader assets served from the shaders CDN.
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
@@ -54,30 +55,6 @@ function extractMediaParams(dsl) {
     if (urlMatch) params.url = urlMatch[1]
 
     return params.url ? params : null
-}
-
-/**
- * Remove the `url:"..."` argument from media() calls.
- *
- * The /1 engine's synth.media has no `url` argument — it sources its image from
- * an external texture (uploaded via updateTextureFromSource as `imageTex_step_N`).
- * The app, however, writes `media(url: "<data-url|http|live>")` (drag-drop,
- * camera, video), which the engine rejects with "Unknown argument 'url'". We
- * read the URL ourselves via extractMediaParams, so strip it before the engine
- * sees the DSL. Other media args (if any) and all non-media code are preserved.
- *
- * @param {string} dsl - DSL source code
- * @returns {string} DSL with media() url arguments removed
- */
-function stripMediaUrlArg(dsl) {
-    return dsl.replace(/\bmedia\s*\(((?:[^()]*|\([^()]*\))*)\)/gi, (_full, args) => {
-        const cleaned = args
-            .replace(/\burl\s*:\s*(?:"[^"]*"|'[^']*')\s*,?/i, '') // drop url:"..." (+ optional trailing comma)
-            .replace(/,\s*$/, '')    // dangling comma if url was last
-            .replace(/^\s*,\s*/, '') // dangling comma if url was first
-            .trim()
-        return `media(${cleaned})`
-    })
 }
 
 /**
