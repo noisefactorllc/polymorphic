@@ -40,3 +40,66 @@ test('formatDsl idempotent across multi-line input', () => {
     const twice = formatDsl(once)
     assert.strictEqual(twice, once)
 })
+
+// ---- string-literal safety (formatting must never corrupt quoted values) ----
+
+test('formatDsl does not mangle a media() URL', () => {
+    const input = 'media(url:"https://example.com/img.png").write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"https://example.com/img.png"'),
+        `URL must survive verbatim, got: ${out}`)
+})
+
+test('formatDsl preserves a URL containing parentheses and a query string', () => {
+    const input = 'media(url:"https://x.com/File_(1).png?t=1,2").write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"https://x.com/File_(1).png?t=1,2"'),
+        `URL with parens/commas must survive, got: ${out}`)
+})
+
+test('formatDsl preserves colons inside text() strings', () => {
+    const input = 'solid().text(text:"Time: 12:30 PM").out(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"Time: 12:30 PM"'),
+        `colon inside string must not gain spaces, got: ${out}`)
+})
+
+test('formatDsl preserves commas inside strings (no injected space)', () => {
+    const input = 'solid().text(text:"a,b,c").out(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"a,b,c"'),
+        `comma inside string must not gain spaces, got: ${out}`)
+})
+
+test('formatDsl still normalizes code spacing around a protected string', () => {
+    const input = 'solid().text(text:"x",size:0.2).out(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('.text(text: "x", size: 0.2)'),
+        `code outside the string is still normalized, got: ${out}`)
+})
+
+test('formatDsl handles single-quoted strings', () => {
+    const input = "media(url:'https://x.com/a:b').write(o0)"
+    const out = formatDsl(input)
+    assert.ok(out.includes("'https://x.com/a:b'"),
+        `single-quoted value must survive, got: ${out}`)
+})
+
+test('formatDsl tolerates an unbalanced paren inside a string', () => {
+    const input = 'solid().text(text:"smile :)").out(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"smile :)"'), `string content preserved, got: ${out}`)
+    assert.ok(out.includes('.out(o0)'), `chain still splits correctly, got: ${out}`)
+})
+
+test('formatDsl does not corrupt an unterminated string', () => {
+    const input = 'solid().text(text:"oops).out(o0)'
+    const out = formatDsl(input)   // must not throw
+    assert.ok(out.includes('"oops).out(o0)'), `unterminated tail preserved, got: ${out}`)
+})
+
+test('formatDsl is idempotent on sketches with strings', () => {
+    const input = 'media(url:"https://x.com/a.png")\n  .text(text:"Hi: there, ok")\n  .out(o0)'
+    const once = formatDsl(input)
+    assert.strictEqual(formatDsl(once), once)
+})

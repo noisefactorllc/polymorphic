@@ -4,15 +4,50 @@
  *   - chains: each .step() on its own line, indented 2 spaces
  *   - args: single space after ':', single space after ','
  *   - blank lines preserved as block separators
+ *
+ * String literals are never reformatted: characters inside "..." / '...'
+ * (URLs like "https://x", text like "a, b") pass through verbatim so
+ * formatting can never corrupt a working sketch's media url or text content.
  */
+
+/**
+ * Return a same-length copy of `text` with every character inside a string
+ * literal (and the surrounding quotes) replaced by a space. Structural scans
+ * (paren depth, splitting a chain on '.') run over the mask so a ':' '.' '('
+ * ')' or ',' inside a quoted value is never mistaken for syntax, while the
+ * original text is used for slicing so the literal survives intact. An
+ * unterminated quote masks to end-of-string. No escape handling, matching the
+ * DSL's own `[^"']` string extraction.
+ * @param {string} text
+ * @returns {string}
+ */
+function maskStrings(text) {
+    let out = ''
+    let i = 0
+    while (i < text.length) {
+        const c = text[i]
+        if (c === '"' || c === "'") {
+            out += ' '            // opening quote
+            i++
+            while (i < text.length && text[i] !== c) { out += ' '; i++ }
+            if (i < text.length) { out += ' '; i++ }   // closing quote
+        } else {
+            out += c
+            i++
+        }
+    }
+    return out
+}
+
 export function formatDsl(input) {
     if (!input || typeof input !== 'string') return input || ''
 
     const formatChain = (text) => {
+        const mask = maskStrings(text)
         const parts = []
         let depth = 0, start = 0
         for (let i = 0; i < text.length; i++) {
-            const c = text[i]
+            const c = mask[i]
             if (c === '(') depth++
             else if (c === ')') depth--
             else if (c === '.' && depth === 0 && i > 0) {
@@ -26,11 +61,32 @@ export function formatDsl(input) {
             : '  ' + formatArgs(p.trim())).join('\n')
     }
 
-    const formatArgs = (text) => text
-        .replace(/\s*:\s*/g, ': ')
-        .replace(/\s*,\s*/g, ', ')
-        .replace(/\(\s+/g, '(')
-        .replace(/\s+\)/g, ')')
+    // Normalise whitespace around ':' ',' '(' ')', but only in the code spans
+    // between string literals — literals are copied through untouched.
+    const formatArgs = (text) => {
+        let out = ''
+        let i = 0
+        while (i < text.length) {
+            const c = text[i]
+            if (c === '"' || c === "'") {
+                let j = i + 1
+                while (j < text.length && text[j] !== c) j++
+                if (j < text.length) j++   // include closing quote
+                out += text.slice(i, j)
+                i = j
+            } else {
+                let j = i
+                while (j < text.length && text[j] !== '"' && text[j] !== "'") j++
+                out += text.slice(i, j)
+                    .replace(/\s*:\s*/g, ': ')
+                    .replace(/\s*,\s*/g, ', ')
+                    .replace(/\(\s+/g, '(')
+                    .replace(/\s+\)/g, ')')
+                i = j
+            }
+        }
+        return out
+    }
 
     // Pass 1: collapse multi-line statements (unbalanced parens) into logical lines.
     // Also fold chain-continuation lines (starting with '.') onto the previous statement.
@@ -45,7 +101,7 @@ export function formatDsl(input) {
         // Detection happens BEFORE depth update so this line's own '(' doesn't disqualify it.
         const isChainCont = depth === 0 && !buf && trimmed.startsWith('.')
             && logical.length && logical[logical.length - 1] !== ''
-        for (const c of raw) {
+        for (const c of maskStrings(raw)) {
             if (c === '(') depth++
             else if (c === ')') depth = Math.max(0, depth - 1)
         }
