@@ -15,9 +15,11 @@
  * literal (and the surrounding quotes) replaced by a space. Structural scans
  * (paren depth, splitting a chain on '.') run over the mask so a ':' '.' '('
  * ')' or ',' inside a quoted value is never mistaken for syntax, while the
- * original text is used for slicing so the literal survives intact. An
- * unterminated quote masks to end-of-string. No escape handling, matching the
- * DSL's own `[^"']` string extraction.
+ * original text is used for slicing so the literal survives intact. A literal
+ * is paired on the SAME quote char, so `"O'Brien, hi"` stays one piece — this
+ * is deliberately more robust than the engine's either-quote `[^"']` extraction
+ * (which would split that literal at the apostrophe); do not "align" the two.
+ * An unterminated quote masks to end-of-string. No escape handling.
  * @param {string} text
  * @returns {string}
  */

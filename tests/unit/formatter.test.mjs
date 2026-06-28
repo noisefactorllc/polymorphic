@@ -103,3 +103,22 @@ test('formatDsl is idempotent on sketches with strings', () => {
     const once = formatDsl(input)
     assert.strictEqual(formatDsl(once), once)
 })
+
+test('formatDsl keeps a literal whole when it contains the other quote', () => {
+    // Literals pair on the SAME quote: an apostrophe inside "..." is content,
+    // not a string end — deliberately more robust than the engine's [^"'] rule,
+    // which would split here and re-space the comma. Pin it so a refactor can't
+    // silently regress to either-quote matching.
+    const out = formatDsl(`solid().text(text:"O'Brien, hi").out(o0)`)
+    assert.ok(out.includes(`"O'Brien, hi"`), `mixed-quote literal must stay whole, got: ${out}`)
+})
+
+test('formatDsl handles adjacent string literals', () => {
+    const out = formatDsl('solid().text(text:"a","b").out(o0)')
+    assert.ok(out.includes('"a", "b"'), `adjacent literals: code comma normalized, both intact, got: ${out}`)
+})
+
+test('formatDsl handles an empty string literal', () => {
+    const out = formatDsl('solid().text(text:"",size:0.1).out(o0)')
+    assert.ok(out.includes('text: "", size: 0.1'), `empty literal + surrounding code, got: ${out}`)
+})
