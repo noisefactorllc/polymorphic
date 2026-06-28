@@ -113,11 +113,9 @@ export function attachScrubber(editor, options = {}) {
     function formatValue(v, raw) {
         const dot = raw.indexOf('.')
         const decimals = dot < 0 ? 0 : raw.length - dot - 1
-        // Round to the same precision; preserve leading minus
-        const fixed = v.toFixed(Math.max(decimals, decimals === 0 ? 0 : decimals))
-        // For integer-flavored originals, drop the decimal
+        // Integer-flavored originals scrub as integers; decimals keep their precision.
         if (decimals === 0) return Math.round(v).toString()
-        return fixed
+        return v.toFixed(decimals)
     }
 
     function onPointerMove(e) {
