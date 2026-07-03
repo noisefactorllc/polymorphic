@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
-import { SEANCE_SDK_URL, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
+import { SEANCE_SDK_URL, hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
 
 const BASE_SKETCH = [
   'search synth, filter',
@@ -39,6 +39,7 @@ const SERVER_SKETCH = [
 let seance
 
 test.describe.configure({ mode: 'serial' })
+test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
 
 test.beforeAll(async () => {
   seance = await startSeanceServer()

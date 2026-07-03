@@ -108,6 +108,18 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         sessionStatus.hidden = !isOnline
     }
 
+    function isLayerConnected(layer = online) {
+        const status = layer?.getStatus?.()
+        return status === 'online' || status === 'readonly' || status === 'connecting'
+    }
+
+    function closeActiveSession(layer = online) {
+        if (!isLayerConnected(layer)) return false
+        layer.goOffline?.()
+        refreshStatus('offline')
+        return true
+    }
+
     function writeSessionToBrowserUrl(sessionId) {
         if (!history?.replaceState || !online?.writeSessionToUrl) return
         try {
@@ -120,6 +132,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
     async function takeOnline() {
         const layer = await ensureOnline()
+        closeActiveSession(layer)
         await layer.takeOnline(getInitialDocs(getCurrentDsl()))
         rememberSessionId(layer.getSessionId())
         writeSessionToBrowserUrl(layer.getSessionId())
@@ -133,6 +146,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         if (!normalized) return null
         const resolvedSessionId = await resolveJoinSessionId(normalized)
         const layer = await ensureOnline()
+        closeActiveSession(layer)
         await layer.joinSession(resolvedSessionId)
         rememberSessionId(layer.getSessionId())
         writeSessionToBrowserUrl(layer.getSessionId())
@@ -243,6 +257,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         openJoinDialog,
         wireUi,
         refreshStatus,
+        closeActiveSession,
         dispose,
         get online() { return online },
     }

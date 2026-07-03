@@ -7,9 +7,15 @@ import { join, resolve } from 'node:path'
 
 export const SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js'
 
-const seanceRoot = resolve(process.cwd(), '../seance')
-const seanceSdkDir = resolve(seanceRoot, 'sdk')
-const seancePython = resolve(seanceRoot, '.venv/bin/python')
+const seanceRoot = resolve(process.env.SEANCE_ROOT || resolve(process.cwd(), '../seance'))
+const seanceSdkDir = resolve(process.env.SEANCE_SDK_DIR || resolve(seanceRoot, 'sdk'))
+const seancePython = resolve(process.env.SEANCE_PYTHON || resolve(seanceRoot, '.venv/bin/python'))
+
+export function hasLocalSeanceHarness() {
+    return existsSync(resolve(seanceSdkDir, 'index.js')) &&
+        existsSync(seancePython) &&
+        existsSync(resolve(seanceRoot, 'bin/app.py'))
+}
 
 export async function routeSeanceSdkLocal(page) {
     await page.route('https://seance.noisefactor.io/sdk/0/**', async (route) => {
@@ -30,6 +36,12 @@ export async function routeSeanceSdkLocal(page) {
 }
 
 export async function startSeanceServer({ origin = 'http://localhost:3017' } = {}) {
+    if (!hasLocalSeanceHarness()) {
+        throw new Error(
+            'Polymorphic collaboration tests require a local Seance harness; ' +
+            'set SEANCE_SDK_DIR and SEANCE_PYTHON, or keep ../seance with .venv/bin/python.'
+        )
+    }
     const port = await getFreePort()
     const tmp = mkdtempSync(join(tmpdir(), 'polymorphic-seance-'))
     const key = randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_')

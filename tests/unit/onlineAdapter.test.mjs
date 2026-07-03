@@ -5,6 +5,7 @@ import {
     DEFAULT_SEANCE_SDK_URL,
     DEFAULT_SEANCE_URL,
     applyRemoteDslText,
+    createPolymorphicOnlineAdapter,
     getInitialDocs,
     resolveOnlineConfig,
     shareBaseUrl,
@@ -77,4 +78,55 @@ test('applyRemoteDslText preserves invalid remote text in editor and reports com
     assert.deepEqual(failures, [{ source: 'remote', text: 'not valid @@@' }])
     assert.deepEqual(result, { success: false, error: 'bad syntax' })
     assert.equal(editor.value, 'not valid @@@')
+})
+
+test('switching sessions closes the active SDK connection before reconnecting', async () => {
+    const calls = []
+    const layer = {
+        status: 'offline',
+        sessionId: '',
+        on() { return () => {} },
+        bindEditor() { return () => {} },
+        async takeOnline(seedDocs) {
+            calls.push({ type: 'takeOnline', seedDocs })
+            this.status = 'online'
+            this.sessionId = `S${calls.length}`
+        },
+        async joinSession(sessionId) {
+            calls.push({ type: 'joinSession', sessionId })
+            this.status = 'online'
+            this.sessionId = sessionId
+        },
+        goOffline() {
+            calls.push({ type: 'goOffline', sessionId: this.sessionId })
+            this.status = 'offline'
+        },
+        getStatus() { return this.status },
+        getSessionId() { return this.sessionId },
+        getShareUrl() { return this.sessionId ? `https://poly.test/?seance=${this.sessionId}` : null },
+        writeSessionToUrl(url, sessionId) {
+            const next = new URL(url)
+            if (sessionId) next.searchParams.set('seance', sessionId)
+            else next.searchParams.delete('seance')
+            return next.toString()
+        },
+    }
+    const adapter = createPolymorphicOnlineAdapter({
+        editor: { value: 'search synth\n\nnoise().write(o0)' },
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        location: new URL('https://poly.test/?dsl=one'),
+        history: { replaceState() {} },
+    })
+
+    await adapter.takeOnline()
+    await adapter.joinSession('NEXT01')
+    await adapter.takeOnline()
+
+    assert.deepEqual(calls.map((call) => call.type), [
+        'takeOnline',
+        'goOffline',
+        'joinSession',
+        'goOffline',
+        'takeOnline',
+    ])
 })
