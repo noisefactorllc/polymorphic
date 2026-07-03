@@ -112,12 +112,12 @@ let isPlaying = false
 let loadedFromShareCode = false
 
 // =========================================================================
-// Imported Effect Storage (for Edit in Noisedeck)
+// Imported Effect Storage (for the "edit in <app>" menu options)
 // =========================================================================
 
 /**
  * Store for the last imported effect files.
- * This allows us to transport the effect to Noisedeck via sharing-is-caring.
+ * This allows us to transport the effect to other apps via sharing-is-caring.
  * Structure: { files: Map<string, string>, name: string }
  */
 let importedEffectStore = {
@@ -215,7 +215,7 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
     // Register the effect
     registerPortableEffect(effectData)
 
-    // Store the imported files for "Edit in Noisedeck" feature
+    // Store the imported files for the "edit in <app>" menu options
     importedEffectStore.files.clear()
     importedEffectStore.name = effectData.func || name
     for (const [path, content] of Object.entries(files)) {
@@ -644,11 +644,12 @@ async function resetDsl() {
 }
 
 // =========================================================================
-// Edit in Noisedeck
+// Edit in other apps
 // =========================================================================
 
 const SHARE_API_URL = 'https://sharing.noisedeck.app/api/embed/shorten'
 const NOISEDECK_URL = 'https://noisedeck.app'
+const NOODLES_URL = 'https://noodles.noisedeck.app'
 
 /**
  * Show a toast notification (styled like the import toast)
@@ -708,9 +709,11 @@ function showToast(message, type = 'info') {
 }
 
 /**
- * Share the effect and open Noisedeck in a new window
+ * Generic handler to share and open in another app
+ * @param {string} appName - Name of the target app (for messages)
+ * @param {string} appUrl - Base URL of the target app
  */
-async function handleEditInNoisedeck() {
+async function handleEditInApp(appName, appUrl) {
     // Get DSL from editor
     let dsl = dslEditor?.value || ''
     if (!dsl) {
@@ -718,7 +721,7 @@ async function handleEditInNoisedeck() {
         return
     }
 
-    showToast('Opening in Noisedeck...', 'info')
+    showToast(`Opening in ${appName}...`, 'info')
 
     try {
         // Capture screenshot
@@ -747,7 +750,7 @@ async function handleEditInNoisedeck() {
             ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
             screenshot = tempCanvas.toDataURL('image/jpeg', 0.85)
         } catch (err) {
-            console.warn('[Noisedeck] Screenshot capture failed:', err)
+            console.warn(`[${appName}] Screenshot capture failed:`, err)
         }
 
         // Collect all effect ZIPs
@@ -803,7 +806,7 @@ async function handleEditInNoisedeck() {
                 })
                 effectZips.push(effectZip)
             } catch (err) {
-                console.warn('[Noisedeck] Effect ZIP creation failed:', err)
+                console.warn(`[${appName}] Effect ZIP creation failed:`, err)
             }
         }
 
@@ -870,9 +873,9 @@ async function handleEditInNoisedeck() {
                         reader.readAsDataURL(zipBlob)
                     })
                     effectZips.push(sharingEffectZip)
-                    console.log(`[Noisedeck] Packaged sharing effect: ${effectFunc}`)
+                    console.log(`[${appName}] Packaged sharing effect: ${effectFunc}`)
                 } catch (err) {
-                    console.warn(`[Noisedeck] Failed to package sharing effect ${effectFunc}:`, err)
+                    console.warn(`[${appName}] Failed to package sharing effect ${effectFunc}:`, err)
                 }
             }
         }
@@ -882,7 +885,7 @@ async function handleEditInNoisedeck() {
             dsl,
             title: importedEffectStore.name || 'Polymorphic Effect',
             description: 'Created with Polymorphic',
-            ttlMinutes: 60  // Reduced TTL for edit-in-noisedeck links
+            ttlMinutes: 60  // Reduced TTL for edit-in-app links
         }
         if (screenshot) payload.screenshot = screenshot
         if (effectZips.length > 0) payload.effects = effectZips
@@ -900,17 +903,31 @@ async function handleEditInNoisedeck() {
         }
 
         const result = await response.json()
-        console.log('[Noisedeck] Share result:', result)
+        console.log(`[${appName}] Share result:`, result)
 
-        // Open Noisedeck with the short code
-        const noisedeckUrl = `${NOISEDECK_URL}/?code=${result.code}`
-        window.open(noisedeckUrl, '_blank')
+        // Open the target app with the short code
+        const targetUrl = `${appUrl}/?code=${result.code}`
+        window.open(targetUrl, '_blank')
 
-        showToast('Opened in Noisedeck', 'success')
+        showToast(`Opened in ${appName}`, 'success')
     } catch (error) {
-        console.error('[Noisedeck] Error:', error)
-        showToast(`Failed to open in Noisedeck: ${error.message}`, 'error')
+        console.error(`[${appName}] Error:`, error)
+        showToast(`Failed to open in ${appName}: ${error.message}`, 'error')
     }
+}
+
+/**
+ * Share the effect and open Noisedeck in a new window
+ */
+async function handleEditInNoisedeck() {
+    return handleEditInApp('Noisedeck', NOISEDECK_URL)
+}
+
+/**
+ * Share the effect and open Noodles in a new window
+ */
+async function handleEditInNoodles() {
+    return handleEditInApp('Noodles', NOODLES_URL)
 }
 
 /**
@@ -1769,6 +1786,16 @@ function setupMenuBar() {
     if (editInNoisedeckMenuItem) {
         editInNoisedeckMenuItem.addEventListener('click', () => {
             handleEditInNoisedeck()
+            // Close menus
+            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
+        })
+    }
+
+    // Edit in Noodles
+    const editInNoodlesMenuItem = document.getElementById('editInNoodlesMenuItem')
+    if (editInNoodlesMenuItem) {
+        editInNoodlesMenuItem.addEventListener('click', () => {
+            handleEditInNoodles()
             // Close menus
             document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
         })
