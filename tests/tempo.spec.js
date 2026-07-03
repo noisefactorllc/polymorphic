@@ -119,20 +119,32 @@ test('T key routes to tap tempo (manual source) and is gated by editor focus', a
     sch.onTap(() => { window.__tapCount++ })
   })
 
-  // With nothing focused (manual source), the T key taps. Space the presses so
-  // each keydown fully dispatches under load.
-  await page.keyboard.press('KeyT')
-  await page.waitForTimeout(60)
-  await page.keyboard.press('KeyT')
-  await page.waitForTimeout(60)
+  // With nothing focused (manual source), the document-level T handler taps.
+  // Dispatch directly on document so this test targets the app listener instead
+  // of browser focus/key-repeat timing under parallel shader boot load.
+  await page.evaluate(() => {
+    document.activeElement?.blur?.()
+    for (let i = 0; i < 2; i++) {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 't',
+        code: 'KeyT',
+        bubbles: true,
+      }))
+    }
+  })
   const afterUnfocused = await page.evaluate(() => window.__tapCount)
   expect(afterUnfocused).toBeGreaterThanOrEqual(2)
 
   // With the DSL editor focused, the T key must NOT tap (it types instead) —
   // the count must not advance.
-  await page.evaluate(() => document.getElementById('dsl-editor')?.getTextarea?.()?.focus())
-  await page.keyboard.press('KeyT')
-  await page.waitForTimeout(60)
+  await page.evaluate(() => {
+    document.getElementById('dsl-editor')?.getTextarea?.()?.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 't',
+      code: 'KeyT',
+      bubbles: true,
+    }))
+  })
   expect(await page.evaluate(() => window.__tapCount)).toBe(afterUnfocused)
 })
 

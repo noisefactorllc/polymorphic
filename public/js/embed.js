@@ -37,6 +37,7 @@ import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import { parseErrorLocation } from './ui/errorBanner.js'
+import { createPolymorphicOnlineAdapter } from './onlineAdapter.js'
 import './ui/codeEditor.js'  // Polymorphic editor CSS; handfish registers and owns the element behavior.
 import './ui/effectControls.js' // Register <effect-controls> custom element
 import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
@@ -73,12 +74,21 @@ const savePNG = document.getElementById('savePNG')
 const saveJPG = document.getElementById('saveJPG')
 const aboutMenuItem = document.getElementById('aboutMenuItem')
 const docsMenuItem = document.getElementById('docsMenuItem')
+const takeOnlineMenuItem = document.getElementById('takeOnlineMenuItem')
+const joinSessionMenuItem = document.getElementById('joinSessionMenuItem')
+const goOfflineMenuItem = document.getElementById('goOfflineMenuItem')
+const onlineSessionStatus = document.getElementById('online-session-status')
+const joinSessionDialog = document.getElementById('join-session-dialog')
 
 // Renderer reference (set after initialization)
 let renderer = null
 
 // ProgramState (single source of truth for effect parameter values)
 let programState = null
+
+// Seance online collaboration adapter. Lazily loads/connects the SDK only when
+// the user takes or joins a session, or when ?seance= activates on boot.
+let onlineAdapter = null
 
 // Effect controls panel element (created on-demand and inserted in #dsl-overlay)
 let controlsPanel = null
@@ -234,6 +244,7 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
     // Update the DSL editor
     if (dslEditor) {
         dslEditor.value = dsl
+        publishLocalDsl('import-effect')
     }
 
     // Compile and run
@@ -513,6 +524,7 @@ async function handleDroppedFile(file) {
         })
         if (dslEditor) {
             insertAtCursor(dslEditor, `\n\nmedia(url: "${dataUrl}").write(o0)\n\nrender(o0)`)
+            publishLocalDsl('drop-media')
             showToast(`Loaded image: ${file.name}`, 'success')
         }
         return
@@ -617,6 +629,56 @@ function showCanvas() {
     isPlaying = true
 }
 
+function publishLocalDsl(source) {
+    try {
+        onlineAdapter?.updateLocalText(source)
+    } catch (err) {
+        console.debug('[Polymorphic] Online local text update failed:', err)
+    }
+}
+
+async function applyCurrentDslFromOnline(source = 'remote') {
+    if (hotReloadTimeout) {
+        clearTimeout(hotReloadTimeout)
+        hotReloadTimeout = null
+    }
+    const result = await recompileShader()
+    if (!result.success) {
+        console.warn(`Online ${source} compile failed:`, result.error)
+        showCompilerError(result.error)
+    } else {
+        hideCompilerError()
+        outputPicker.setDsl(dslEditor?.value || '').catch(err => console.debug('[outputPicker] setDsl failed:', err))
+    }
+    return result
+}
+
+function setupOnlineCollaboration() {
+    if (!dslEditor || onlineAdapter) return
+    onlineAdapter = createPolymorphicOnlineAdapter({
+        editor: dslEditor,
+        sessionStatus: onlineSessionStatus,
+        joinDialog: joinSessionDialog,
+        takeOnlineMenuItem,
+        joinSessionMenuItem,
+        goOfflineMenuItem,
+        getCurrentDsl: () => dslEditor?.value || '',
+        applyCurrentDsl: applyCurrentDslFromOnline,
+        showToast,
+    })
+    onlineAdapter.wireUi()
+}
+
+async function joinOnlineSessionFromUrlIfPresent() {
+    if (!onlineAdapter) return
+    try {
+        await onlineAdapter.joinFromUrl()
+    } catch (err) {
+        console.error('[Polymorphic] Failed to join Seance session from URL:', err)
+        showToast(`Could not join session: ${err.message}`, 'error')
+    }
+}
+
 /**
  * Update reset button visibility based on whether DSL has been modified
  * (No longer used - reset is now a menu item, but kept for API compatibility)
@@ -631,6 +693,7 @@ function updateResetButtonVisibility() {
 async function resetDsl() {
     if (!dslEditor) return
     dslEditor.value = originalDsl
+    publishLocalDsl('reset')
     // Update reset button visibility
     updateResetButtonVisibility()
     // Recompile with original DSL
@@ -941,6 +1004,7 @@ function handleLoadFromUrl(composition) {
     // Set DSL from composition
     if (composition.dsl && dslEditor) {
         dslEditor.value = composition.dsl
+        publishLocalDsl('import-url')
         
         // Trigger rebuild
         recompileShader().catch(err => {
@@ -1311,6 +1375,7 @@ function setupDslEditor() {
         const sel = ta ? { start: ta.selectionStart, end: ta.selectionEnd } : null
         if (before.trim()) snapshotHistory.push(before)
         dslEditor.value = after
+        publishLocalDsl('format')
         if (ta && sel) {
             const len = after.length
             ta.selectionStart = Math.min(sel.start, len)
@@ -1376,6 +1441,7 @@ function setupProgramState() {
         } finally {
             suppressDslReact = false
         }
+        publishLocalDsl('program-state')
     })
 
     // For `define` params (those that affect shader compilation), ProgramState
@@ -1485,6 +1551,7 @@ function snapshotBack() {
         snapshotHistory.silence(() => {
             dslEditor.value = prev
         })
+        publishLocalDsl('snapshot-back')
         // Recompile immediately, but don't re-snapshot
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
         recompileShader().then(r => {
@@ -1503,6 +1570,7 @@ function snapshotForward() {
         snapshotHistory.silence(() => {
             dslEditor.value = next
         })
+        publishLocalDsl('snapshot-forward')
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
         recompileShader().then(r => {
             if (!r.success) showCompilerError(r.error)
@@ -1592,6 +1660,7 @@ async function startShader() {
             renderer,
             onInsert: (snippet) => {
                 if (dslEditor) insertAtCursor(dslEditor, snippet)
+                publishLocalDsl('live-inputs')
                 liveInputsPanel.flashSnippet?.(snippet)
             }
         })
@@ -1601,6 +1670,7 @@ async function startShader() {
                 if (!dslEditor) return
                 const next = dslEditor.value.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`)
                 dslEditor.value = next
+                publishLocalDsl('output-picker')
                 scheduleHotReload()
             }
         })
@@ -1707,6 +1777,8 @@ async function startShader() {
         }
 
         outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+
+        await joinOnlineSessionFromUrlIfPresent()
 
         // Handle resize — coalesce bursts of resize events into at most one
         // canvas resize per frame. Dragging a window edge fires `resize` many
@@ -1829,6 +1901,7 @@ function setupMenuBar() {
                 const text = await navigator.clipboard.readText()
                 if (dslEditor && text) {
                     dslEditor.value = text
+                    publishLocalDsl('paste')
                     updateResetButtonVisibility()
                     scheduleHotReload()
                 }
@@ -2033,6 +2106,7 @@ function setupMenuBar() {
                 const dsl = scenes.load(slot)
                 if (dsl && dslEditor) {
                     dslEditor.value = dsl
+                    publishLocalDsl('scene-load')
                     scheduleHotReload()
                     showToast(`Loaded scene ${slot}`, 'info')
                 }
@@ -2045,6 +2119,7 @@ function setupMenuBar() {
             if (!dslEditor) return
             dslEditor.value = example.dsl
             originalDsl = example.dsl
+            publishLocalDsl('gallery')
             scheduleHotReload()
             dslEditor.focus()
         }
@@ -2074,6 +2149,7 @@ function init() {
     setApplyToEditorCallback((code) => {
         if (dslEditor) {
             dslEditor.value = code;
+            publishLocalDsl('doc-reader')
             updateResetButtonVisibility();
             scheduleHotReload();
         }
@@ -2090,6 +2166,7 @@ function init() {
         setDsl: (dsl) => {
             if (dslEditor) {
                 dslEditor.value = dsl
+                publishLocalDsl('program-load')
                 updateResetButtonVisibility()
                 scheduleHotReload()
             }
@@ -2098,6 +2175,10 @@ function init() {
     
     // Set up menu bar
     setupMenuBar()
+
+    // Set up online collaboration menu/status wiring. The SDK itself is loaded
+    // lazily only when a session action occurs or ?seance= activates on boot.
+    setupOnlineCollaboration()
     
     // Set up doc reader close button
     if (docReaderClose) {
@@ -2174,6 +2255,7 @@ function init() {
             gallery,
             snapshotHistory,
             shortcutsDialog,
+            get onlineAdapter() { return onlineAdapter },
             get renderer() { return renderer },
             get programState() { return programState }
         }
@@ -2276,10 +2358,12 @@ function setupCommandPalette() {
             if (opts?.as === 'starter') {
                 // Starter snippets are full programs — replace the editor content
                 dslEditor.value = snippet
+                publishLocalDsl('palette-starter')
                 scheduleHotReload()
                 dslEditor.focus()
             } else {
                 insertAtCursor(dslEditor, snippet)
+                publishLocalDsl('palette-insert')
             }
         }
     })
@@ -2357,6 +2441,7 @@ function setupCommandPalette() {
             if (ex && dslEditor) {
                 dslEditor.value = ex.dsl
                 originalDsl = ex.dsl
+                publishLocalDsl('shuffle')
                 scheduleHotReload()
                 dslEditor.focus()
             }

@@ -4,10 +4,18 @@
 // (e.g. HANDFISH_LOCAL=../handfish/dist), serve the Handfish CDN from it so
 // components and editor APIs can be exercised before they ship. No machine path
 // is committed; with the env var unset these tests run against the real CDN.
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { resolve } from 'path'
+
+const siblingHandfishDist = resolve(process.cwd(), '../handfish/dist')
+
+function handfishLocalDir() {
+    if (process.env.HANDFISH_LOCAL) return process.env.HANDFISH_LOCAL
+    return existsSync(siblingHandfishDist) ? siblingHandfishDist : null
+}
 
 export async function routeHandfishLocal(page) {
-    const local = process.env.HANDFISH_LOCAL
+    const local = handfishLocalDir()
     if (!local) return
     await page.route('https://handfish.noisefactor.io/0/**', async (route) => {
         const rel = new URL(route.request().url()).pathname.replace(/^\/0\//, '')
