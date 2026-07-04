@@ -3,25 +3,34 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 export const SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js'
 
-const seanceRoot = resolve(process.env.SEANCE_ROOT || resolve(process.cwd(), '../seance'))
-const seanceSdkDir = resolve(process.env.SEANCE_SDK_DIR || resolve(seanceRoot, 'sdk'))
-const seancePython = resolve(process.env.SEANCE_PYTHON || resolve(seanceRoot, '.venv/bin/python'))
+export function resolveSeanceHarnessPaths({ env = process.env, cwd = process.cwd() } = {}) {
+    const sdkDir = env.SEANCE_SDK_DIR ? resolve(env.SEANCE_SDK_DIR) : null
+    const root = resolve(env.SEANCE_ROOT || (sdkDir ? dirname(sdkDir) : resolve(cwd, '../seance')))
+    return {
+        root,
+        sdkDir: sdkDir || resolve(root, 'sdk'),
+        python: resolve(env.SEANCE_PYTHON || resolve(root, '.venv/bin/python')),
+        app: resolve(root, 'bin/app.py'),
+    }
+}
 
-export function hasLocalSeanceHarness() {
-    return existsSync(resolve(seanceSdkDir, 'index.js')) &&
-        existsSync(seancePython) &&
-        existsSync(resolve(seanceRoot, 'bin/app.py'))
+const harnessPaths = resolveSeanceHarnessPaths()
+
+export function hasLocalSeanceHarness(paths = harnessPaths, exists = existsSync) {
+    return exists(resolve(paths.sdkDir, 'index.js')) &&
+        exists(paths.python) &&
+        exists(paths.app)
 }
 
 export async function routeSeanceSdkLocal(page) {
     await page.route('https://seance.noisefactor.io/sdk/0/**', async (route) => {
         const rel = new URL(route.request().url()).pathname.replace(/^\/sdk\/0\//, '')
-        const file = resolve(seanceSdkDir, rel)
-        if (!file.startsWith(seanceSdkDir) || !existsSync(file)) {
+        const file = resolve(harnessPaths.sdkDir, rel)
+        if (!file.startsWith(harnessPaths.sdkDir) || !existsSync(file)) {
             await route.fulfill({ status: 404, body: `missing ${rel}` })
             return
         }
@@ -39,7 +48,7 @@ export async function startSeanceServer({ origin = 'http://localhost:3017' } = {
     if (!hasLocalSeanceHarness()) {
         throw new Error(
             'Polymorphic collaboration tests require a local Seance harness; ' +
-            'set SEANCE_SDK_DIR and SEANCE_PYTHON, or keep ../seance with .venv/bin/python.'
+            'set SEANCE_ROOT, or set SEANCE_SDK_DIR to a Seance checkout sdk dir and SEANCE_PYTHON.'
         )
     }
     const port = await getFreePort()
@@ -47,11 +56,11 @@ export async function startSeanceServer({ origin = 'http://localhost:3017' } = {
     const key = randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
     let logs = ''
 
-    const proc = spawn(seancePython, ['bin/app.py'], {
-        cwd: seanceRoot,
+    const proc = spawn(harnessPaths.python, [harnessPaths.app], {
+        cwd: harnessPaths.root,
         env: {
             ...process.env,
-            PYTHONPATH: seanceRoot,
+            PYTHONPATH: harnessPaths.root,
             SEANCE_BIND: `127.0.0.1:${port}`,
             SEANCE_SECRET: key,
             SEANCE_DB: join(tmp, 'seance.db'),

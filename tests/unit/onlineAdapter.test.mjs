@@ -10,6 +10,7 @@ import {
     resolveOnlineConfig,
     shareBaseUrl,
 } from '../../public/js/onlineAdapter.js'
+import { hasLocalSeanceHarness, resolveSeanceHarnessPaths } from '../seanceLocal.js'
 
 test('online adapter uses the rolling major SDK URL by default', () => {
     const config = resolveOnlineConfig({
@@ -129,4 +130,28 @@ test('switching sessions closes the active SDK connection before reconnecting', 
         'goOffline',
         'takeOnline',
     ])
+})
+
+test('local Seance harness paths can be inferred from SDK and Python overrides', () => {
+    const paths = resolveSeanceHarnessPaths({
+        env: {
+            SEANCE_SDK_DIR: '/tmp/custom-seance/sdk',
+            SEANCE_PYTHON: '/tmp/custom-seance/.venv/bin/python',
+        },
+        cwd: '/tmp/polymorphic',
+    })
+
+    assert.deepEqual(paths, {
+        root: '/tmp/custom-seance',
+        sdkDir: '/tmp/custom-seance/sdk',
+        python: '/tmp/custom-seance/.venv/bin/python',
+        app: '/tmp/custom-seance/bin/app.py',
+    })
+
+    const existing = new Set([
+        '/tmp/custom-seance/sdk/index.js',
+        '/tmp/custom-seance/.venv/bin/python',
+        '/tmp/custom-seance/bin/app.py',
+    ])
+    assert.equal(hasLocalSeanceHarness(paths, (path) => existing.has(path)), true)
 })
