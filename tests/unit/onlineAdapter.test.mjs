@@ -36,7 +36,7 @@ test('getInitialDocs produces one default main DSL document from current editor 
         {
             id: 'main',
             title: 'Program',
-            kind: 'dsl',
+            kind: 'noisemaker-dsl',
             text: 'search synth\n\nnoise().write(o0)',
             default: true,
         },

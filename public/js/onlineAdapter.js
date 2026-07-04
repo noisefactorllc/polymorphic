@@ -23,7 +23,7 @@ export function getInitialDocs(text) {
     return [{
         id: DEFAULT_DOC_ID,
         title: 'Program',
-        kind: 'dsl',
+        kind: 'noisemaker-dsl',
         text: String(text ?? ''),
         default: true,
     }]
