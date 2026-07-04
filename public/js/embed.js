@@ -149,7 +149,8 @@ function isFeatureEnabled(name) {
 }
 
 function setOnlineCollaborationUiVisible(visible) {
-    for (const el of [takeOnlineMenuItem, joinSessionMenuItem, goOfflineMenuItem, joinSessionDialog]) {
+    const separator = document.getElementById('onlineCollabMenuSeparator')
+    for (const el of [takeOnlineMenuItem, joinSessionMenuItem, goOfflineMenuItem, joinSessionDialog, separator]) {
         if (el) el.hidden = !visible
     }
     if (!visible && onlineSessionStatus) onlineSessionStatus.hidden = true
@@ -665,7 +666,20 @@ async function applyCurrentDslFromOnline(source = 'remote') {
         clearTimeout(hotReloadTimeout)
         hotReloadTimeout = null
     }
-    const result = await recompileShader()
+    // Single-flight gate (same contract as the other compile paths): wait
+    // out any in-flight compile instead of racing it. The remote text is
+    // already in the editor, so whichever apply runs last compiles the
+    // latest text.
+    while (_compileInFlight) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    let result
+    try {
+        _compileInFlight = true
+        result = await recompileShader()
+    } finally {
+        _compileInFlight = false
+    }
     if (!result.success) {
         console.warn(`Online ${source} compile failed:`, result.error)
         showCompilerError(result.error)
