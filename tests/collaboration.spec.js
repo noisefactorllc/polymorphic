@@ -37,6 +37,7 @@ const SERVER_SKETCH = [
 ].join('\n')
 
 let seance
+const ONLINE_FEATURE = 'onlineCollaboration'
 
 test.describe.configure({ mode: 'serial' })
 test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
@@ -49,6 +50,19 @@ test.afterAll(async () => {
   await seance?.stop()
 })
 
+test('online collaboration is hidden and ignores ?seance= without the feature flag', async ({ page }) => {
+  await preparePage(page)
+  await page.goto(appPath({ dsl: BASE_SKETCH, seance: 'JOIN42', online: false }))
+  await waitForApp(page)
+
+  await page.locator('#programMenuTitle').click()
+  await expect(page.locator('#takeOnlineMenuItem')).toBeHidden()
+  await expect(page.locator('#joinSessionMenuItem')).toBeHidden()
+  await expect(page.locator('#goOfflineMenuItem')).toBeHidden()
+  await expect(page.locator('#online-session-status')).toBeHidden()
+  await expect.poll(() => page.evaluate(() => window.__poly?.onlineAdapter ?? null)).toBeNull()
+})
+
 test('take online prints and copies the share URL, and go offline preserves local text', async ({ page }) => {
   await preparePage(page)
   await page.goto(appPath({ dsl: BASE_SKETCH }))
@@ -59,6 +73,7 @@ test('take online prints and copies the share URL, and go offline preserves loca
   const status = page.locator('#online-session-status')
   const shareUrl = await status.locator('.hf-session-status-url').textContent()
   expect(shareUrl).toContain('seance=')
+  expect(shareUrl).toContain(`features=${ONLINE_FEATURE}`)
   expect(shareUrl).toContain(encodeURIComponent(SEANCE_SDK_URL))
 
   await status.locator('[data-action="copy-url"]').click()
@@ -175,6 +190,7 @@ async function preparePage(page) {
 
 function appPath(params = {}) {
   const url = new URL('/', 'http://localhost:3017')
+  if (params.online !== false) url.searchParams.set('features', ONLINE_FEATURE)
   url.searchParams.set('seanceUrl', seance.url)
   url.searchParams.set('seanceSdk', SEANCE_SDK_URL)
   if (params.dsl) url.searchParams.set('dsl', params.dsl)

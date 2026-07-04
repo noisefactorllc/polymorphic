@@ -42,6 +42,8 @@ import './ui/codeEditor.js'  // Polymorphic editor CSS; handfish registers and o
 import './ui/effectControls.js' // Register <effect-controls> custom element
 import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
 
+const ONLINE_COLLABORATION_FEATURE = 'onlineCollaboration'
+
 // DOM elements
 const canvas = document.getElementById('canvas')
 const loadingEl = document.getElementById('loading')
@@ -79,6 +81,7 @@ const joinSessionMenuItem = document.getElementById('joinSessionMenuItem')
 const goOfflineMenuItem = document.getElementById('goOfflineMenuItem')
 const onlineSessionStatus = document.getElementById('online-session-status')
 const joinSessionDialog = document.getElementById('join-session-dialog')
+const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
 
 // Renderer reference (set after initialization)
 let renderer = null
@@ -133,6 +136,26 @@ let importedEffectStore = {
     files: new Map(),
     name: ''
 }
+
+function isFeatureEnabled(name) {
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = (params.get('features') || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (fromUrl.includes(name)) return true
+    try {
+        return localStorage.getItem(`feature.${name}`) === 'true'
+    } catch {
+        return false
+    }
+}
+
+function setOnlineCollaborationUiVisible(visible) {
+    for (const el of [takeOnlineMenuItem, joinSessionMenuItem, goOfflineMenuItem, joinSessionDialog]) {
+        if (el) el.hidden = !visible
+    }
+    if (!visible && onlineSessionStatus) onlineSessionStatus.hidden = true
+}
+
+setOnlineCollaborationUiVisible(onlineCollaborationEnabled)
 
 // =========================================================================
 // Import from ZIP Dialog
@@ -654,6 +677,7 @@ async function applyCurrentDslFromOnline(source = 'remote') {
 }
 
 function setupOnlineCollaboration() {
+    if (!onlineCollaborationEnabled) return
     if (!dslEditor || onlineAdapter) return
     onlineAdapter = createPolymorphicOnlineAdapter({
         editor: dslEditor,
@@ -670,6 +694,7 @@ function setupOnlineCollaboration() {
 }
 
 async function joinOnlineSessionFromUrlIfPresent() {
+    if (!onlineCollaborationEnabled) return
     if (!onlineAdapter) return
     try {
         await onlineAdapter.joinFromUrl()
