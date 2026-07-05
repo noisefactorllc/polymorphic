@@ -76,11 +76,8 @@ const savePNG = document.getElementById('savePNG')
 const saveJPG = document.getElementById('saveJPG')
 const aboutMenuItem = document.getElementById('aboutMenuItem')
 const docsMenuItem = document.getElementById('docsMenuItem')
-const takeOnlineMenuItem = document.getElementById('takeOnlineMenuItem')
-const joinSessionMenuItem = document.getElementById('joinSessionMenuItem')
-const goOfflineMenuItem = document.getElementById('goOfflineMenuItem')
-const onlineSessionStatus = document.getElementById('online-session-status')
-const joinSessionDialog = document.getElementById('join-session-dialog')
+const goOnlineMenuItem = document.getElementById('goOnlineMenuItem')
+const seanceDialog = document.getElementById('seanceDialog')
 const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
 
 // Renderer reference (set after initialization)
@@ -150,10 +147,10 @@ function isFeatureEnabled(name) {
 
 function setOnlineCollaborationUiVisible(visible) {
     const separator = document.getElementById('onlineCollabMenuSeparator')
-    for (const el of [takeOnlineMenuItem, joinSessionMenuItem, goOfflineMenuItem, joinSessionDialog, separator]) {
+    for (const el of [goOnlineMenuItem, separator]) {
         if (el) el.hidden = !visible
     }
-    if (!visible && onlineSessionStatus) onlineSessionStatus.hidden = true
+    if (!visible && seanceDialog) seanceDialog.hide?.()
 }
 
 setOnlineCollaborationUiVisible(onlineCollaborationEnabled)
@@ -695,16 +692,13 @@ function setupOnlineCollaboration() {
     if (!dslEditor || onlineAdapter) return
     onlineAdapter = createPolymorphicOnlineAdapter({
         editor: dslEditor,
-        sessionStatus: onlineSessionStatus,
-        joinDialog: joinSessionDialog,
-        takeOnlineMenuItem,
-        joinSessionMenuItem,
-        goOfflineMenuItem,
+        dialog: seanceDialog,
         getCurrentDsl: () => dslEditor?.value || '',
         applyCurrentDsl: applyCurrentDslFromOnline,
         showToast,
     })
     onlineAdapter.wireUi()
+    goOnlineMenuItem?.addEventListener('click', () => seanceDialog?.show())
 }
 
 async function joinOnlineSessionFromUrlIfPresent() {

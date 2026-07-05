@@ -242,7 +242,6 @@
         body.performance-mode .live-inputs-panel,
         body.performance-mode .perf-overlay,
         body.performance-mode .status-row,
-        body.performance-mode #online-session-status,
         body.performance-mode .output-picker,
         body.performance-mode .recording-indicator { display: none !important; }
         body.performance-mode { cursor: none; }
@@ -255,7 +254,6 @@
         body.embed-mode .live-inputs-panel,
         body.embed-mode .perf-overlay,
         body.embed-mode .status-row,
-        body.embed-mode #online-session-status,
         body.embed-mode .output-picker,
         body.embed-mode .recording-indicator { display: none !important; }
 
@@ -335,23 +333,6 @@
             background: rgba(0, 0, 0, 0.95);
         }
 
-        #online-session-status {
-            position: fixed;
-            top: calc(2.25em + 0.5rem);
-            left: 1rem;
-            right: 1rem;
-            z-index: 275;
-            pointer-events: auto;
-        }
-
-        #online-session-status[hidden] {
-            display: none !important;
-        }
-
-        #online-session-status .hf-session-status {
-            max-width: min(62rem, calc(100vw - 2rem));
-        }
-        
         /* Doc Reader Panel */
         #doc-reader-panel {
             position: fixed;
@@ -1167,12 +1148,10 @@
                     <div id="editInNoisedeckMenuItem">edit in Noisedeck...</div>
                     <div id="editInNoodlesMenuItem">edit in Noodles...</div>
                     <hr class="menu-seperator">
-                    <div id="takeOnlineMenuItem">Take Online</div>
-                    <div id="joinSessionMenuItem">Join Session by ID...</div>
-                    <div id="goOfflineMenuItem">Go Offline</div>
-                    <hr class="menu-seperator" id="onlineCollabMenuSeparator">
                     <div id="importFromUrlMenuItem">import from url...</div>
                     <div id="shareProgram">share publicly...</div>
+                    <hr class="menu-seperator" id="onlineCollabMenuSeparator">
+                    <div id="goOnlineMenuItem">go online...</div>
                 </div>
             </div>
         </div>
@@ -1189,8 +1168,8 @@
         </div>
     </div>
 
-    <session-status id="online-session-status" state="offline" hidden></session-status>
-    <join-session-dialog id="join-session-dialog"></join-session-dialog>
+    <seance-dialog id="seanceDialog" heading="Go Online"
+        copy="Share this composition live. Taking it online creates a session anyone with the link can join."></seance-dialog>
 
     <!-- Loading -->
     <div id="loading">

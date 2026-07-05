@@ -56,10 +56,9 @@ test('online collaboration is hidden and ignores ?seance= without the feature fl
   await waitForApp(page)
 
   await page.locator('#programMenuTitle').click()
-  await expect(page.locator('#takeOnlineMenuItem')).toBeHidden()
-  await expect(page.locator('#joinSessionMenuItem')).toBeHidden()
-  await expect(page.locator('#goOfflineMenuItem')).toBeHidden()
-  await expect(page.locator('#online-session-status')).toBeHidden()
+  await expect(page.locator('#goOnlineMenuItem')).toBeHidden()
+  await expect(page.locator('#onlineCollabMenuSeparator')).toBeHidden()
+  await expect(page.locator('#seanceDialog dialog')).toBeHidden()
   await expect.poll(() => page.evaluate(() => window.__poly?.onlineAdapter ?? null)).toBeNull()
 })
 
@@ -70,20 +69,23 @@ test('take online prints and copies the share URL, and go offline preserves loca
 
   await takeOnline(page)
 
-  const status = page.locator('#online-session-status')
-  const shareUrl = await status.locator('.hf-session-status-url').textContent()
+  const dialog = page.locator('#seanceDialog')
+  const shareUrl = await dialog.locator('.hf-seance-url').inputValue()
   expect(shareUrl).toContain('seance=')
   expect(shareUrl).toContain(`features=${ONLINE_FEATURE}`)
   expect(shareUrl).toContain(encodeURIComponent(SEANCE_SDK_URL))
 
-  await status.locator('[data-action="copy-url"]').click()
+  await dialog.locator('[data-action="copy-url"]').click()
   await expect.poll(() => page.evaluate(() => window.__clipboardText)).toBe(shareUrl)
 
+  // Close the modal to reach the editor, make a local edit, then reopen and go
+  // offline — the local text must survive the disconnect.
+  await closeDialog(page)
   await setEditorText(page, PEER_SKETCH)
-  await page.locator('#programMenuTitle').click()
-  await page.locator('#goOfflineMenuItem').click()
+  await openDialog(page)
+  await dialog.locator('[data-action="go-offline"]').click()
+  await expect(dialog.locator('.hf-seance-status-text')).toHaveText('Offline')
 
-  await expect(status).toBeHidden()
   await expect.poll(() => editorText(page)).toBe(PEER_SKETCH)
 })
 
@@ -118,14 +120,15 @@ test('a printed share URL boots a second tab into the online session', async ({ 
   await waitForApp(page)
   await takeOnline(page)
 
-  const shareUrl = await page.locator('#online-session-status .hf-session-status-url').textContent()
+  const shareUrl = await page.locator('#seanceDialog .hf-seance-url').inputValue()
   const joiner = await context.newPage()
   await preparePage(joiner)
   await joiner.goto(shareUrl)
   await waitForApp(joiner)
 
   await expect.poll(() => editorText(joiner), { timeout: 15000 }).toBe(SERVER_SKETCH)
-  await expect(joiner.locator('#online-session-status')).toBeVisible()
+  await openDialog(joiner)
+  await expect(joiner.locator('#seanceDialog .hf-seance-status-text')).toHaveText('Online')
 })
 
 test('?code= load resolves before ?seance= join, so the session snapshot wins', async ({ page, context }) => {
@@ -219,25 +222,33 @@ async function waitForApp(page) {
   }
 }
 
-async function takeOnline(page) {
+async function openDialog(page) {
   await page.locator('#programMenuTitle').click()
-  await page.locator('#takeOnlineMenuItem').click()
-  const status = page.locator('#online-session-status')
-  await expect(status).toBeVisible({ timeout: 15000 })
-  await expect(status).toContainText('Online')
-  const sessionId = await status.evaluate((el) => el.sessionId)
+  await page.locator('#goOnlineMenuItem').click()
+  await expect(page.locator('#seanceDialog dialog')).toBeVisible()
+}
+
+async function closeDialog(page) {
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#seanceDialog dialog')).toBeHidden()
+}
+
+async function takeOnline(page) {
+  await openDialog(page)
+  await page.locator('#seanceDialog [data-action="take-online"]').click()
+  const status = page.locator('#seanceDialog .hf-seance-status-text')
+  await expect(status).toHaveText('Online', { timeout: 15000 })
+  const sessionId = await page.locator('#seanceDialog').evaluate((el) => el.sessionId)
   expect(sessionId).toMatch(/^[A-Za-z0-9]{6}$/)
   return sessionId
 }
 
 async function joinById(page, sessionId) {
-  await page.locator('#programMenuTitle').click()
-  await page.locator('#joinSessionMenuItem').click()
-  const dialog = page.locator('#join-session-dialog dialog')
-  await expect(dialog).toBeVisible()
-  await dialog.locator('input[name="sessionId"]').fill(sessionId)
-  await dialog.locator('button[type="submit"]').click()
-  await expect(page.locator('#online-session-status')).toBeVisible({ timeout: 15000 })
+  await openDialog(page)
+  const dialog = page.locator('#seanceDialog')
+  await dialog.locator('.hf-seance-join-input').fill(sessionId)
+  await dialog.locator('[data-action="join"]').click()
+  await expect(dialog.locator('.hf-seance-status-text')).toHaveText('Online', { timeout: 15000 })
 }
 
 async function editorText(page) {

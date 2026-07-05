@@ -95,17 +95,19 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function refreshStatus(status = online?.getStatus?.() || 'offline') {
-        const sessionStatus = deps.sessionStatus
-        if (!sessionStatus) return
+        const dialog = deps.dialog
+        if (!dialog) return
 
         const isOnline = status === 'online' || status === 'readonly'
         const sessionId = online?.getSessionId?.() || ''
         const sessionUrl = isOnline ? (online?.getShareUrl?.() || '') : ''
 
-        sessionStatus.state = isOnline ? 'online' : 'offline'
-        sessionStatus.sessionId = isOnline ? sessionId : ''
-        sessionStatus.sessionUrl = sessionUrl
-        sessionStatus.hidden = !isOnline
+        // Drive the unified seance-dialog's internal view via its state; the
+        // dialog is shown/hidden by its own trigger (the "go online" menu
+        // item), so never toggle its visibility here.
+        dialog.state = isOnline ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
+        dialog.sessionId = isOnline ? sessionId : ''
+        dialog.sessionUrl = sessionUrl
     }
 
     function isLayerConnected(layer = online) {
@@ -175,15 +177,15 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     async function copyShareUrl() {
-        const url = deps.sessionStatus?.sessionUrl || online?.getShareUrl?.()
+        const url = deps.dialog?.sessionUrl || online?.getShareUrl?.()
         if (!url) return false
         await navigatorRef?.clipboard?.writeText?.(url)
         showToast('Session URL copied', 'success')
         return true
     }
 
-    function openJoinDialog() {
-        deps.joinDialog?.show?.()
+    function openDialog() {
+        deps.dialog?.show?.()
     }
 
     async function resolveJoinSessionId(sessionId) {
@@ -210,27 +212,29 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function wireUi() {
-        deps.takeOnlineMenuItem?.addEventListener?.('click', () => {
+        // All collaboration intents now arrive from the single seance-dialog
+        // as semantic events (was: separate menu-item clicks + session-status
+        // events).
+        const dialog = deps.dialog
+        dialog?.addEventListener?.('take-online', () => {
             takeOnline().catch((err) => {
                 console.error('[Polymorphic] Take online failed:', err)
                 showToast(`Could not take online: ${err.message}`, 'error')
             })
         })
-        deps.joinSessionMenuItem?.addEventListener?.('click', () => openJoinDialog())
-        deps.goOfflineMenuItem?.addEventListener?.('click', () => goOffline())
-        deps.joinDialog?.addEventListener?.('join-session', (event) => {
+        dialog?.addEventListener?.('join-session', (event) => {
             joinSession(event.detail?.sessionId).catch((err) => {
                 console.error('[Polymorphic] Join session failed:', err)
                 showToast(`Could not join session: ${err.message}`, 'error')
             })
         })
-        deps.sessionStatus?.addEventListener?.('copy-url', () => {
+        dialog?.addEventListener?.('go-offline', () => goOffline())
+        dialog?.addEventListener?.('copy-url', () => {
             copyShareUrl().catch((err) => {
                 console.error('[Polymorphic] Copy session URL failed:', err)
                 showToast('Could not copy session URL', 'error')
             })
         })
-        deps.sessionStatus?.addEventListener?.('go-offline', () => goOffline())
         refreshStatus('offline')
     }
 
@@ -254,7 +258,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         goOffline,
         updateLocalText,
         copyShareUrl,
-        openJoinDialog,
+        openDialog,
         wireUi,
         refreshStatus,
         closeActiveSession,
