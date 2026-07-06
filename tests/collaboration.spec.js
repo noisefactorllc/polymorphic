@@ -50,16 +50,27 @@ test.afterAll(async () => {
   await seance?.stop()
 })
 
-test('online collaboration is hidden and ignores ?seance= without the feature flag', async ({ page }) => {
+test('online collaboration is available by default without any feature flag', async ({ page, context }) => {
   await preparePage(page)
-  await page.goto(appPath({ dsl: BASE_SKETCH, seance: 'JOIN42', online: false }))
+  await page.goto(appPath({ dsl: BASE_SKETCH, online: false }))
   await waitForApp(page)
 
+  // The entry point is present without ?features=, and the dialog stays
+  // closed until the user opens it.
   await page.locator('#programMenuTitle').click()
-  await expect(page.locator('#goOnlineMenuItem')).toBeHidden()
-  await expect(page.locator('#onlineCollabMenuSeparator')).toBeHidden()
+  await expect(page.locator('#goOnlineMenuItem')).toBeVisible()
+  await expect(page.locator('#onlineCollabMenuSeparator')).toBeVisible()
   await expect(page.locator('#seanceDialog dialog')).toBeHidden()
-  await expect.poll(() => page.evaluate(() => window.__poly?.onlineAdapter ?? null)).toBeNull()
+  await page.locator('#programMenuTitle').click()
+
+  // And it fully works with no flag: take online, then a second flag-less
+  // ?seance= tab joins and converges.
+  const sessionId = await takeOnline(page)
+  const joiner = await context.newPage()
+  await preparePage(joiner)
+  await joiner.goto(appPath({ online: false, seance: sessionId }))
+  await waitForApp(joiner)
+  await expect.poll(() => editorText(joiner), { timeout: 15000 }).toBe(BASE_SKETCH)
 })
 
 test('take online prints and copies the share URL, and go offline preserves local text', async ({ page }) => {
