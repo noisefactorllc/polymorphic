@@ -1834,8 +1834,12 @@ async function startShader() {
             })
         })
 
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => {
+        // Clean up on page unload. `pagehide` (not `beforeunload`) is the
+        // reliable teardown signal on iOS Safari, and its `persisted` flag
+        // tells us the page is only being frozen for the bfcache — disposing
+        // the GL context there would leave a dead canvas on restore.
+        window.addEventListener('pagehide', (e) => {
+            if (e.persisted) return
             renderer.dispose()
         })
 

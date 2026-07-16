@@ -300,10 +300,6 @@ export class PolymorphicRenderer {
             // Compile the DSL
             await this._renderer.compile(engineDsl)
 
-            // Normalize color uniforms: DSL defaults may be hex strings
-            // which the WebGL uniform setter can't parse as vec3
-            this._normalizeColorUniforms()
-
             // Check for text effects and render text textures (supports multiple)
             const allTextParams = extractAllTextParams(dsl)
             const textStepIndices = this._findAllTextStepIndices(engineDsl)
@@ -602,24 +598,6 @@ export class PolymorphicRenderer {
         // Upload to texture with step-indexed ID
         const textureId = `textTex_step_${stepIndex}`
         this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
-    }
-
-    /**
-     * Normalize color uniforms after compilation.
-     * @private
-     */
-    _normalizeColorUniforms() {
-        const passes = this._renderer._pipeline?.graph?.passes
-        if (!passes) return
-
-        for (const pass of passes) {
-            if (!pass.uniforms) continue
-            for (const [name, value] of Object.entries(pass.uniforms)) {
-                if (typeof value === 'string' && /^#[a-f0-9]{6}$/i.test(value)) {
-                    pass.uniforms[name] = hexToRgb(value)
-                }
-            }
-        }
     }
 
     /**

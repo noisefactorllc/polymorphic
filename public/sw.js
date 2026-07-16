@@ -8,7 +8,6 @@ const PRECACHE = [
     '/index.html',
     '/css/menu.css',
     '/css/touch.css',
-    '/data/examples.json',
     '/img/polymorphic.png',
     '/manifest.webmanifest'
 ]
