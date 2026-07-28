@@ -7,25 +7,10 @@
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
 import { stripMediaUrlArg } from './dslSanitize.js'
+import { textEffectsFromParsed } from './textParams.js'
 
 // Shader assets served from the shaders CDN.
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
-
-/**
- * Default text parameters for text effects
- */
-const TEXT_DEFAULTS = {
-    text: 'Hello World',
-    font: 'Nunito',
-    size: 0.1,
-    posX: 0.5,
-    posY: 0.5,
-    color: '#ffffff',
-    rotation: 0,
-    bgColor: '#000000',
-    bgOpacity: 0,
-    justify: 'center'
-}
 
 /**
  * Default media parameters for media effects
@@ -42,7 +27,7 @@ const MEDIA_DEFAULTS = {
 function extractMediaParams(dsl) {
     // Match media(...) calls. The inner pattern tolerates one level of nested
     // parens so URLs that contain them (e.g. ".../File_(1).png" or signed query
-    // strings) aren't truncated at the first ')' — mirrors extractAllTextParams.
+    // strings) aren't truncated at the first ')'.
     const mediaCallRegex = /media\s*\(((?:[^()]*|\([^()]*\))*)\)/i
     const match = dsl.match(mediaCallRegex)
     if (!match) return null
@@ -55,104 +40,6 @@ function extractMediaParams(dsl) {
     if (urlMatch) params.url = urlMatch[1]
 
     return params.url ? params : null
-}
-
-/**
- * Extract text effect parameters from DSL
- * @param {string} dsl - DSL source code
- * @returns {Object|null} Text parameters or null if no text effect
- * @deprecated Use extractAllTextParams instead
- */
-function extractTextParams(dsl) {
-    // Match .text(...) calls
-    const textCallRegex = /\.text\s*\(([^)]*)\)/i
-    const match = dsl.match(textCallRegex)
-    if (!match) return null
-
-    return parseTextParamsString(match[1])
-}
-
-/**
- * Parse a text params string into a params object
- * @param {string} paramsStr - The parameters inside .text(...)
- * @returns {Object} Parsed parameters
- */
-function parseTextParamsString(paramsStr) {
-    const params = { ...TEXT_DEFAULTS }
-
-    // Extract parameters
-    const extractParam = (name, regex) => {
-        const m = paramsStr.match(regex)
-        return m ? m[1] : null
-    }
-
-    // String params
-    const text = extractParam('text', /text\s*:\s*["']([^"']+)["']/i)
-    if (text) params.text = text
-
-    const font = extractParam('font', /font\s*:\s*["']([^"']+)["']/i)
-    if (font) params.font = font
-
-    const color = extractParam('color', /color\s*:\s*#([a-f0-9]{6,8})/i)
-    if (color) params.color = `#${color.substring(0, 6)}`
-
-    const bgColor = extractParam('bgColor', /bgColor\s*:\s*#([a-f0-9]{6,8})/i)
-    if (bgColor) params.bgColor = `#${bgColor.substring(0, 6)}`
-
-    const justify = extractParam('justify', /justify\s*:\s*(\w+)/i)
-    if (justify) params.justify = justify
-
-    // Numeric params
-    const size = extractParam('size', /size\s*:\s*([\d.]+)/i)
-    if (size) params.size = parseFloat(size)
-
-    const posX = extractParam('posX', /posX\s*:\s*([\d.]+)/i)
-    if (posX) params.posX = parseFloat(posX)
-
-    const posY = extractParam('posY', /posY\s*:\s*([\d.]+)/i)
-    if (posY) params.posY = parseFloat(posY)
-
-    const rotation = extractParam('rotation', /rotation\s*:\s*([\d.-]+)/i)
-    if (rotation) params.rotation = parseFloat(rotation)
-
-    const bgOpacity = extractParam('bgOpacity', /bgOpacity\s*:\s*([\d.]+)/i)
-    if (bgOpacity) params.bgOpacity = parseFloat(bgOpacity)
-
-    return params
-}
-
-/**
- * Extract ALL text effect parameters from DSL with their positions
- * @param {string} dsl - DSL source code
- * @returns {Array<{params: Object, matchIndex: number}>} Array of text params with match positions
- */
-function extractAllTextParams(dsl) {
-    const results = []
-    // Match ALL .text(...) calls globally - handle nested parens and multiline
-    const textCallRegex = /\.text\s*\(((?:[^()]*|\([^()]*\))*)\)/gi
-    let match
-    
-    while ((match = textCallRegex.exec(dsl)) !== null) {
-        const params = parseTextParamsString(match[1])
-        results.push({
-            params,
-            matchIndex: match.index
-        })
-    }
-    
-    return results
-}
-
-/**
- * Parse hex color to RGB array (0-1 range)
- */
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-    return result ? [
-        parseInt(result[1], 16) / 255,
-        parseInt(result[2], 16) / 255,
-        parseInt(result[3], 16) / 255
-    ] : [1, 1, 1]
 }
 
 /**
@@ -187,8 +74,8 @@ export class PolymorphicRenderer {
 
         this._initialized = false
 
-        // Text texture canvas (created on demand)
-        this._textCanvas = null
+        // Text texture canvases, one per text effect, keyed by step index
+        this._textCanvases = new Map()
     }
 
     /**
@@ -283,8 +170,9 @@ export class PolymorphicRenderer {
 
         try {
             // The engine never sees media() url args (it rejects them); strip
-            // them for every engine/parser call. Param extraction below still
-            // reads url/text from the original `dsl`.
+            // them for every engine/parser call. Media url extraction below
+            // still reads from the original `dsl`, since that is the only copy
+            // that still carries the url.
             const engineDsl = stripMediaUrlArg(dsl)
 
             // Extract effect names and load them if needed
@@ -300,27 +188,19 @@ export class PolymorphicRenderer {
             // Compile the DSL
             await this._renderer.compile(engineDsl)
 
-            // Check for text effects and render text textures (supports multiple)
-            const allTextParams = extractAllTextParams(dsl)
-            const textStepIndices = this._findAllTextStepIndices(engineDsl)
-            
-            if (allTextParams.length > 0) {
-                // Store for re-rendering on resize
-                this._lastAllTextParams = []
-                
+            // Check for text effects and render text textures (supports multiple).
+            // Parameters and step indices come from the same parse of the DSL the
+            // engine compiled, so they cannot drift out of step with each other.
+            this._lastAllTextParams = this._extractTextEffects(engineDsl)
+
+            if (this._lastAllTextParams.length > 0) {
                 // Wait until the pipeline backend can accept the text texture
                 await this._waitForPipeline()
 
                 // Render each text effect
-                for (let i = 0; i < allTextParams.length; i++) {
-                    const { params } = allTextParams[i]
-                    const stepIndex = textStepIndices[i] !== undefined ? textStepIndices[i] : i
-                    
-                    this._lastAllTextParams.push({ params, stepIndex })
+                for (const { params, stepIndex } of this._lastAllTextParams) {
                     this._renderTextTexture(params, stepIndex)
                 }
-            } else {
-                this._lastAllTextParams = []
             }
 
             // Check for media effects and load image
@@ -382,43 +262,23 @@ export class PolymorphicRenderer {
     }
 
     /**
-     * Find the step index for a text effect in the DSL
+     * Collect the text effects in a DSL program along with their parameters.
+     *
+     * Uses the bundle's DSL parser rather than matching on the DSL source, so
+     * the text arrives exactly as authored — including multi-line triple-quoted
+     * strings, and quotes or parens inside the text itself.
+     *
      * @param {string} dsl - DSL source code
-     * @returns {number} Step index (0-based)
-     * @private
-     * @deprecated Use _findAllTextStepIndices instead
-     */
-    _findTextStepIndex(dsl) {
-        const indices = this._findAllTextStepIndices(dsl)
-        return indices[0] || 0
-    }
-
-    /**
-     * Find ALL step indices for text effects in the DSL
-     * @param {string} dsl - DSL source code
-     * @returns {number[]} Array of step indices (0-based)
+     * @returns {Array<{params: object, stepIndex: number}>} One entry per text effect
      * @private
      */
-    _findAllTextStepIndices(dsl) {
-        const indices = []
+    _extractTextEffects(dsl) {
         try {
-            // Use the bundle's DSL parser to get effect info
-            const effects = extractEffectsFromDsl(dsl)
-
-            // Find ALL text effects
-            for (const effect of effects) {
-                if (effect.name === 'text' || effect.fullName === 'filter.text' || effect.effectKey === 'text') {
-                    // Use effect.temp which matches the pipeline's texture binding
-                    // (pass.stepIndex = step.temp), NOT effect.stepIndex (globalStepIndex)
-                    const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
-                    indices.push(stepIndex)
-                }
-            }
+            return textEffectsFromParsed(extractEffectsFromDsl(dsl))
         } catch (err) {
-            console.warn('Failed to parse DSL for text step indices:', err)
+            console.warn('Failed to parse DSL for text effects:', err)
+            return []
         }
-
-        return indices
     }
 
     /**
@@ -536,13 +396,15 @@ export class PolymorphicRenderer {
     _renderTextTexture(params, stepIndex = 0) {
         if (!this._renderer._pipeline) return
 
-        // Create text canvas if needed
-        if (!this._textCanvas) {
-            this._textCanvas = document.createElement('canvas')
-            this._textCanvas.style.display = 'none'
+        // One canvas per text effect, so a program with several text overlays
+        // cannot have one step's rasterization clobber another's.
+        let canvas = this._textCanvases.get(stepIndex)
+        if (!canvas) {
+            canvas = document.createElement('canvas')
+            canvas.style.display = 'none'
+            this._textCanvases.set(stepIndex, canvas)
         }
 
-        const canvas = this._textCanvas
         // Match the actual canvas dimensions (not just width)
         canvas.width = this.width
         canvas.height = this.height
@@ -550,7 +412,7 @@ export class PolymorphicRenderer {
         const ctx = canvas.getContext('2d')
 
         // Clear with background color
-        const bgColor = hexToRgb(params.bgColor)
+        const bgColor = params.bgColor
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         if (params.bgOpacity > 0) {
             ctx.fillStyle = `rgba(${Math.round(bgColor[0] * 255)}, ${Math.round(bgColor[1] * 255)}, ${Math.round(bgColor[2] * 255)}, ${params.bgOpacity})`
@@ -569,7 +431,7 @@ export class PolymorphicRenderer {
         ctx.textAlign = params.justify
         ctx.textBaseline = 'middle'
 
-        const textColor = hexToRgb(params.color)
+        const textColor = params.color
         ctx.fillStyle = `rgba(${Math.round(textColor[0] * 255)}, ${Math.round(textColor[1] * 255)}, ${Math.round(textColor[2] * 255)}, 1)`
 
         // Position and rotation
@@ -630,6 +492,7 @@ export class PolymorphicRenderer {
      */
     dispose() {
         this.stop()
+        this._textCanvases.clear()
         if (this._renderer.dispose) {
             this._renderer.dispose()
         }
