@@ -7,7 +7,11 @@
 
 const APP_VERSION = '0.11'
 
-import { AboutDialog, dslTokenizer } from 'handfish'
+import { AboutDialog, dslTokenizer, initEscapeHandler } from 'handfish'
+
+// One global Escape handler for handfish components (menu bar, dialogs).
+// Required once per app by the handfish escape-stack contract.
+initEscapeHandler()
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { ProgramState, getEffect } from './noisemaker/bundle.js'
 import { restoreMediaUrls } from './noisemaker/dslSanitize.js'
@@ -54,29 +58,6 @@ dslEditor?.setTokenizer?.(dslTokenizer)
 const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
-// Menu bar elements
-const codeToggleBtn = document.getElementById('code-toggle-btn')
-const docToggleBtn = document.getElementById('doc-toggle-btn')
-const fullscreenBtnMenu = document.getElementById('fullscreen-btn-menu')
-const playPauseBtnMenu = document.getElementById('play-pause-btn-menu')
-const inputsToggleBtn = document.getElementById('inputs-toggle-btn')
-const recordToggleBtn = document.getElementById('record-toggle-btn')
-const perfToggleBtn = document.getElementById('perf-toggle-btn')
-const galleryBtn = document.getElementById('gallery-btn')
-
-// Menu items
-const resetMenuItem = document.getElementById('resetMenuItem')
-const shareProgram = document.getElementById('shareProgram')
-const copyProgram = document.getElementById('copyProgram')
-const pasteProgram = document.getElementById('pasteProgram')
-const saveProgram = document.getElementById('saveProgram')
-const loadProgram = document.getElementById('loadProgram')
-const deleteProgram = document.getElementById('deleteProgram')
-const savePNG = document.getElementById('savePNG')
-const saveJPG = document.getElementById('saveJPG')
-const aboutMenuItem = document.getElementById('aboutMenuItem')
-const docsMenuItem = document.getElementById('docsMenuItem')
-const goOnlineMenuItem = document.getElementById('goOnlineMenuItem')
 const seanceDialog = document.getElementById('seanceDialog')
 const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
 
@@ -120,6 +101,234 @@ let isPlaying = false
 // share via the share modal.
 let loadedFromShareCode = false
 
+// Online-collaboration UI visibility (kill-switch; see setOnlineCollaborationUiVisible)
+let onlineCollabUiVisible = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
+
+const menuBarEl = document.getElementById('menu')
+
+function refreshMenuBar() {
+    menuBarEl?.refresh?.()
+}
+
+// Config for the shared handfish <menu-bar>. Handlers are the same closures
+// the old per-id listeners ran; dynamic fields are pulled on menu open,
+// after every activation, and on refreshMenuBar().
+if (menuBarEl) {
+    menuBarEl.config = {
+        ariaLabel: 'Polymorphic menu',
+        regions: {
+            left: [
+                {
+                    type: 'menu',
+                    id: 'logoMenu',
+                    trigger: {
+                        html: '<svg id="logo" width="1.25em" height="1.5em" viewBox="0 0 600 600" fill="currentColor"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M3920 5709 c-248 -32 -507 -143 -790 -337 -282 -194 -349 -237 -426 -273 -178 -84 -313 -93 -571 -35 -246 55 -390 46 -560 -33 -133 -63 -288 -192 -382 -320 -151 -205 -169 -380 -64 -639 102 -254 266 -430 506 -542 337 -158 633 -99 816 161 65 92 103 201 147 417 41 204 68 288 126 390 147 257 354 383 577 352 107 -14 189 -57 273 -142 238 -242 203 -643 -87 -978 -132 -153 -293 -269 -673 -487 -263 -151 -533 -321 -692 -439 -277 -204 -450 -460 -499 -738 -31 -172 11 -257 146 -297 39 -11 45 -10 81 13 93 62 198 105 337 139 76 19 118 23 275 23 160 -1 197 -4 270 -23 105 -28 224 -84 309 -145 71 -50 103 -57 164 -31 52 22 93 60 111 105 21 53 39 292 31 415 -3 55 -13 161 -22 235 -24 208 -22 397 5 493 41 145 108 258 269 455 228 278 568 616 908 902 265 223 372 356 411 513 22 93 15 298 -15 412 -33 123 -65 181 -151 267 -111 111 -197 146 -409 168 -119 12 -327 11 -421 -1z"/><path d="M2316 1660 c-220 -35 -399 -121 -519 -250 -119 -128 -163 -247 -154 -415 9 -173 75 -340 187 -473 57 -67 152 -147 214 -179 113 -58 273 -77 416 -49 347 68 650 439 650 796 0 152 -41 242 -166 361 -165 157 -418 241 -628 209z"/></g></svg>',
+                        ariaLabel: 'Polymorphic menu',
+                    },
+                    items: [
+                        { id: 'aboutMenuItem', label: 'about Polymorphic', onSelect: () => aboutDialog.show() },
+                        { type: 'separator' },
+                        { id: 'docsMenuItem', label: 'documentation', onSelect: () => showDocReader() },
+                    ],
+                },
+                {
+                    type: 'menu',
+                    id: 'fileMenu',
+                    trigger: { label: 'file', id: 'fileMenuTitle' },
+                    items: [
+                        {
+                            id: 'savePNG',
+                            label: 'quick save as png',
+                            onSelect: () => {
+                                if (canvas) {
+                                    const link = document.createElement('a')
+                                    link.download = 'polymorphic.png'
+                                    link.href = canvas.toDataURL('image/png')
+                                    link.click()
+                                }
+                            },
+                        },
+                        {
+                            id: 'saveJPG',
+                            label: 'quick save as jpg',
+                            onSelect: () => {
+                                if (canvas) {
+                                    const link = document.createElement('a')
+                                    link.download = 'polymorphic.jpg'
+                                    link.href = canvas.toDataURL('image/jpeg', 0.95)
+                                    link.click()
+                                }
+                            },
+                        },
+                        { type: 'separator' },
+                        { id: 'importFromZipMenuItem', label: 'import effect from zip...', onSelect: () => importEffectDialog.open() },
+                    ],
+                },
+                {
+                    type: 'menu',
+                    id: 'editMenu',
+                    trigger: { label: 'edit', id: 'editMenuTitle' },
+                    items: [
+                        { id: 'resetMenuItem', label: 'reset to original', onSelect: () => resetDsl() },
+                    ],
+                },
+                {
+                    type: 'menu',
+                    id: 'viewMenu',
+                    trigger: { label: 'view', id: 'viewMenuTitle' },
+                    items: [
+                        { type: 'checkbox', id: 'viewMenuItem-editor', classes: 'view-item', label: 'code editor',
+                          checked: () => dslOverlay?.style.display !== 'none',
+                          onSelect: () => toggleDslOverlay() },
+                        { type: 'checkbox', id: 'viewMenuItem-docs', classes: 'view-item', label: 'documentation',
+                          checked: () => isDocReaderVisible(),
+                          onSelect: () => { toggleDocReader() } },
+                        { type: 'checkbox', id: 'viewMenuItem-live-inputs', classes: 'view-item', label: 'live inputs',
+                          checked: () => liveInputsPanel.isOpen(),
+                          onSelect: () => { liveInputsPanel.toggle() } },
+                        { type: 'checkbox', id: 'viewMenuItem-surface-pips', classes: 'view-item', label: 'surface pips',
+                          checked: () => outputPicker.isEnabled(),
+                          onSelect: () => outputPicker.toggle() },
+                        { type: 'separator' },
+                        { type: 'checkbox', id: 'viewMenuItem-perf', classes: 'view-item', label: 'performance overlay',
+                          checked: () => perfOverlay.isOpen(),
+                          onSelect: () => { perfOverlay.toggle() } },
+                        { type: 'checkbox', id: 'viewMenuItem-status', classes: 'view-item', label: 'status row',
+                          checked: () => statusRow.isOpen(),
+                          onSelect: () => statusRow.toggle() },
+                        { type: 'separator' },
+                        { id: 'viewMenuItem-gallery', classes: 'view-item', label: 'gallery…',
+                          onSelect: () => gallery.open().catch(err => console.error('[Gallery] open failed:', err)) },
+                        { id: 'viewMenuItem-shortcuts', classes: 'view-item', label: 'keyboard shortcuts…', onSelect: () => shortcutsDialog.open() },
+                        { type: 'separator' },
+                        { type: 'checkbox', id: 'viewMenuItem-performance-mode', classes: 'view-item', label: 'performance mode',
+                          checked: () => document.body.classList.contains('performance-mode'),
+                          onSelect: () => togglePerformanceMode() },
+                        { type: 'checkbox', id: 'viewMenuItem-fullscreen', classes: 'view-item', label: 'fullscreen',
+                          checked: () => !!document.fullscreenElement,
+                          onSelect: () => toggleFullscreen() },
+                        { type: 'separator' },
+                        { id: 'viewMenuItem-open-viewport-window', classes: 'view-item', label: 'open viewport window', onSelect: () => openViewportWindow() },
+                    ],
+                },
+                {
+                    type: 'menu',
+                    id: 'programMenu',
+                    trigger: { label: 'program', id: 'programMenuTitle' },
+                    items: [
+                        {
+                            id: 'copyProgram',
+                            label: 'copy program',
+                            onSelect: async () => {
+                                const dsl = dslEditor?.value || ''
+                                try {
+                                    await navigator.clipboard.writeText(dsl)
+                                    console.log('Program copied to clipboard')
+                                } catch (err) {
+                                    console.error('Failed to copy program:', err)
+                                }
+                            },
+                        },
+                        {
+                            id: 'pasteProgram',
+                            label: 'paste program',
+                            onSelect: async () => {
+                                try {
+                                    const text = await navigator.clipboard.readText()
+                                    if (dslEditor && text) {
+                                        dslEditor.value = text
+                                        publishLocalDsl('paste')
+                                        updateResetButtonVisibility()
+                                        scheduleHotReload()
+                                    }
+                                } catch (err) {
+                                    console.error('Failed to paste program:', err)
+                                }
+                            },
+                        },
+                        { type: 'separator' },
+                        { id: 'saveProgram', label: 'save program', onSelect: () => openProgramModal('save') },
+                        { id: 'loadProgram', label: 'load program', onSelect: () => openProgramModal('load') },
+                        { id: 'deleteProgram', label: 'delete program', onSelect: () => openProgramModal('delete') },
+                        { type: 'separator' },
+                        { id: 'editInNoisedeckMenuItem', label: 'edit in Noisedeck...', onSelect: () => handleEditInNoisedeck() },
+                        { id: 'editInNoodlesMenuItem', label: 'edit in Noodles...', onSelect: () => handleEditInNoodles() },
+                        { type: 'separator' },
+                        {
+                            id: 'importFromUrlMenuItem',
+                            label: 'import from url...',
+                            onSelect: () => {
+                                importFromUrlDialog.open({
+                                    onLoad: (composition) => handleLoadFromUrl(composition)
+                                })
+                            },
+                        },
+                        {
+                            id: 'shareProgram',
+                            label: 'share publicly...',
+                            onSelect: () => {
+                                const dsl = dslEditor?.value || ''
+                                shareModal.open({ dsl, canvas })
+                            },
+                        },
+                        { type: 'separator', id: 'onlineCollabMenuSeparator', hidden: () => !onlineCollabUiVisible },
+                        { id: 'goOnlineMenuItem', label: 'go online...', hidden: () => !onlineCollabUiVisible, onSelect: () => seanceDialog?.show() },
+                    ],
+                },
+            ],
+            center: [],
+            right: [
+                { type: 'button', id: 'gallery-btn', icon: 'collections', tooltip: 'gallery', ariaLabel: 'Open inspiration gallery',
+                  onSelect: () => gallery.open().catch(err => console.error('[Gallery] open failed:', err)) },
+                { type: 'button', id: 'inputs-toggle-btn', icon: 'tune', tooltip: 'live inputs', ariaLabel: 'Toggle live inputs',
+                  active: () => liveInputsPanel.isOpen(),
+                  onSelect: () => liveInputsPanel.toggle() },
+                { type: 'button', id: 'record-toggle-btn', icon: 'fiber_manual_record', tooltip: () => recorder.isRecording() ? 'stop recording' : 'record', ariaLabel: 'Toggle recording',
+                  active: () => recorder.isRecording(),
+                  onSelect: () => { if (recorder.isRecording()) recorder.stop(); else recorder.start() } },
+                { type: 'button', id: 'perf-toggle-btn', icon: 'speed', tooltip: 'performance', ariaLabel: 'Toggle performance overlay',
+                  active: () => perfOverlay.isOpen(),
+                  onSelect: () => perfOverlay.toggle() },
+                { type: 'button', id: 'doc-toggle-btn', icon: 'info', tooltip: 'documentation', ariaLabel: 'Toggle documentation',
+                  active: () => isDocReaderVisible(),
+                  onSelect: () => { toggleDocReader() } },
+                { type: 'button', id: 'code-toggle-btn', icon: 'code', tooltip: 'code editor', ariaLabel: 'Toggle code view',
+                  active: () => dslOverlay?.style.display !== 'none',
+                  onSelect: () => toggleDslOverlay() },
+                { type: 'button', id: 'fullscreen-btn-menu', icon: () => document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen',
+                  tooltip: 'fullscreen', ariaLabel: 'Toggle fullscreen',
+                  onSelect: () => toggleFullscreen() },
+                { type: 'button', id: 'play-pause-btn-menu',
+                  icon: () => isPlaying ? 'pause' : 'play_arrow',
+                  tooltip: () => isPlaying ? 'pause' : 'play',
+                  ariaLabel: () => isPlaying ? 'Pause animation' : 'Play animation',
+                  onSelect: () => togglePlayPause() },
+            ],
+        },
+    }
+}
+
+// Menu bar elements
+const codeToggleBtn = document.getElementById('code-toggle-btn')
+const docToggleBtn = document.getElementById('doc-toggle-btn')
+const inputsToggleBtn = document.getElementById('inputs-toggle-btn')
+const recordToggleBtn = document.getElementById('record-toggle-btn')
+const perfToggleBtn = document.getElementById('perf-toggle-btn')
+
+// Menu items
+const resetMenuItem = document.getElementById('resetMenuItem')
+const shareProgram = document.getElementById('shareProgram')
+const copyProgram = document.getElementById('copyProgram')
+const pasteProgram = document.getElementById('pasteProgram')
+const saveProgram = document.getElementById('saveProgram')
+const loadProgram = document.getElementById('loadProgram')
+const deleteProgram = document.getElementById('deleteProgram')
+const savePNG = document.getElementById('savePNG')
+const saveJPG = document.getElementById('saveJPG')
+const aboutMenuItem = document.getElementById('aboutMenuItem')
+const docsMenuItem = document.getElementById('docsMenuItem')
+const goOnlineMenuItem = document.getElementById('goOnlineMenuItem')
+
 // =========================================================================
 // Imported Effect Storage (for the "edit in <app>" menu options)
 // =========================================================================
@@ -151,10 +360,8 @@ function isFeatureEnabled(name) {
 }
 
 function setOnlineCollaborationUiVisible(visible) {
-    const separator = document.getElementById('onlineCollabMenuSeparator')
-    for (const el of [goOnlineMenuItem, separator]) {
-        if (el) el.hidden = !visible
-    }
+    onlineCollabUiVisible = visible
+    refreshMenuBar()
     if (!visible && seanceDialog) seanceDialog.hide?.()
 }
 
@@ -444,23 +651,18 @@ function hideCompilerError() {
  * Toggle play/pause state
  */
 function togglePlayPause() {
-    if (!renderer || !playPauseBtnMenu) return
-    
+    if (!renderer) return
+
     isPlaying = !isPlaying
-    
+
     if (isPlaying) {
         renderer.start()
-        playPauseBtnMenu.textContent = 'pause'
-        playPauseBtnMenu.setAttribute('data-title', 'pause')
-        playPauseBtnMenu.setAttribute('aria-label', 'Pause animation')
         canvas.classList.remove('paused')
     } else {
         renderer.stop()
-        playPauseBtnMenu.textContent = 'play_arrow'
-        playPauseBtnMenu.setAttribute('data-title', 'play')
-        playPauseBtnMenu.setAttribute('aria-label', 'Play animation')
         canvas.classList.add('paused')
     }
+    refreshMenuBar()
 }
 
 /**
@@ -594,8 +796,8 @@ function toggleFullscreen() {
  * Update fullscreen button icon based on current state
  */
 function updateFullscreenButton() {
-    if (!fullscreenBtnMenu) return
-    fullscreenBtnMenu.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen'
+    // The menu bar's fullscreen button pulls document.fullscreenElement.
+    refreshMenuBar()
 }
 
 /**
@@ -651,8 +853,9 @@ function showCanvas() {
     if (dslEditor) {
         dslEditor.focus()
     }
-    
+
     isPlaying = true
+    refreshMenuBar()
 }
 
 function publishLocalDsl(source) {
@@ -703,7 +906,7 @@ function setupOnlineCollaboration() {
         showToast,
     })
     onlineAdapter.wireUi()
-    goOnlineMenuItem?.addEventListener('click', () => seanceDialog?.show())
+    // "go online..." is a menu-bar item wired via its config (seanceDialog.show)
 }
 
 async function joinOnlineSessionFromUrlIfPresent() {
@@ -1060,9 +1263,7 @@ function toggleDslOverlay() {
     if (!dslOverlay) return
     const isHidden = dslOverlay.style.display === 'none'
     dslOverlay.style.display = isHidden ? '' : 'none'
-    if (codeToggleBtn) {
-        codeToggleBtn.classList.toggle('active', isHidden)
-    }
+    refreshMenuBar()
     // Hide compiler error when editor is closed
     if (!isHidden) {
         hideCompilerError()
@@ -1788,7 +1989,7 @@ async function startShader() {
             quality: 'standard',
             onChange: ({ recording }) => {
                 recordToggleBtn?.classList.toggle('recording', recording)
-                recordToggleBtn?.setAttribute('data-title', recording ? 'stop recording' : 'record')
+                refreshMenuBar()
                 statusRow.setRecording(recording)
             }
         })
@@ -1853,228 +2054,12 @@ async function startShader() {
  * Set up menu bar dropdowns and handlers
  */
 function setupMenuBar() {
-    const menus = document.querySelectorAll('#menuLeft .menu')
-    
-    // Toggle dropdown on click
-    menus.forEach(menu => {
-        const title = menu.querySelector('.menu-title')
-        const items = menu.querySelector('.menu-items')
-        
-        if (title && items) {
-            title.addEventListener('click', (e) => {
-                e.stopPropagation()
-                
-                // Close other menus
-                menus.forEach(m => {
-                    if (m !== menu) {
-                        m.querySelector('.menu-items')?.classList.add('hide')
-                    }
-                })
-                
-                // Toggle this menu
-                items.classList.toggle('hide')
-            })
-        }
-    })
-    
-    // Close menus when clicking outside
-    document.addEventListener('click', () => {
-        menus.forEach(menu => {
-            menu.querySelector('.menu-items')?.classList.add('hide')
-        })
-    })
-    
-    // Menu item handlers
-    
-    // Program menu
-    if (shareProgram) {
-        shareProgram.addEventListener('click', () => {
-            const dsl = dslEditor?.value || ''
-            shareModal.open({ dsl, canvas })
-        })
-    }
+    // Menu structure, items, and buttons live in the shared <menu-bar>
+    // component config (assigned at module scope above). What remains here is
+    // the app-level keyboard map and listeners that outlive any menu.
 
-    // Edit in Noisedeck
-    const editInNoisedeckMenuItem = document.getElementById('editInNoisedeckMenuItem')
-    if (editInNoisedeckMenuItem) {
-        editInNoisedeckMenuItem.addEventListener('click', () => {
-            handleEditInNoisedeck()
-            // Close menus
-            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
-        })
-    }
-
-    // Edit in Noodles
-    const editInNoodlesMenuItem = document.getElementById('editInNoodlesMenuItem')
-    if (editInNoodlesMenuItem) {
-        editInNoodlesMenuItem.addEventListener('click', () => {
-            handleEditInNoodles()
-            // Close menus
-            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
-        })
-    }
-    
-    // Import from URL
-    const importFromUrlMenuItem = document.getElementById('importFromUrlMenuItem')
-    if (importFromUrlMenuItem) {
-        importFromUrlMenuItem.addEventListener('click', () => {
-            importFromUrlDialog.open({
-                onLoad: (composition) => handleLoadFromUrl(composition)
-            })
-            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
-        })
-    }
-    
-    if (copyProgram) {
-        copyProgram.addEventListener('click', async () => {
-            const dsl = dslEditor?.value || ''
-            try {
-                await navigator.clipboard.writeText(dsl)
-                console.log('Program copied to clipboard')
-            } catch (err) {
-                console.error('Failed to copy program:', err)
-            }
-        })
-    }
-    
-    if (pasteProgram) {
-        pasteProgram.addEventListener('click', async () => {
-            try {
-                const text = await navigator.clipboard.readText()
-                if (dslEditor && text) {
-                    dslEditor.value = text
-                    publishLocalDsl('paste')
-                    updateResetButtonVisibility()
-                    scheduleHotReload()
-                }
-            } catch (err) {
-                console.error('Failed to paste program:', err)
-            }
-        })
-    }
-    
-    // Save/Load/Delete program handlers
-    if (saveProgram) {
-        saveProgram.addEventListener('click', () => {
-            openProgramModal('save')
-        })
-    }
-    
-    if (loadProgram) {
-        loadProgram.addEventListener('click', () => {
-            openProgramModal('load')
-        })
-    }
-    
-    if (deleteProgram) {
-        deleteProgram.addEventListener('click', () => {
-            openProgramModal('delete')
-        })
-    }
-    
-    // Edit menu
-    if (resetMenuItem) {
-        resetMenuItem.addEventListener('click', resetDsl)
-    }
-    
-    // Import from ZIP
-    const importFromZipMenuItem = document.getElementById('importFromZipMenuItem')
-    if (importFromZipMenuItem) {
-        importFromZipMenuItem.addEventListener('click', () => {
-            importEffectDialog.open()
-            // Close menus
-            document.querySelectorAll('#menuLeft .menu-items').forEach(el => el.classList.add('hide'))
-        })
-    }
-    
-    // File menu
-    if (savePNG) {
-        savePNG.addEventListener('click', () => {
-            if (canvas) {
-                const link = document.createElement('a')
-                link.download = 'polymorphic.png'
-                link.href = canvas.toDataURL('image/png')
-                link.click()
-            }
-        })
-    }
-    
-    if (saveJPG) {
-        saveJPG.addEventListener('click', () => {
-            if (canvas) {
-                const link = document.createElement('a')
-                link.download = 'polymorphic.jpg'
-                link.href = canvas.toDataURL('image/jpeg', 0.95)
-                link.click()
-            }
-        })
-    }
-    
-    // Logo menu
-    if (aboutMenuItem) {
-        aboutMenuItem.addEventListener('click', () => {
-            aboutDialog.show()
-        })
-    }
-
-    if (docsMenuItem) {
-        docsMenuItem.addEventListener('click', () => {
-            showDocReader()
-            if (docToggleBtn) {
-                docToggleBtn.classList.add('active')
-            }
-        })
-    }
-
-    // View menu — toggleable panels with checkmark indicators
-    setupViewMenu()
-    
-    // Right side icon buttons
-    if (codeToggleBtn) {
-        codeToggleBtn.addEventListener('click', toggleDslOverlay)
-    }
-    
-    if (docToggleBtn) {
-        docToggleBtn.addEventListener('click', () => {
-            const isVisible = toggleDocReader()
-            docToggleBtn.classList.toggle('active', isVisible)
-        })
-    }
-    
-    if (fullscreenBtnMenu) {
-        fullscreenBtnMenu.addEventListener('click', toggleFullscreen)
-    }
-    
-    if (playPauseBtnMenu) {
-        playPauseBtnMenu.addEventListener('click', togglePlayPause)
-    }
-
-    if (inputsToggleBtn) {
-        inputsToggleBtn.addEventListener('click', () => {
-            liveInputsPanel.toggle()
-            inputsToggleBtn.classList.toggle('active', liveInputsPanel.isOpen())
-        })
-    }
-
-    if (recordToggleBtn) {
-        recordToggleBtn.addEventListener('click', () => {
-            if (recorder.isRecording()) recorder.stop()
-            else recorder.start()
-        })
-    }
-
-    if (perfToggleBtn) {
-        perfToggleBtn.addEventListener('click', () => {
-            perfOverlay.toggle()
-            perfToggleBtn.classList.toggle('active', perfOverlay.isOpen())
-        })
-    }
-
-    if (galleryBtn) {
-        galleryBtn.addEventListener('click', () => {
-            gallery.open().catch(err => console.error('[Gallery] open failed:', err))
-        })
-    }
+    // Viewport window popup mirror needs the canvas reference.
+    configureViewportWindow({ canvas })
 
     // Snapshot history shortcuts (Cmd/Ctrl+Alt+Left/Right)
     document.addEventListener('keydown', (e) => {
@@ -2198,9 +2183,7 @@ function init() {
     });
     showPlaceholderContent()
     showDocReader()
-    if (docToggleBtn) {
-        docToggleBtn.classList.add('active')
-    }
+    refreshMenuBar()
     
     // Initialize program modal
     initProgramModal({
@@ -2226,9 +2209,7 @@ function init() {
     if (docReaderClose) {
         docReaderClose.addEventListener('click', () => {
             hideDocReader()
-            if (docToggleBtn) {
-                docToggleBtn.classList.remove('active')
-            }
+            refreshMenuBar()
         })
     }
     
@@ -2305,89 +2286,6 @@ function init() {
 
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()
-}
-
-/**
- * Wire the View menu — toggle panels and reflect their state with a check.
- *
- * Each menu item with a `data-view-toggle` attribute owns a panel-toggle
- * action. When the menu's parent is opened (click on its title), we refresh
- * the check states from the actual panel visibility. Clicking an item
- * toggles the panel and re-syncs.
- */
-function setupViewMenu() {
-    const menu = document.getElementById('viewMenuTitle')?.closest('.menu')
-    if (!menu) return
-
-    // Map each toggle id to (read state, toggle action) functions.
-    const toggles = {
-        'editor':           { is: () => dslOverlay?.style.display !== 'none', do: () => toggleDslOverlay() },
-        'docs':             { is: () => isDocReaderVisible(),                do: () => {
-            const visible = toggleDocReader()
-            docToggleBtn?.classList.toggle('active', visible)
-        }},
-        'live-inputs':      { is: () => liveInputsPanel.isOpen(),            do: () => {
-            liveInputsPanel.toggle()
-            inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
-        }},
-        'surface-pips':     { is: () => outputPicker.isEnabled(),            do: () => outputPicker.toggle() },
-        'perf':             { is: () => perfOverlay.isOpen(),                do: () => {
-            perfOverlay.toggle()
-            perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
-        }},
-        'status':           { is: () => statusRow.isOpen(),                  do: () => statusRow.toggle() },
-        'performance-mode': { is: () => document.body.classList.contains('performance-mode'), do: () => togglePerformanceMode() },
-        'fullscreen':       { is: () => !!document.fullscreenElement,        do: () => toggleFullscreen() }
-    }
-
-    function refreshChecks() {
-        for (const [id, { is }] of Object.entries(toggles)) {
-            const item = document.querySelector(`[data-view-toggle="${id}"]`)
-            if (!item) continue
-            item.classList.toggle('checked', !!is())
-            const check = item.querySelector('.view-check')
-            if (check) check.textContent = is() ? '✓' : ''
-        }
-    }
-
-    // Refresh when the View menu opens
-    const title = document.getElementById('viewMenuTitle')
-    title?.addEventListener('click', () => {
-        // Use rAF so the dropdown's `.hide` toggle (handled by the generic
-        // menu-bar listener) has time to apply before we read state.
-        requestAnimationFrame(refreshChecks)
-    })
-
-    // Wire each toggle item
-    for (const [id, { do: action }] of Object.entries(toggles)) {
-        const item = document.querySelector(`[data-view-toggle="${id}"]`)
-        item?.addEventListener('click', () => {
-            action()
-            refreshChecks()
-        })
-    }
-
-    // One-shot actions (gallery, shortcuts) — open and let the generic menu
-    // close-on-click handler dismiss the dropdown.
-    document.getElementById('viewMenuItem-gallery')?.addEventListener('click', () => {
-        gallery.open().catch(err => console.error('[Gallery] open failed:', err))
-    })
-    document.getElementById('viewMenuItem-shortcuts')?.addEventListener('click', () => {
-        shortcutsDialog.open()
-    })
-
-    // Viewport window: opens a popup mirror of the canvas for full-screen
-    // display on a secondary monitor. Idempotent — focuses an existing popup.
-    configureViewportWindow({ canvas })
-    document.getElementById('viewMenuItem-open-viewport-window')?.addEventListener('click', () => {
-        openViewportWindow()
-    })
-
-    // Initial state
-    refreshChecks()
-
-    // Listen for fullscreen changes externally so the check stays accurate
-    document.addEventListener('fullscreenchange', refreshChecks)
 }
 
 /**

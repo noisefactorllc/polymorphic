@@ -4,7 +4,7 @@
    bottom sheet so the canvas can stay full-width. */
 @media (hover: none) and (pointer: coarse), (max-width: 768px) {
     body { font-size: 15px; }
-    #menu { font-size: 14px; }
+    #menu .hf-menubar { font-size: 14px; }
 
     /* Right-side overlays become bottom sheets */
     .live-inputs-panel,
@@ -20,7 +20,7 @@
     }
 
     /* Bigger touch targets — higher specificity to override #menu button */
-    #menu .menu-icon-btn { padding: 0.5em 0.65em; font-size: 1.4em; }
+    #menu .hf-menubar-btn { padding: 0.5em 0.65em; font-size: 1.4em; }
     .source-btn, .live-input-toggle { min-height: 36px; }
     .gallery-card { min-height: 44px; }
 

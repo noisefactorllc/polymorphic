@@ -1,6 +1,11 @@
 /**
  * Polymorphic Menu Bar Styles
  * Ported from Noisedeck - exact pixel dimensions
+ *
+ * The menu bar renders as the shared handfish <menu-bar> component; these are
+ * the original Polymorphic menu styles retargeted at the component's DOM so
+ * the bar looks exactly as it always has. Every rule that handfish's defaults
+ * would otherwise change is overridden here.
  */
 
 /* Material Symbols font */
@@ -40,16 +45,16 @@
     --glass-blur-strength: blur(20px);
     --effect-surface-opacity: 85%;
     --effect-surface-transparency: 15%;
-    
+
     /* Chrome gradient settings (matching noisedeck) */
     --ui-chrome-highlight-blend: 86%;
     --ui-chrome-highlight-tint: 14%;
     --ui-chrome-shadow-blend: 72%;
     --ui-chrome-shadow-shade: 28%;
-    
+
     /* Font family definitions */
     --font-accent: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
-    
+
     /* Neutral colors */
     --color2: #141414;
     --color6: #d0d0d0;
@@ -66,8 +71,8 @@
     --menu-border: rgba(255, 255, 255, 0.1);
 }
 
-/* Menu Bar Container */
-#menu {
+/* Menu Bar Container (was #menu; the component wraps its bar in .hf-menubar) */
+#menu .hf-menubar {
     position: fixed;
     top: 0;
     left: 0;
@@ -75,14 +80,16 @@
     height: var(--ui-titlebar-height);
     z-index: 2000;
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     align-items: center;
     border-radius: 0 0 var(--ui-corner-radius) 0;
     font-family: 'Nunito', 'Nunito Block';
     font-size: 16px;
+    color: var(--menu-text);
 }
 
-#menuBackdrop {
+/* was #menuBackdrop */
+#menu .hf-menubar-backdrop {
     position: absolute;
     inset: 0;
     --ui-titlebar-highlight: color-mix(in srgb,
@@ -95,21 +102,19 @@
             var(--ui-titlebar-highlight) 0%,
             var(--menu-bg) 55%,
             var(--ui-titlebar-shadow) 100%);
-    background-color: var(--menu-bg);
-    background-image: var(--ui-titlebar-gradient);
+    background: var(--ui-titlebar-gradient) var(--menu-bg);
+    opacity: 1;
     backdrop-filter: var(--glass-blur-strength);
     -webkit-backdrop-filter: var(--glass-blur-strength);
     pointer-events: none;
     z-index: -1;
-    grid-column: 1 / -1;
-    grid-row: 1;
     border-radius: 0 0 var(--ui-corner-radius) 0;
 }
 
-#menuLeft {
-    grid-column: 1;
-    grid-row: 1;
+/* was #menuLeft */
+#menu .hf-menubar-left {
     padding-left: 0.75em;
+    padding-inline-start: 0.75em;
     display: flex;
     gap: 1.5em;
     color: var(--menu-text);
@@ -117,10 +122,10 @@
     height: 100%;
 }
 
-#menuRight {
-    grid-column: 2;
-    grid-row: 1;
+/* was #menuRight */
+#menu .hf-menubar-right {
     padding-right: 1em;
+    padding-inline-end: 1em;
     display: flex;
     justify-content: flex-end;
     gap: 1em;
@@ -140,22 +145,7 @@
     color: var(--menu-accent-hover);
 }
 
-/* Menu Buttons */
-#menu button {
-    background: none;
-    border: none;
-    color: var(--menu-text);
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    transition: color 0.15s ease;
-    font-size: 1.25em;
-}
-
-#menu span:hover,
-#menu button:hover {
+#menu .hf-menubar span:hover {
     color: var(--menu-text-hover);
 }
 
@@ -167,8 +157,8 @@
     pointer-events: none;
 }
 
-/* Dropdown Menu */
-.menu {
+/* Dropdown Menu (was .menu) */
+#menu .hf-menubar-menu {
     position: relative;
     font-family: 'Nunito', 'Nunito Block';
     font-size: 0.875em;
@@ -182,18 +172,33 @@
     cursor: pointer;
 }
 
-.menu-title {
+/* was .menu-title */
+#menu .hf-menubar-trigger {
     position: relative;
     top: -1px;
     line-height: 1;
     display: inline-flex;
     align-items: center;
     height: 100%;
+    padding: 0;
+    gap: 0;
+    font-size: 1em;
+    color: var(--menu-accent);
+    transition: color 0.15s ease;
 }
 
-.menu-items {
+#menu .hf-menubar-trigger[aria-expanded="true"] {
+    color: var(--menu-accent);
+}
+
+#menu .hf-menubar-trigger:hover {
+    color: var(--menu-accent-hover);
+}
+
+/* was .menu-items */
+#menu .hf-menubar-panel {
     position: absolute;
-    background-color: color-mix(in srgb, var(--menu-bg) var(--effect-surface-opacity), transparent var(--effect-surface-transparency));
+    background: color-mix(in srgb, var(--menu-bg) var(--effect-surface-opacity), transparent var(--effect-surface-transparency));
     color: var(--menu-accent);
     width: max-content;
     min-width: 200px;
@@ -206,83 +211,115 @@
     backdrop-filter: var(--glass-blur-strength);
     -webkit-backdrop-filter: var(--glass-blur-strength);
     border: 1px solid var(--menu-border);
+    box-shadow: none;
+    padding: 0;
 }
 
-.menu-items div {
+/* was .menu-items div */
+#menu .hf-menubar-panel .hf-menu-item {
     padding: 8px 16px;
     cursor: pointer;
     font-size: 0.875rem;
+    font-family: 'Nunito', 'Nunito Block';
+    color: var(--menu-accent);
+    gap: 0;
     transition: color 0.15s ease;
+    border-radius: 0;
+    line-height: 1.5;   /* items were block divs inheriting the body line-height */
 }
 
-.menu-items div:hover {
+#menu .hf-menubar-panel .hf-menu-item:hover {
     background-color: transparent;
     color: var(--menu-accent-hover);
 }
 
-.menu-seperator {
+/* was .menu-seperator */
+#menu .hf-menubar-panel .hf-menu-separator {
     border: none;
     border-top: 1px solid color-mix(in srgb, var(--menu-accent) 20%, transparent 80%);
     margin: 0.25em 0;
+    height: 0;
+    background: none;
 }
 
-/* Menu item with a check indicator (View menu toggles) */
-.menu-items div .view-check {
+/* Menu item with a check indicator (View menu rows; was span.view-check).
+   The component marks checkbox items with aria-checked; every View-menu row
+   carries the .view-item class so one-shot rows reserve the same column. */
+#menu .hf-menubar-panel .hf-menu-item[aria-checked] {
+    font-weight: normal;
+}
+
+#menu .hf-menubar-panel .view-item::before {
+    content: '✓';
     display: inline-block;
     width: 1em;
     margin-right: 0.35em;
+    margin-left: 0;
+    margin-top: 0;
     color: var(--menu-accent);
     font-size: 0.8em;
+    visibility: hidden;
 }
 
-.menu-items div .view-check:empty::before {
-    content: '';
-    display: inline-block;
-    width: 1em;
+#menu .hf-menubar-panel .view-item[aria-checked="true"]::before {
+    visibility: visible;
 }
 
 /* Menu item with keyboard shortcut */
-.menu-item-with-shortcut {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 2em;
-}
-
-.menu-item-with-shortcut .shortcut {
+#menu .hf-menu-shortcut {
     font-size: 0.75rem;
     color: var(--menu-text);
     opacity: 0.6;
 }
 
-/* Hide class */
-.hide {
-    display: none !important;
-}
-
-/* Menu icon button style */
-.menu-icon-btn {
+/* Menu icon button style (was .menu-icon-btn; note the original
+   `#menu button { padding: 0 }` rule out-specified the class's padding,
+   so the buttons effectively rendered with none) */
+#menu .hf-menubar-btn {
     background: none;
     border: none;
     color: var(--menu-text);
     cursor: pointer;
-    padding: 0.18em 0.32em;
+    padding: 0;
+    margin: 0;
     line-height: 1;
+    height: auto;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     border-radius: 6px;
     transition: color 0.15s ease, background 0.15s ease;
-    font-size: 1.2em;
+    font-size: 1.25em;
+    opacity: 1;
 }
 
-.menu-icon-btn:hover {
+#menu .hf-menubar-btn .hf-icon {
+    color: inherit;
+    font-size: 20px;
+}
+
+#menu .hf-menubar-btn:hover {
     color: var(--menu-text-hover);
     background: rgba(255, 255, 255, 0.06);
+    opacity: 1;
 }
 
-.menu-icon-btn.active {
-    color: #a5b8ff;
-    background: rgba(165, 184, 255, 0.12);
+#menu .hf-menubar-btn:hover .hf-icon {
+    color: inherit;
+}
+
+/* Note: the original's .menu-icon-btn.active indigo styling was dead code —
+   its own `#menu button` id-rule out-specified it, so active buttons always
+   rendered plain. Matching that computed reality (and overriding handfish's
+   own active styling). */
+#menu .hf-menubar-btn.active {
+    color: var(--menu-text);
+    background: none;
+    opacity: 1;
+}
+
+#menu .hf-menubar-btn.active .hf-icon {
+    color: inherit;
 }
 
 /* Material symbols font for icons */
@@ -349,12 +386,12 @@
 
 /* Responsive - small screens */
 @media (max-width: 768px) {
-    #menu {
+    #menu .hf-menubar {
         width: 100%;
         border-radius: 0;
     }
-    
-    #menuBackdrop {
+
+    #menu .hf-menubar-backdrop {
         border-radius: 0;
     }
 }
@@ -401,7 +438,7 @@
     #rotate-device-overlay {
         display: flex;
     }
-    
+
     body > *:not(#rotate-device-overlay) {
         visibility: hidden;
     }
