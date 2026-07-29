@@ -7,6 +7,8 @@
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
 import { stripMediaUrlArg } from './dslSanitize.js'
+import { parseDsl } from './dslParse.js'
+import { findCalls, stringArg } from './dslQuery.js'
 import { textEffectsFromParsed } from './textParams.js'
 
 // Shader assets served from the shaders CDN.
@@ -25,21 +27,14 @@ const MEDIA_DEFAULTS = {
  * @returns {Object|null} Media parameters or null if no media effect
  */
 function extractMediaParams(dsl) {
-    // Match media(...) calls. The inner pattern tolerates one level of nested
-    // parens so URLs that contain them (e.g. ".../File_(1).png" or signed query
-    // strings) aren't truncated at the first ')'.
-    const mediaCallRegex = /media\s*\(((?:[^()]*|\([^()]*\))*)\)/i
-    const match = dsl.match(mediaCallRegex)
-    if (!match) return null
+    // Read the url off the parsed program. The syntax parser accepts `url`
+    // even though the engine rejects it, so this works on the DSL as authored
+    // — and a url with parens or quotes in it survives, which no source-level
+    // pattern could guarantee.
+    const [call] = findCalls(parseDsl(dsl), 'media')
+    const url = stringArg(call, 'url')
 
-    const params = { ...MEDIA_DEFAULTS }
-    const paramsStr = match[1]
-
-    // Extract URL parameter
-    const urlMatch = paramsStr.match(/url\s*:\s*["']([^"']+)["']/i)
-    if (urlMatch) params.url = urlMatch[1]
-
-    return params.url ? params : null
+    return url ? { ...MEDIA_DEFAULTS, url } : null
 }
 
 /**
