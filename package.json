@@ -13,7 +13,7 @@
   "author": "Noise Factor",
   "license": "UNLICENSED",
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "playwright": "^1.60.0",
     "serve": "^14.2.0"
   }
