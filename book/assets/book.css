@@ -1,0 +1,799 @@
+/*
+ * The Book of Polymorphic DSL
+ *
+ * Two layouts share this sheet: the index (a scrolling contents page over a
+ * live canvas) and a reading page (a full-bleed canvas with the program at the
+ * top and the writing in the lower third).
+ *
+ * Every visual value is an --hf-* token. Comfortaa is Polymorphic's accent
+ * face and carries every heading here; Nunito carries the prose; Noto Sans
+ * Mono carries the program and the folio. The first is declared locally
+ * because handfish's tokens.css ships only the latter two.
+ */
+
+@font-face {
+    font-family: 'Comfortaa Block';
+    src: url('https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa-Block.woff2') format('woff2');
+    font-weight: 100 700;
+    font-style: normal;
+    font-display: block;
+}
+
+@font-face {
+    font-family: 'Comfortaa';
+    src: url('https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa%5Bwght%5D.woff2') format('woff2');
+    font-weight: 100 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --book-font-accent: 'Comfortaa', 'Comfortaa Block', var(--hf-font-family);
+
+    /* One measure, shared by the program and the prose, so the two read as a
+       single column rather than two floating panels. */
+    --book-measure: 46rem;
+    /* Where the program block ends, measured and written by book-page.js once
+       the editor has been sized to its own line count. The plate takes the
+       rest of the viewport, so a page with a short program gives its writing
+       more room and a page with a long one gives it less. Falls back to a
+       sensible height if the script has not run. */
+    --book-program-bottom: 20rem;
+    --book-gutter: var(--hf-space-6);
+    --book-rail-height: 2.75rem;
+
+    /* The cover's height, shared by the cover block and the canvas pinned to
+       it, so the two cannot disagree. */
+    --book-cover-height: min(78vh, 46rem);
+
+    /* Scrim stops. The plate has to stay legible over a shader that may be
+       white, so the floor is near-opaque and the ramp is long. */
+    --book-scrim-floor: color-mix(in srgb, var(--hf-bg-base) 95%, transparent);
+    --book-scrim-mid: color-mix(in srgb, var(--hf-bg-base) 82%, transparent);
+    /* The far end of every scrim. Spelling it as the same colour at zero alpha
+       rather than the `transparent` keyword matters: mixing a bare
+       `transparent` stop with color-mix() stops makes Chromium clamp part of
+       the ramp to full opacity, which showed up as a hard black band across
+       the cover. Every stop being the same base colour keeps the
+       interpolation well defined. */
+    --book-scrim-none: color-mix(in srgb, var(--hf-bg-base) 0%, transparent);
+    --book-glass: color-mix(in srgb, var(--hf-bg-surface) 72%, transparent);
+}
+
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    background: var(--hf-bg-base);
+    color: var(--hf-text-normal);
+    font-family: var(--hf-font-family);
+    font-weight: var(--hf-weight-medium);
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    overflow: hidden;
+}
+
+a {
+    color: var(--hf-link-color);
+    text-decoration: none;
+    transition: var(--hf-transition-color);
+}
+
+a:hover {
+    color: var(--hf-link-hover);
+}
+
+:focus-visible {
+    outline: var(--hf-focus-ring-width) solid var(--hf-focus-ring-color);
+    outline-offset: var(--hf-focus-ring-offset);
+    border-radius: var(--hf-radius-sm);
+}
+
+/* ==========================================================================
+   Canvas and boot state
+   ========================================================================== */
+
+/* Hidden until the first frame is ready, the same way Polymorphic hides its
+   canvas: display, not opacity. */
+#canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: none;
+}
+
+#canvas.visible {
+    display: block;
+}
+
+.book-boot {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    gap: var(--hf-space-4);
+    justify-items: center;
+    color: var(--hf-text-dim);
+    font-size: var(--hf-size-sm);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: lowercase;
+    transition: opacity var(--hf-transition-slow);
+}
+
+.book-boot[hidden] {
+    display: none;
+}
+
+.book-boot::before {
+    content: '';
+    width: var(--hf-space-8);
+    height: var(--hf-space-8);
+    border: var(--hf-border-width) solid var(--hf-border);
+    border-top-color: var(--hf-accent);
+    border-radius: var(--hf-radius-full);
+    animation: book-spin 900ms linear infinite;
+}
+
+@keyframes book-spin {
+    to { transform: rotate(1turn); }
+}
+
+/* ==========================================================================
+   Reader rail
+   ========================================================================== */
+
+.book-rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--hf-z-sticky);
+    height: var(--book-rail-height);
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-4);
+    padding: 0 var(--book-gutter);
+    background: var(--book-glass);
+    backdrop-filter: var(--hf-glass-blur-sm);
+    -webkit-backdrop-filter: var(--hf-glass-blur-sm);
+    border-bottom: var(--hf-border-width) solid var(--hf-border);
+}
+
+.book-rail__mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    font-family: var(--book-font-accent);
+    font-size: var(--hf-size-sm);
+    font-weight: var(--hf-weight-bold);
+    letter-spacing: var(--hf-tracking-wide);
+    color: var(--hf-text-bright);
+    white-space: nowrap;
+}
+
+.book-rail__mark:hover {
+    color: var(--hf-accent);
+}
+
+.book-rail__mark-text span {
+    color: var(--hf-text-dim);
+    font-weight: var(--hf-weight-normal);
+}
+
+.book-rail__nav {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+    margin-inline: auto;
+}
+
+.book-rail__step {
+    display: inline-grid;
+    place-items: center;
+    min-width: var(--hf-space-8);
+    height: var(--hf-space-8);
+    padding: 0 var(--hf-space-2);
+    border: var(--hf-border-width) solid transparent;
+    border-radius: var(--hf-radius-sm);
+    color: var(--hf-text-dim);
+    font-size: var(--hf-size-sm);
+    line-height: 1;
+    transition: var(--hf-transition-color), var(--hf-transition-bg), var(--hf-transition-border);
+}
+
+/* Let the step drive its glyph, so hover and the disabled state reach it.
+   tokens.css paints every .hf-icon with the accent by default. */
+.book-rail__step .hf-icon,
+.book-rail__tear .hf-icon {
+    color: inherit;
+}
+
+.book-rail__step:hover {
+    color: var(--hf-text-bright);
+    background: var(--hf-bg-elevated);
+    border-color: var(--hf-border);
+}
+
+.book-rail__step[aria-disabled='true'] {
+    color: var(--hf-text-muted);
+    pointer-events: none;
+}
+
+.book-rail__folio {
+    padding: 0 var(--hf-space-3);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    color: var(--hf-text-dim);
+    white-space: nowrap;
+}
+
+.book-rail__folio b {
+    color: var(--hf-text-normal);
+    font-weight: var(--hf-weight-semibold);
+}
+
+.book-rail__tear {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    height: var(--hf-space-8);
+    padding: 0 var(--hf-space-3);
+    border: var(--hf-border-width) solid var(--hf-border);
+    border-radius: var(--hf-radius-sm);
+    background: var(--hf-accent-bg);
+    color: var(--hf-accent);
+    font-size: var(--hf-size-sm);
+    white-space: nowrap;
+    transition: var(--hf-transition-color), var(--hf-transition-bg), var(--hf-transition-border);
+}
+
+.book-rail__tear:hover {
+    border-color: var(--hf-border-hover);
+    color: var(--hf-accent-hover);
+}
+
+/* ==========================================================================
+   Program
+   ========================================================================== */
+
+.book-program {
+    position: fixed;
+    top: calc(var(--book-rail-height) + var(--hf-space-4));
+    left: var(--book-gutter);
+    z-index: var(--hf-z-fixed);
+    width: min(var(--book-measure), calc(100vw - var(--book-gutter) * 2));
+    display: flex;
+    flex-direction: column;
+    gap: var(--hf-space-2);
+}
+
+.book-program code-editor {
+    /* --book-editor-height is set per page from the program's line count. */
+    height: var(--book-editor-height, 12rem);
+    /* A long program scrolls rather than pushing the writing off the screen.
+       Anything past about ten lines was going to scroll at any cap this side
+       of half the viewport, so the cap is set where the writing keeps its
+       room rather than where the longest program stops scrolling. */
+    max-height: 26vh;
+    border-radius: var(--hf-radius);
+    --code-editor-font-size: var(--hf-size-base);
+}
+
+/* The hint sits directly on the shader, so it carries its own ground. Without
+   one it disappears entirely over a bright frame. */
+.book-program__note {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    padding: var(--hf-space-1) var(--hf-space-3);
+    border-radius: var(--hf-radius-pill);
+    background: var(--book-glass);
+    backdrop-filter: var(--hf-glass-blur-sm);
+    -webkit-backdrop-filter: var(--hf-glass-blur-sm);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-dim);
+    letter-spacing: var(--hf-tracking-wide);
+}
+
+.book-program__note kbd {
+    font-family: var(--hf-font-family-mono);
+    font-size: inherit;
+    padding: 0 var(--hf-space-1);
+    border: var(--hf-border-width) solid var(--hf-border);
+    border-radius: var(--hf-radius-sm);
+    color: var(--hf-text-normal);
+}
+
+.book-error {
+    display: none;
+    padding: var(--hf-space-2) var(--hf-space-3);
+    border: var(--hf-border-width) solid var(--hf-red);
+    border-radius: var(--hf-radius-sm);
+    background: var(--book-scrim-floor);
+    color: var(--hf-red);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    line-height: var(--hf-leading-normal);
+    white-space: pre-wrap;
+}
+
+.book-error.visible {
+    display: block;
+}
+
+/* ==========================================================================
+   The plate: chapter line, effect name, prose
+   ========================================================================== */
+
+.book-plate {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--hf-z-sticky);
+    /* A floor under the plate keeps the scrim ramp the same length whether the
+       page runs two paragraphs or one line. Without it a short page gets a
+       compressed gradient and the title sits on bare shader. */
+    min-height: 48vh;
+    /* Everything below the program. The top of this box is scrim rather than
+       content, so it may run back up behind the program's last line without
+       covering anything. Inside, the reading column shrinks first, since it
+       can scroll and the parameter panel cannot. */
+    max-height: calc(100vh - var(--book-program-bottom) + var(--hf-space-8));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--hf-space-8) var(--book-gutter) var(--hf-space-6);
+    background: linear-gradient(
+        to top,
+        var(--book-scrim-floor) 0%,
+        var(--book-scrim-floor) 45%,
+        var(--book-scrim-mid) 78%,
+        var(--book-scrim-none) 100%
+    );
+    pointer-events: none;
+}
+
+.book-plate__inner {
+    width: min(var(--book-measure), 100%);
+    flex: 0 1 auto;
+    min-height: 0;
+    /* Caps the reading column at just over half the viewport. Raised from 45vh
+       when the further-reading row was added: the row costs about one line
+       plus its rule, and without the extra room the longest pages started the
+       reader off scrolling on an ordinary laptop. It is a cap, not a height,
+       so short pages are unaffected. */
+    max-height: 51vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hf-border) transparent;
+}
+
+.book-plate__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    font-size: var(--hf-size-xs);
+    font-weight: var(--hf-weight-semibold);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+    color: var(--hf-accent);
+}
+
+.book-plate__eyebrow em {
+    font-style: normal;
+    font-weight: var(--hf-weight-normal);
+    color: var(--hf-text-dim);
+}
+
+.book-plate__title {
+    margin-top: var(--hf-space-2);
+    font-family: var(--book-font-accent);
+    font-size: clamp(1.6rem, 4vw, 2.5rem);
+    font-weight: var(--hf-weight-bold);
+    line-height: var(--hf-leading-tight);
+    letter-spacing: var(--hf-tracking-tight);
+    color: var(--hf-text-bright);
+}
+
+.book-plate__rule {
+    width: var(--hf-space-10);
+    height: 2px;
+    margin: var(--hf-space-2) 0 var(--hf-space-3);
+    border: 0;
+    background: var(--hf-accent);
+    opacity: 0.7;
+}
+
+.book-prose {
+    font-size: var(--hf-size-md);
+    line-height: var(--hf-leading-normal);
+    color: var(--hf-text-normal);
+    text-wrap: pretty;
+}
+
+.book-prose p + p {
+    margin-top: var(--hf-space-3);
+}
+
+.book-prose code {
+    font-family: var(--hf-font-family-mono);
+    font-size: 0.9em;
+    padding: 0 var(--hf-space-1);
+    border-radius: var(--hf-radius-sm);
+    background: var(--hf-bg-elevated);
+    color: var(--hf-text-bright);
+}
+
+/* Parameter controls. Polymorphic's own <effect-controls>, opened on the
+   page's effect instead of waiting for a click on the program. The widget
+   carries its own styling; what belongs here is only where it sits and how
+   much room it may take. */
+.book-controls {
+    display: none;
+}
+
+.book-controls.open {
+    display: block;
+    width: min(var(--book-measure), 100%);
+    margin-bottom: var(--hf-space-3);
+    pointer-events: auto;
+    flex: 0 0 auto;
+}
+
+.book-controls effect-controls {
+    /* Deliberately shorter than Polymorphic's own min(40vh, 24rem): there the
+       panel sits over a canvas the reader can still see around it, and here it
+       is stacked above the writing. The widget scrolls its own body, so a long
+       parameter list stays reachable. */
+    max-height: min(16vh, 11rem);
+}
+
+/* Further reading. A single wrapped row at the foot of the plate: enough to
+   send a reader to the paper, the original algorithm, or the history, without
+   the page becoming a bibliography. Kept inside the scrolling area so it
+   belongs to the article rather than floating over the canvas. */
+.book-plate__links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--hf-space-1) var(--hf-space-3);
+    margin-top: var(--hf-space-3);
+    padding-top: var(--hf-space-2);
+    border-top: 1px solid var(--hf-border-subtle);
+    font-size: var(--hf-size-xs);
+    line-height: var(--hf-leading-normal);
+}
+
+.book-plate__links-label {
+    font-weight: var(--hf-weight-semibold);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+    color: var(--hf-text-dim);
+}
+
+.book-plate__links a {
+    color: var(--hf-text-normal);
+    text-decoration: none;
+    border-bottom: 1px solid var(--hf-border);
+    transition: var(--hf-transition-color), var(--hf-transition-border);
+}
+
+.book-plate__links a:hover,
+.book-plate__links a:focus-visible {
+    color: var(--hf-accent);
+    border-bottom-color: var(--hf-accent);
+}
+
+/* ==========================================================================
+   Index
+   ========================================================================== */
+
+body.book-index {
+    overflow: auto;
+}
+
+/* On the contents page the art belongs to the cover, not to the whole page.
+   Pinning the canvas to the cover instead of the viewport also avoids a
+   Chromium compositing bug: a sticky element layered over a position:fixed
+   WebGL canvas paints its own background at the wrong offset, which drew a
+   hard black band across the cover. It stops the shader running behind an
+   opaque panel while you scroll the contents, too. */
+body.book-index #canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--book-cover-height);
+}
+
+.book-index__scroll {
+    position: relative;
+    z-index: var(--hf-z-base);
+    padding-bottom: var(--hf-space-12);
+}
+
+.book-cover {
+    position: relative;
+    min-height: var(--book-cover-height);
+    display: grid;
+    align-content: end;
+    gap: var(--hf-space-4);
+    padding: var(--hf-space-12) var(--book-gutter) var(--hf-space-10);
+    background: linear-gradient(
+        to top,
+        var(--hf-bg-base) 0%,
+        var(--book-scrim-floor) 24%,
+        var(--book-scrim-mid) 62%,
+        var(--book-scrim-none) 100%
+    );
+}
+
+/* The cover canvas is fixed, so everything below the cover needs its own
+   opaque ground — otherwise the contents list scrolls over a moving shader
+   and none of it can be read. */
+.book-chapter-nav,
+.book-contents-ground {
+    background: var(--hf-bg-base);
+}
+
+.book-chapter-nav {
+    position: sticky;
+    top: 0;
+    z-index: var(--hf-z-sticky);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hf-space-1);
+    padding: var(--hf-space-2) var(--book-gutter);
+    border-bottom: var(--hf-border-width) solid var(--hf-border);
+}
+
+.book-chapter-nav__link {
+    padding: var(--hf-space-1) var(--hf-space-3);
+    border-radius: var(--hf-radius-pill);
+    font-size: var(--hf-size-sm);
+    color: var(--hf-text-dim);
+    white-space: nowrap;
+    transition: var(--hf-transition-color), var(--hf-transition-bg);
+}
+
+.book-chapter-nav__link:hover {
+    background: var(--hf-bg-surface);
+    color: var(--hf-text-bright);
+}
+
+.book-chapter-nav__link b {
+    font-weight: var(--hf-weight-normal);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-muted);
+}
+
+.book-cover__kicker {
+    font-size: var(--hf-size-xs);
+    font-weight: var(--hf-weight-semibold);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+    color: var(--hf-accent);
+}
+
+.book-cover__title {
+    max-width: 20ch;
+    font-family: var(--book-font-accent);
+    font-size: clamp(2.5rem, 8vw, 5.5rem);
+    font-weight: var(--hf-weight-bold);
+    line-height: 0.98;
+    letter-spacing: var(--hf-tracking-tight);
+    color: var(--hf-text-bright);
+}
+
+.book-cover__standfirst {
+    max-width: 52ch;
+    font-size: var(--hf-size-lg);
+    line-height: var(--hf-leading-relaxed);
+    color: var(--hf-text-dim);
+    text-wrap: pretty;
+}
+
+.book-contents {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: var(--hf-space-10) var(--book-gutter) 0;
+}
+
+.book-chapter + .book-chapter {
+    margin-top: var(--hf-space-12);
+}
+
+.book-chapter {
+    /* Clear the sticky chapter rail when jumped to by anchor. */
+    scroll-margin-top: var(--hf-space-12);
+}
+
+.book-chapter__head {
+    display: grid;
+    gap: var(--hf-space-2);
+    padding-bottom: var(--hf-space-4);
+    border-bottom: var(--hf-border-width) solid var(--hf-border);
+}
+
+.book-chapter__number {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+    color: var(--hf-accent);
+}
+
+.book-chapter__title {
+    font-family: var(--book-font-accent);
+    font-size: var(--hf-size-2xl);
+    font-weight: var(--hf-weight-bold);
+    letter-spacing: var(--hf-tracking-tight);
+    color: var(--hf-text-bright);
+}
+
+.book-chapter__title small {
+    margin-left: var(--hf-space-2);
+    font-family: var(--hf-font-family);
+    font-size: var(--hf-size-sm);
+    font-weight: var(--hf-weight-normal);
+    letter-spacing: var(--hf-tracking-normal);
+    color: var(--hf-text-dim);
+}
+
+.book-chapter__blurb {
+    max-width: 62ch;
+    font-size: var(--hf-size-base);
+    line-height: var(--hf-leading-relaxed);
+    color: var(--hf-text-dim);
+    text-wrap: pretty;
+}
+
+.book-entries {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--hf-space-1);
+    margin-top: var(--hf-space-4);
+    list-style: none;
+}
+
+.book-entry {
+    display: grid;
+    gap: var(--hf-space-1);
+    padding: var(--hf-space-3);
+    border: var(--hf-border-width) solid transparent;
+    border-radius: var(--hf-radius);
+    transition: var(--hf-transition-bg), var(--hf-transition-border);
+}
+
+.book-entry:hover {
+    background: var(--hf-bg-surface);
+    border-color: var(--hf-border);
+}
+
+.book-entry__name {
+    font-family: var(--book-font-accent);
+    font-size: var(--hf-size-md);
+    font-weight: var(--hf-weight-semibold);
+    color: var(--hf-text-bright);
+}
+
+.book-entry:hover .book-entry__name {
+    color: var(--hf-accent);
+}
+
+.book-entry__func {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-muted);
+}
+
+.book-entry__desc {
+    font-size: var(--hf-size-sm);
+    line-height: var(--hf-leading-normal);
+    color: var(--hf-text-dim);
+    text-wrap: pretty;
+}
+
+.book-colophon {
+    max-width: 74rem;
+    margin: var(--hf-space-12) auto 0;
+    padding: var(--hf-space-6) var(--book-gutter) 0;
+    border-top: var(--hf-border-width) solid var(--hf-border);
+    font-size: var(--hf-size-sm);
+    line-height: var(--hf-leading-relaxed);
+    color: var(--hf-text-dim);
+}
+
+.book-colophon p + p {
+    margin-top: var(--hf-space-2);
+}
+
+/* ==========================================================================
+   Narrow and short viewports
+   ========================================================================== */
+
+@media (max-width: 48rem) {
+    :root {
+        --book-gutter: var(--hf-space-4);
+    }
+
+    /* The rail has to fit a phone without dropping the tear-off link, so the
+       wordmark and the tear-off label both fall back to their glyphs. */
+    .book-rail {
+        gap: var(--hf-space-2);
+    }
+
+    .book-rail__mark-text,
+    .book-rail__tear-text {
+        display: none;
+    }
+
+    .book-rail__tear {
+        padding: 0 var(--hf-space-2);
+    }
+
+    .book-rail__folio {
+        padding: 0 var(--hf-space-1);
+    }
+
+    .book-program code-editor {
+        max-height: 32vh;
+        --code-editor-font-size: var(--hf-size-sm);
+    }
+
+    .book-plate {
+        padding-top: var(--hf-space-10);
+    }
+
+    .book-plate__inner {
+        max-height: 52vh;
+    }
+
+    .book-prose {
+        font-size: var(--hf-size-base);
+    }
+}
+
+/* A laptop in a short window still has to show the program and the writing.
+   Give the plate the room and let the program shrink. */
+@media (max-height: 44rem) {
+    .book-program code-editor {
+        max-height: 26vh;
+    }
+
+    .book-plate {
+        padding-top: var(--hf-space-8);
+    }
+
+    .book-plate__inner {
+        max-height: 48vh;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #canvas,
+    .book-boot {
+        transition: none;
+    }
+
+    .book-boot::before {
+        animation: none;
+    }
+}

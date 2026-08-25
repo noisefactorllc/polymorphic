@@ -1,0 +1,76 @@
+{
+  "_comment": [
+    "Editorial decisions the engine cannot make for the book, applied by",
+    "scripts/extract-book-data.mjs on top of what it reads from the CDN, so a",
+    "re-extract after a Noisemaker release keeps them.",
+    "",
+    "exclude: effects that have no page. Each one needs a reason.",
+    "programs: effects whose engine-derived default program does not actually",
+    "demonstrate the effect on a book page. Each one needs a reason too, and",
+    "the program still has to call the effect it belongs to, which the offline",
+    "tests check."
+  ],
+  "exclude": {
+    "synth/media": "needs a file, a camera or a screen share to show anything; a book page has none of them",
+    "synth/remap": "the default program wires no zones, so the page would show a background colour and nothing else",
+    "synth/roll": "needs a MIDI keyboard attached and someone playing it",
+    "synth/scope": "needs microphone access, which a reader turning pages should not be asked for",
+    "synth/spectrum": "needs microphone access, which a reader turning pages should not be asked for",
+    "render/meshLoader": "loads geometry into textures and draws nothing on its own",
+    "render/meshRender": "the mesh path is a proof of concept and paints one flat tone here"
+  },
+  "programs": {
+    "filter/blur": {
+      "why": "a blur needs a hard edge to soften, and the derived program blurs a noise field that has none",
+      "program": "search filter, synth\n\ntestPattern(pattern: checkerboard, gridSize: 8)\n  .blur(radiusX: 18, radiusY: 18)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/feedback": {
+      "why": "feedback only shows when something is fed back and moved, so the loop needs a mix, a blend mode and a transform",
+      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .feedback(mix: 49, blendMode: lighten, scaleAmt: 102, rotation: 3, intensity: -25)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/fibers": {
+      "why": "threads have to lie on something; the derived program lays them on a flat black fill",
+      "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .fibers(density: 0.8, alpha: 0.7, seed: 2)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/grade": {
+      "why": "every stage sits at neutral by default, so the derived program grades nothing; a named preset shows the suite doing its job",
+      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .grade(preset: tealOrange)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/grime": {
+      "why": "dirt has to settle on something; the derived program lays it on a flat white fill",
+      "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .grime(strength: 1, seed: 4)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/median": {
+      "why": "removing speckles is invisible unless there are speckles and something to compare against, so the page adds static and splits the frame: cleaned on the left, untouched on the right",
+      "program": "search filter, mixer, synth\n\nperlin(scale: 85, octaves: 4, colorMode: rgb, speed: 0)\n  .snow(alpha: 1, density: 8, pause: true)\n  .write(o0)\n\nread(o0)\n  .median(radius: 3)\n  .split(tex: read(o0), rotation: 90)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "filter/motionBlur": {
+      "why": "a trail needs movement, and the derived program blurs a still frame",
+      "program": "search filter, synth\n\ntestPattern(pattern: colorBars)\n  .scroll(speedX: 3, speedY: 0)\n  .motionBlur(amount: 92)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/normalize": {
+      "why": "auto levels does nothing to a picture that already fills the range, and nothing visible at all without the flat original beside it: washed out on the right, stretched on the left",
+      "program": "search filter, mixer, synth\n\nperlin(scale: 55, octaves: 3, colorMode: rgb, speed: 0)\n  .adjust(contrast: 0.08, brightness: 1.5)\n  .write(o0)\n\nread(o0)\n  .normalize()\n  .split(tex: read(o0), rotation: 90)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "filter/osd": {
+      "why": "the readout defaults to the bottom right, where the book's own writing sits over it; the nudge moves it clear of the toolbar as well",
+      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .osd(corner: topRight, alpha: 1, speed: 6, seed: 7)\n  .translate(y: -0.1, wrap: clamp)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/outline": {
+      "why": "operator's program: constant-interpolated noise gives the flat regions an outline can actually trace, where the smooth default has no boundaries to ink",
+      "program": "search filter, synth\n\nnoise(\n  type: constant,\n  ridges: true,\n  loopScale: 100\n)\n  .outline(thickness: 2.7)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/pondRipples": {
+      "why": "a ripple bends straight lines, and there are none in a noise field to bend",
+      "program": "search filter, synth\n\ntestPattern(pattern: gridLines, gridSize: 10)\n  .pondRipples(amount: 70, ridges: 14, speed: 2)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/scratches": {
+      "why": "scratches belong on a picture; the derived program puts them on a flat grey fill",
+      "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .scratches(density: 0.7, alpha: 0.9, seed: 3)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "filter/texture": {
+      "why": "a surface texture reads as a surface only when there is a picture printed on it, not a flat fill",
+      "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .texture(mode: canvas, alpha: 0.9, scale: 1.6, intensity: 70)\n  .write(o0)\n\nrender(o0)\n"
+    }
+  }
+}

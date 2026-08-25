@@ -23,6 +23,17 @@ jobs:
           DEPLOY_DATE=$(date -u +"%s")
           printf '{\n  "git_hash": "%s",\n  "date": %s\n}\n' "$GIT_HASH" "$DEPLOY_DATE" > "$GITHUB_WORKSPACE/public/deployment-meta.json"
 
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+
+      # Renders The Book of Polymorphic DSL from committed data and prose into
+      # dist/book/. Offline: no shader CDN, no engine import, and no install
+      # either, since the script imports nothing but node builtins. A missing
+      # prose file fails here rather than shipping a page with nothing on it.
+      - name: Build the book
+        run: npm run build
+
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
@@ -31,8 +42,19 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan ${{ secrets.SCAFFOLD_SERVER_IP }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy to scaffold
+      # Two independent rsyncs into one document root. The app ships from
+      # public/; the book ships from dist/book/ and is never inside public/ (see
+      # scripts/build-book.mjs). --exclude=/book/ keeps the app's --delete from
+      # sweeping away the book it does not know about, so neither deploy can
+      # blank the other and re-running either is a no-op.
+      - name: Deploy app to scaffold
         run: |
-          rsync -avz --delete \
+          rsync -avz --delete --exclude=/book/ \
             public/ \
             deploy@${{ secrets.SCAFFOLD_SERVER_IP }}:~/sites/polymorphic.noisedeck.app/content/
+
+      - name: Deploy book to scaffold
+        run: |
+          rsync -avz --delete \
+            dist/book/ \
+            deploy@${{ secrets.SCAFFOLD_SERVER_IP }}:~/sites/polymorphic.noisedeck.app/content/book/

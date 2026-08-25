@@ -27,3 +27,6 @@ public/js/noisemaker/vendor/effects/
 # Environment
 .env
 .env.local
+
+# Generated book output (see scripts/build-book.mjs; never lands in public/)
+/dist/

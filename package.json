@@ -4,11 +4,14 @@
   "description": "Polymorphic - Live shader coding environment using the Noisemaker DSL",
   "private": true,
   "scripts": {
-    "start": "npx serve public -l 3000",
-    "dev": "npx serve public -l 3000",
+    "start": "npm run build && node scripts/serve-book.mjs 3000",
+    "dev": "npm run build && node scripts/serve-book.mjs 3000",
+    "build": "node scripts/build-book.mjs",
+    "book:extract": "node scripts/extract-book-data.mjs",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
-    "test": "node --test tests/unit/*.test.mjs"
+    "test": "node --test tests/unit/*.test.mjs",
+    "check:links": "node scripts/check-book-links.mjs"
   },
   "author": "Noise Factor",
   "license": "UNLICENSED",

@@ -94,6 +94,51 @@ polymorphic/
 The Noisemaker shader engine and effects are loaded at runtime from the CDN
 (`shaders.noisedeck.app/1`). No local vendor files are needed.
 
+## The Book of Polymorphic DSL
+
+`polymorphic.noisedeck.app/book` is an illustrated reference to every effect in
+the engine: one page each, showing the program that demonstrates it running
+full-screen, with an account of what its shader is doing. Pages are editable in
+place and tear off into Polymorphic.
+
+Programs come from the engine, not from hand-authoring.
+`scripts/extract-book-data.mjs` imports the shipped effect bundles and the core
+engine from `shaders.noisedeck.app/1` and runs the same routine Noisedeck's
+effect browser uses, so each page demonstrates the default program the engine
+itself derives.
+
+`book/curation.json` holds the editorial decisions on top of that, and the
+extract applies them so a re-extract keeps them: effects that get no page
+because they need a camera, a microphone or a MIDI keyboard, and the handful
+whose derived default demonstrates nothing on a page (a blur on a field with no
+edges, a motion blur on a still frame, an overlay on a flat fill). Each entry
+carries its reason, and a stale one fails the extract.
+
+Run it after a Noisemaker release and commit the diff:
+
+```bash
+npm run book:extract      # refresh book/data/effects.json from the CDN
+npm run build             # render book/ into dist/book/ (offline)
+npm run dev               # serve public/ with the book mounted at /book
+```
+
+Prose lives in `book/content/<chapter>/<effect>.md`, one file per effect, ending
+with a `Further reading:` block of `- Label | https://url` lines that send the
+reader to the paper, the algorithm, or the history behind the effect. The build
+fails if a file is missing or has no links.
+
+`npm test` checks the data and the prose offline. `npm run test:e2e` walks every
+page in a browser and fails on a compile error, a blank canvas, or writing too
+tall for the plate. `npm run check:links` fetches every further-reading URL and
+reports what no longer resolves; it needs the network, so it is not part of
+`npm test`. Run it after adding links, and periodically after that.
+
+Output goes to `dist/book/`, never into `public/`. The standalone desktop and
+mobile pipeline stages `public/` straight from the working checkout without
+running a build, so a generated `public/book/` would ride into three shipped
+apps on whichever machine happened to have built it. The deploy rsyncs
+`dist/book/` to the same document root as a second step.
+
 ## Portable Effects
 
 Polymorphic supports the Portable Effects Format for creating and sharing custom
