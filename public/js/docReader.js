@@ -338,6 +338,8 @@ export function showPlaceholderContent() {
 
 Polymorphic is a high-level composition language that compiles into a WebGL2 or WebGPU shader graph. It powers the open source [Noisemaker engine](https://noisemaker.app/), and is at the core of [Noisedeck](https://noisedeck.app/) and [Layers](https://layers.noisefactor.io/). It's designed for flexibility and expressiveness.
 
+Check out the [Book of Polymorphic DSL](/book).
+
 > **Full language spec:** [docs.noisemaker.app](https://docs.noisemaker.app/shaders/language/)
 
 ---
