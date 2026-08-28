@@ -1063,6 +1063,7 @@
         }
     </style>
     <link rel="stylesheet" href="/css/menu.css">
+    <link rel="stylesheet" href="/css/sync.css">
     <link rel="stylesheet" href="/css/touch.css">
 </head>
 <body>
@@ -1165,6 +1166,47 @@
         </div>
     </div>
     
+    <!-- Sync Output Modal -->
+    <dialog id="syncOutputDialog" class="sync-output-dialog" aria-labelledby="syncOutputDialogTitle" aria-describedby="syncOutputDialogDescription syncOutputPreviewWarning">
+        <div class="sync-tally-rail" aria-hidden="true"></div>
+        <div class="sync-titlebar">
+            <span id="syncOutputDialogTitle">Sync output</span>
+            <span id="syncOutputLiveBadge" class="sync-live-badge" hidden>LIVE</span>
+            <button type="button" id="syncOutputCloseBtn" class="sync-close-btn" aria-label="Close Sync output">✕</button>
+        </div>
+        <div class="sync-body">
+            <p id="syncOutputDialogDescription" class="sync-description">Publish Polymorphic’s rendered output through the Sync companion.</p>
+            <div class="sync-preview-panel" role="note">
+                <span id="syncOutputPreviewWarning">Preview — Sync is not ready for general use.</span>
+                <a href="https://github.com/noisefactorllc/sync" target="_blank" rel="noopener" class="sync-docs-link">learn about Sync</a>
+            </div>
+            <div class="sync-name-field">
+                <label for="syncOutputName">Output name</label>
+                <input type="text" id="syncOutputName" value="Polymorphic" placeholder="Polymorphic" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="sync-state-row">
+                <span class="sync-state-dot" aria-hidden="true"></span>
+                <span id="syncOutputStateText">Disconnected</span>
+                <span class="sync-state-spacer"></span>
+                <span class="sync-meta-label">Provider</span>
+                <span id="syncOutputProvider">No provider</span>
+                <span class="sync-meta-divider" aria-hidden="true">·</span>
+                <span id="syncOutputFormat">—×— · 60</span>
+            </div>
+            <div class="sync-counters" role="group" aria-label="Sync output counters">
+                <div class="sync-counter"><span>Sent</span><output id="syncOutputSent">0</output></div>
+                <div class="sync-counter"><span>GPU busy</span><output id="syncOutputGpuBusy">0</output></div>
+                <div class="sync-counter"><span>Network</span><output id="syncOutputNetwork">0</output></div>
+                <div class="sync-counter"><span>Failed</span><output id="syncOutputFailed">0</output></div>
+            </div>
+            <div id="syncOutputStatus" class="sync-status" role="status" aria-live="polite" aria-atomic="true">
+                <p id="syncOutputConnectNotice" class="sync-connect-notice" hidden>Your browser may request loopback access. Sync will separately ask whether this exact origin may pair.</p>
+                <p id="syncOutputRecovery">Sync is not connected.</p>
+            </div>
+            <button type="button" id="syncOutputAction" class="sync-primary-action">Check again</button>
+        </div>
+    </dialog>
+
     <!-- Program Modal -->
     <dialog id="programModal" aria-labelledby="programModalTitle">
         <div class="program-modal-title">

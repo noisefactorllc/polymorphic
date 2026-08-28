@@ -68,6 +68,7 @@ const EXPECTED = {
         ['viewMenuItem-fullscreen', 'fullscreen'],
         'separator',
         ['viewMenuItem-open-viewport-window', 'open viewport window'],
+        ['syncOutputMenuItem', 'send to Sync...'],
     ],
     programMenu: [
         ['copyProgram', 'copy program'],
@@ -167,6 +168,21 @@ test('dialog and overlay items open their targets; downloads fire', async ({ pag
         expect(download.suggestedFilename()).toBe(name)
         await download.cancel()
     }
+})
+
+test('Sync target opens with Polymorphic identity and browser-readable product help', async ({ page }) => {
+    await boot(page)
+    await page.evaluate(() => document.getElementById('syncOutputMenuItem').click())
+
+    await expect(page.locator('#syncOutputDialog')).toBeVisible()
+    await expect(page.locator('#syncOutputDialogTitle')).toHaveText('Sync output')
+    await expect(page.locator('#syncOutputName')).toHaveValue('Polymorphic')
+    await expect(page.locator('#syncOutputAction')).toHaveText(/Check again|Connect Sync/)
+    await expect(page.locator('.sync-docs-link')).toHaveAttribute('href', 'https://github.com/noisefactorllc/sync')
+    await expect(page.locator('.sync-docs-link')).toHaveAttribute('target', '_blank')
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#syncOutputDialog')).not.toBeVisible()
 })
 
 test('view menu checkmarks pull live state; toggles flip panels and mirrored buttons', async ({ page }) => {

@@ -36,6 +36,8 @@ import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
+import { SyncOutputController } from './syncOutput.js'
+import { createSyncOutputDialog } from './ui/syncOutputDialog.js'
 import { configureViewportWindow, openViewportWindow } from './ui/viewportWindow.js'
 import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
@@ -63,6 +65,7 @@ const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE
 
 // Renderer reference (set after initialization)
 let renderer = null
+let syncOutputDialog = null
 
 // ProgramState (single source of truth for effect parameter values)
 let programState = null
@@ -209,6 +212,7 @@ if (menuBarEl) {
                           onSelect: () => toggleFullscreen() },
                         { type: 'separator' },
                         { id: 'viewMenuItem-open-viewport-window', classes: 'view-item', label: 'open viewport window', onSelect: () => openViewportWindow() },
+                        { id: 'syncOutputMenuItem', classes: 'view-item', label: 'send to Sync...', onSelect: () => syncOutputDialog?.open() },
                     ],
                 },
                 {
@@ -1882,6 +1886,12 @@ async function startShader() {
             console.error('Render error:', err)
         }
     })
+    const syncOutputController = new SyncOutputController({
+        renderer: renderer.inner,
+        getCanvas: () => canvas
+    })
+    syncOutputDialog?.destroy()
+    syncOutputDialog = createSyncOutputDialog({ controller: syncOutputController })
 
     try {
         // Preload fonts used in text effects
