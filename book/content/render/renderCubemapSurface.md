@@ -1,4 +1,4 @@
-The same six-faced camera as `renderCubemap3d`, but showing the volume's own
+The same six-faced camera as `renderCubemap3d()`, but showing the volume's own
 colour rather than a lit surface. No lighting, no gamma, no surface threshold.
 
 Instead of stopping at a surface, each ray travels all the way through and adds

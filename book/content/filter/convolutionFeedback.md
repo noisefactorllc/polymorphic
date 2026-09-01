@@ -12,7 +12,7 @@ out.
 
 The result is a reaction and diffusion system built out of nothing but image
 filters, the same tug of war between spreading and concentrating that puts spots
-on a leopard and stripes on a fish. `reset` bypasses the loop and lets the input
+on a leopard and stripes on a fish. `resetState` bypasses the loop and lets the input
 straight through.
 
 Further reading:

@@ -5,8 +5,11 @@
  * What these guard against, in order: an engine release that drops or renames
  * an effect without the book noticing; a page whose demonstration program does
  * not actually render anything; a page shipped with no writing under the title;
- * and prose long enough to push the plate past the lower third of the screen,
- * which is the layout the book is built around.
+ * and a page that has quietly grown into an essay.
+ *
+ * Identifiers in the prose are checked separately, by
+ * scripts/check-book-params.mjs, which resolves every backticked name against
+ * the engine's own definitions.
  */
 
 import { test } from 'node:test'
@@ -24,21 +27,21 @@ const CONTENT = join(REPO, 'book', 'content')
 const book = JSON.parse(await readFile(DATA, 'utf8'))
 
 /**
- * Measured, not guessed. At 1440x900 the plate's scroll box is 459px, of which
- * the eyebrow, title, rule and further-reading row take a fixed 129px. A line
- * of prose is 24px and the gap between paragraphs is 12px, so the writing fits
- * when `24 * lines + 12 * paragraphs` stays inside 342. Prose sets about 100
- * characters to the line at the book's measure.
+ * An editorial limit, not a layout one.
  *
- * This is an estimate: where a line breaks depends on the words, so it can be
- * a line out either way. The authoritative check is in tests/book.spec.js,
- * which measures the real box in a real browser on every page. This one is
- * here so `npm test` catches an overlong page without starting Chromium.
+ * It used to be a layout one: the plate was a fixed box sized in vh, and prose
+ * past about 342px of it pushed the further-reading row out of sight. The
+ * reading page now scrolls, so length no longer breaks anything, and a budget
+ * justified by a box that no longer exists would be enforcing a rule nobody
+ * could explain.
  *
- * Narrower phones scroll by design; a normal desktop window should not have to.
+ * What is worth keeping is the house style. A page introduces one effect,
+ * shows the program, and gets out of the way; the longest page in the book is
+ * just over a thousand characters and the median is around 850. The cap sits
+ * above the longest current page with room to write, so it catches a page that
+ * has turned into an essay without nagging anyone writing a normal one.
  */
-const PLATE_LINE_BUDGET = 342
-const CHARS_PER_LINE = 100
+const PROSE_CHAR_BUDGET = 1400
 
 async function exists(path) {
     try {
@@ -92,7 +95,7 @@ test('every page has a title and a one-line description', () => {
     }
 })
 
-test('every effect has prose, and it fits the plate', async () => {
+test('every effect has prose, and it stays a page rather than an essay', async () => {
     const missing = []
     const overlong = []
 
@@ -111,19 +114,15 @@ test('every effect has prose, and it fits the plate', async () => {
         assert.ok(paragraphs.length >= 1 && paragraphs.length <= 5,
             `${effect.id}: ${paragraphs.length} paragraphs (expected 1 to 5)`)
 
-        const lines = paragraphs.reduce((total, para) => {
-            const chars = para.replace(/\s*\n\s*/g, ' ').replace(/`/g, '').trim().length
-            return total + Math.max(1, Math.ceil(chars / CHARS_PER_LINE))
-        }, 0)
-        const height = 24 * lines + 12 * paragraphs.length
-        if (height > PLATE_LINE_BUDGET) {
-            overlong.push(`${effect.chapter}/${effect.slug} (${lines} lines, ${paragraphs.length} paragraphs)`)
+        const chars = text.replace(/\s*\n\s*/g, ' ').replace(/`/g, '').trim().length
+        if (chars > PROSE_CHAR_BUDGET) {
+            overlong.push(`${effect.chapter}/${effect.slug} (${chars} characters, ${paragraphs.length} paragraphs)`)
         }
     }
 
     assert.equal(missing.length, 0, `prose missing for:\n  ${missing.join('\n  ')}`)
     assert.equal(overlong.length, 0,
-        `prose too tall for the plate, the reader would arrive scrolling:\n  ${overlong.join('\n  ')}`)
+        `prose past the ${PROSE_CHAR_BUDGET}-character house limit:\n  ${overlong.join('\n  ')}`)
 })
 
 test('every page sends the reader somewhere else', async () => {

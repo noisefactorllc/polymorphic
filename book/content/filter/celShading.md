@@ -11,7 +11,7 @@ shadows, applies a diffuse shading term from `lightDirection` so the flat areas
 still describe form, and softens each band boundary by a single pixel so the
 regions have clean edges without stair-stepping.
 
-`levels` sets how many steps, `edgeColor` the ink, and `mixAmount` how much of
+`levels` sets how many steps, `edgeColor` the ink, and `mix` how much of
 the original shows through.
 
 Further reading:

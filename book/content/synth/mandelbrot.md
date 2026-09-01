@@ -1,8 +1,8 @@
 The Mandelbrot set, the most famous picture in mathematics, and the twin of
-`julia`.
+`julia()`.
 
 Both run the same short sum over and over. The difference is which part of it
-the pixel supplies. In `julia` the pixel is the starting value and the constant
+the pixel supplies. In `julia()` the pixel is the starting value and the constant
 is fixed, so you get one shape. Here the pixel is the constant and every point
 starts from zero, so a single image contains every Julia shape at once. That is
 not a coincidence or a pretty analogy: the black region is precisely the set of

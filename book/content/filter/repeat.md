@@ -10,7 +10,7 @@ choice matters more here than elsewhere because you are looking at the joins
 directly. `repeat` gives hard seams wherever the source's left edge meets its
 right. `mirror` reflects alternate tiles so every join matches, which turns
 almost any source into a seamless pattern and is usually what you want. If you
-need a genuinely tileable source rather than a mirrored one, `seamless` does
+need a genuinely tileable source rather than a mirrored one, `seamless()` does
 that job instead.
 
 Further reading:

@@ -1,5 +1,5 @@
 Straightforward physics: gravity, wind, drag and a bit of random wander. This is
-the usual partner for `pointsEmit` when a demonstration just needs something
+the usual partner for `pointsEmit()` when a demonstration just needs something
 moving convincingly.
 
 Each frame, a particle picks up a little speed from gravity and wind, loses a

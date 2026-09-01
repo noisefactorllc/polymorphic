@@ -1,4 +1,4 @@
-Polyhedra written into a volume: the three-dimensional counterpart of `shape`
+Polyhedra written into a volume: the three-dimensional counterpart of `shape()`
 from the first chapter, and it works the same way. Two travelling wavefronts,
 each with its own geometry, staggered in time by position and folded where they
 meet.

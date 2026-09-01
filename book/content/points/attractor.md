@@ -1,9 +1,9 @@
 Thousands of particles caught in a strange attractor, tracing out the famous
 butterfly shape as they go.
 
-Three effects make the program. `pointsEmit` creates the particles,
+Three effects make the program. `pointsEmit()` creates the particles,
 `attractor` moves each one according to the attractor's equations, and
-`pointsRender` draws the trails they leave. It is a genuinely
+`pointsRender()` draws the trails they leave. It is a genuinely
 three-dimensional system, so it is worth watching with
 `pointsRender(viewMode: ortho)`.
 

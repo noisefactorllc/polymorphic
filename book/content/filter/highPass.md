@@ -1,9 +1,9 @@
 Keeps only the fine detail in a picture and throws away everything else, leaving
 a flat grey sheet with edges floating in it.
 
-It works the same way as `unsharpMask` up to the last step. Blur the picture,
+It works the same way as `unsharpMask()` up to the last step. Blur the picture,
 subtract the blur from the original, and what remains is exactly the detail the
-blur removed. `unsharpMask` adds that back; this shows it to you on its own. Mid
+blur removed. `unsharpMask()` adds that back; this shows it to you on its own. Mid
 grey is added because the difference can be negative, and would otherwise clip
 to black.
 

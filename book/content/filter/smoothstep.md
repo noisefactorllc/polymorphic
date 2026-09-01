@@ -9,7 +9,7 @@ book.
 
 Each channel is remapped separately against the same pair of edges, which means
 a colour cast in the picture gets exaggerated rather than corrected. If you want
-even-handed contrast, use `adjust` instead.
+even-handed contrast, use `adjust()` instead.
 
 Setting `edge0` above `edge1` inverts the result, which is a quick way to get a
 high-contrast negative.

@@ -1,7 +1,7 @@
 A colour ramp built from between two and eight colours you choose yourself,
 mapped onto the picture's brightness.
 
-Where `palette` generates its ramps from waves, nothing is generated here. You
+Where `palette()` generates its ramps from waves, nothing is generated here. You
 supply the colours and, if you want, the positions along the ramp where each one
 sits, and the effect blends between them.
 

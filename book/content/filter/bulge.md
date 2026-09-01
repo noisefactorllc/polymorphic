@@ -10,7 +10,7 @@ therefore gets pulled outward from the centre, with the middle magnified most.
 a circle or follows the shape of the frame, which matters on a widescreen canvas:
 with it off the bulge becomes an oval and matches the picture's proportions.
 
-`pinch` is the same effect with the sign reversed. `rotation` only does anything
+`pinch()` is the same effect with the sign reversed. `rotation` only does anything
 visible when the bulge is not circular, since there is nothing to see turning
 otherwise.
 

@@ -11,7 +11,7 @@ Each particle's size and rotation are worked out from its own index number, so
 the population looks varied while staying perfectly reproducible: the same seed
 gives the same arrangement every time, with nothing stored anywhere.
 
-The demonstration draws a `polygon` to a surface first and hands it in as the
+The demonstration draws a `polygon()` to a surface first and hands it in as the
 sprite.
 
 Further reading:

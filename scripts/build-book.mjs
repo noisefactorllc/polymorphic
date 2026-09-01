@@ -11,9 +11,12 @@
  *   node scripts/build-book.mjs --allow-missing   # local preview while writing
  *   node scripts/build-book.mjs --out some/dir
  *
- * A missing prose file is a build failure by default. The book's whole claim
- * is that every page describes what its shader actually does; shipping a page
- * with nothing under the title would quietly break that.
+ * A missing prose file is a build failure by default, and so is a page whose
+ * prose names a parameter the engine does not define. The book's whole claim
+ * is that every page describes what its shader actually does; a page with
+ * nothing under the title breaks that loudly, and a page telling the reader to
+ * type a parameter that was renamed three versions ago breaks it quietly.
+ * See scripts/check-book-params.mjs for the resolution rules.
  *
  * Output lands in dist/, NOT in public/. The standalone desktop and mobile
  * pipeline stages polymorphic/public straight from the working checkout without
@@ -26,6 +29,7 @@
  */
 
 import { mkdir, writeFile, readFile, rm, readdir, copyFile } from 'node:fs/promises'
+import { buildIndex, checkParagraph } from './check-book-params.mjs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -264,26 +268,36 @@ ${head({ title, description, canonical, extraHead: `    <script type="applicatio
         <a class="book-rail__tear" id="tear-off" href="${SITE}/?dsl=${encodeURIComponent(effect.program)}" target="_blank" rel="noopener" title="Open this program in Polymorphic" aria-label="Tear off into Polymorphic"><span class="book-rail__tear-text">tear off</span>${icon('open_in_new')}</a>
     </header>
 
-    <div class="book-program">
-        <code-editor id="dsl-editor" spellcheck="false" aria-label="${esc(effect.title)} program"></code-editor>
-        <p class="book-program__note">edit anything · <kbd>&#8984;&#8629;</kbd> or <kbd>Ctrl&#8629;</kbd> recompiles</p>
-        <div class="book-error" id="compile-error" role="alert"></div>
-    </div>
-
-    <footer class="book-plate">
-        <!-- Polymorphic's own <effect-controls> panel, built by book-page.js.
-             Open by default here, since the whole page is about one effect. -->
-        <div class="book-controls" id="effect-controls-host"></div>
-        <div class="book-plate__inner">
-            <p class="book-plate__eyebrow">Chapter ${ORDINALS[chapterIndex]} · ${esc(chapter.title)} <em>(${esc(chapter.subtitle)})</em></p>
-            <h1 class="book-plate__title">${esc(effect.title)}</h1>
-            <hr class="book-plate__rule">
-            <div class="book-prose">
-            ${prose}
-            </div>
-            ${links}
+    <!-- One scrolling column over a fixed canvas. The program and the
+         parameter panel sit on bare shader, because both are operated while
+         watching the picture; the writing sits on a scrim that ramps in once
+         and runs to the bottom of the page. -->
+    <main class="book-article">
+        <div class="book-program">
+            <code-editor id="dsl-editor" spellcheck="false" aria-label="${esc(effect.title)} program"></code-editor>
+            <p class="book-program__note">edit anything · <kbd>&#8984;&#8629;</kbd> or <kbd>Ctrl&#8629;</kbd> recompiles</p>
+            <div class="book-error" id="compile-error" role="alert"></div>
         </div>
-    </footer>
+
+        <!-- Polymorphic's own <effect-controls> panel, built by book-page.js.
+             Open by default, since the whole page is about one effect. Above
+             the writing's ground rather than on it: the ground is 95% opaque,
+             and a reader moving a control has to be able to see what it
+             does. -->
+        <div class="book-controls" id="effect-controls-host"></div>
+
+        <footer class="book-plate">
+            <div class="book-plate__inner">
+                <p class="book-plate__eyebrow">Chapter ${ORDINALS[chapterIndex]} · ${esc(chapter.title)} <em>(${esc(chapter.subtitle)})</em></p>
+                <h1 class="book-plate__title">${esc(effect.title)}</h1>
+                <hr class="book-plate__rule">
+                <div class="book-prose">
+                ${prose}
+                </div>
+                ${links}
+            </div>
+        </footer>
+    </main>
 
     <script type="application/json" id="book-page-data">${JSON.stringify(pageData)}</script>
     <script type="module" src="/book/assets/book-page.js"></script>
@@ -411,6 +425,13 @@ async function main() {
     await copyAssets()
 
     const missing = []
+    // Identifiers the prose puts in backticks that the engine does not define.
+    // A page can compile, render and read perfectly while telling the reader
+    // to type a parameter name that no longer exists, so the build checks the
+    // writing against the extracted definitions the same way it checks that
+    // the writing is there at all.
+    const index = buildIndex({ effects })
+    const unresolved = []
     let written = 0
 
     for (let i = 0; i < ordered.length; i++) {
@@ -428,6 +449,11 @@ async function main() {
 
         const where = `${effect.chapter}/${effect.slug}`
         const split = splitProseFile(raw)
+        for (const paragraph of split.prose.trim().split(/\n\s*\n/).filter(Boolean)) {
+            for (const token of checkParagraph(paragraph, effect, index)) {
+                unresolved.push(`${where}: \`${token}\` is not a parameter, choice, or effect the engine defines`)
+            }
+        }
         const prose = renderProse(split.prose, where)
         const links = ALLOW_MISSING && !split.links.length ? '' : renderLinks(split.links, where)
 
@@ -464,6 +490,15 @@ async function main() {
         process.stderr.write(`\nmissing prose for ${missing.length} effect(s):\n`)
         for (const m of missing) process.stderr.write(`  book/content/${m}\n`)
         process.stderr.write('\nWrite them, or pass --allow-missing to preview locally.\n')
+        process.exit(1)
+    }
+
+    if (unresolved.length && !ALLOW_MISSING) {
+        process.stderr.write(`\n${unresolved.length} identifier(s) in the prose do not resolve:\n`)
+        for (const u of unresolved) process.stderr.write(`  ${u}\n`)
+        process.stderr.write('\nThe writing has drifted from the engine. book/data/effects.json is\n')
+        process.stderr.write('the authority; regenerate it with scripts/extract-book-data.mjs if the\n')
+        process.stderr.write('engine itself has changed. Run scripts/check-book-params.mjs for detail.\n')
         process.exit(1)
     }
 

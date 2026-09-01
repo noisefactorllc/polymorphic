@@ -11,7 +11,7 @@ overall brightness comes out unchanged.
 `amount` does something slightly surprising. Rather than sharpening harder, it
 moves the neighbours it compares against further away. So turning it up does not
 make fine detail more intense, it starts sharpening larger and larger features
-instead. If you want fine detail brought up hard, `unsharpMask` gives you that
+instead. If you want fine detail brought up hard, `unsharpMask()` gives you that
 control separately.
 
 Further reading:

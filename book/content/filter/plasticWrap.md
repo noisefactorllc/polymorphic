@@ -1,7 +1,7 @@
 The glossy sheen of cling film stretched over something, catching the light in
 narrow bright streaks that follow the shapes underneath.
 
-Like `relief` and `chrome` it treats brightness as height and lights the result,
+Like `relief()` and `chrome()` it treats brightness as height and lights the result,
 but its highlights are narrow and bright rather than broad, which is the
 difference between plastic and stone.
 

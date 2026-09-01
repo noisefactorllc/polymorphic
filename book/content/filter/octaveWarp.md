@@ -1,4 +1,4 @@
-Like `warp`, but applied several times over at increasingly fine scales, which
+Like `warp()`, but applied several times over at increasingly fine scales, which
 gives the folded, marbled look of stirred paint or oil on water.
 
 The difference from simply layering several warps is that each pass distorts a
@@ -11,7 +11,7 @@ is what produces the characteristic folds.
 `octaves` sets how many passes. Two or three is usually plenty; more quickly
 turns everything to mush. `displacement` sets the strength of the first pass, and
 each pass after it moves half as far, so the contribution stays roughly the same
-size on screen at every scale. `frequency` sets how large the coarsest swirls
+size on screen at every scale. `freq` sets how large the coarsest swirls
 are.
 
 Further reading:

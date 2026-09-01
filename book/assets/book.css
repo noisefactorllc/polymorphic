@@ -1,9 +1,21 @@
 /*
  * The Book of Polymorphic DSL
  *
- * Two layouts share this sheet: the index (a scrolling contents page over a
- * live canvas) and a reading page (a full-bleed canvas with the program at the
- * top and the writing in the lower third).
+ * Two layouts share this sheet, and both are a scrolling column over a live
+ * canvas: the index (a cover, then the contents) and a reading page.
+ *
+ * A reading page runs program, parameter panel, then the writing. The first
+ * two sit on bare shader, because both are things you operate while watching
+ * the picture change. The writing sits on a scrim that ramps in once and then
+ * runs to the bottom of the page: a ground that faded back out would leave an
+ * opaque band floating in the middle of the page with art above and below it.
+ *
+ * The page used to pin all three blocks to the viewport and ration the height
+ * between them in vh. That capped every block against the others: the panel
+ * sliced its own list mid-row, the prose became a silent scrollbox that cut
+ * off the last paragraph on a 720px window, and the gaps between blocks ended
+ * up smaller than the padding inside them, so it read as one cramped mass.
+ * Nothing here is sized against the viewport any more.
  *
  * Every visual value is an --hf-* token. Comfortaa is Polymorphic's accent
  * face and carries every heading here; Nunito carries the prose; Noto Sans
@@ -30,17 +42,21 @@
 :root {
     --book-font-accent: 'Comfortaa', 'Comfortaa Block', var(--hf-font-family);
 
-    /* One measure, shared by the program and the prose, so the two read as a
-       single column rather than two floating panels. */
+    /* One measure, shared by the program, the panel and the prose, so the
+       three read as a single column rather than floating panels. */
     --book-measure: 46rem;
-    /* Where the program block ends, measured and written by book-page.js once
-       the editor has been sized to its own line count. The plate takes the
-       rest of the viewport, so a page with a short program gives its writing
-       more room and a page with a long one gives it less. Falls back to a
-       sensible height if the script has not run. */
-    --book-program-bottom: 20rem;
     --book-gutter: var(--hf-space-6);
     --book-rail-height: 2.75rem;
+
+    /* The air between the article's blocks. Has to be larger than the padding
+       inside any of them, or the program, the parameter panel and the writing
+       read as one undifferentiated mass rather than three things. */
+    --book-block-gap: var(--hf-space-8);
+    /* The air between the rail and the program. Modest on purpose: the canvas
+       is fixed behind the whole article and shows beside a 46rem column, so
+       the art is on display without spending a fifth of a short laptop's
+       viewport on an empty band above the fold. */
+    --book-lede: clamp(2.5rem, 9vh, 6rem);
 
     /* The cover's height, shared by the cover block and the canvas pinned to
        it, so the two cannot disagree. */
@@ -81,6 +97,13 @@ body {
 
 body {
     overflow: hidden;
+}
+
+/* A reading page scrolls. Horizontal stays clamped so a wide parameter panel
+   or a long program line can never introduce a sideways scrollbar. */
+body.book-reader {
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 a {
@@ -268,12 +291,26 @@ a:hover {
    Program
    ========================================================================== */
 
+/* ==========================================================================
+   Article
+   ========================================================================== */
+
+/* The whole reading column. In normal flow over the fixed canvas, so each
+   block is as tall as its own content and the page is as tall as the sum.
+   The column is at least a viewport tall so the writing's ground always
+   reaches the bottom edge of the screen, even on the shortest page. */
+.book-article {
+    position: relative;
+    z-index: var(--hf-z-base);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-top: calc(var(--book-rail-height) + var(--book-lede));
+}
+
 .book-program {
-    position: fixed;
-    top: calc(var(--book-rail-height) + var(--hf-space-4));
-    left: var(--book-gutter);
-    z-index: var(--hf-z-fixed);
     width: min(var(--book-measure), calc(100vw - var(--book-gutter) * 2));
+    margin-inline: var(--book-gutter);
     display: flex;
     flex-direction: column;
     gap: var(--hf-space-2);
@@ -282,11 +319,11 @@ a:hover {
 .book-program code-editor {
     /* --book-editor-height is set per page from the program's line count. */
     height: var(--book-editor-height, 12rem);
-    /* A long program scrolls rather than pushing the writing off the screen.
-       Anything past about ten lines was going to scroll at any cap this side
-       of half the viewport, so the cap is set where the writing keeps its
-       room rather than where the longest program stops scrolling. */
-    max-height: 26vh;
+    /* Only the longest programs scroll. The cap is no longer about rationing
+       the viewport between pinned blocks; it is about not letting a 37-line
+       program (mixer/mashup) push everything below it off the screen. Same
+       value as Polymorphic's own panels, so the two agree. */
+    max-height: min(40vh, 24rem);
     border-radius: var(--hf-radius);
     --code-editor-font-size: var(--hf-size-base);
 }
@@ -338,50 +375,37 @@ a:hover {
    The plate: chapter line, effect name, prose
    ========================================================================== */
 
+/* The writing, and the ground it sits on.
+ *
+ * Full bleed rather than column width, so the ground reads as the page turning
+ * to paper under the reader while the text keeps the same left-aligned measure
+ * as the program above it.
+ *
+ * The gradient ramps in once, at the top edge where it meets bare shader, and
+ * is opaque from there down. It never fades back out: `flex: 1 0 auto` inside
+ * a `min-height: 100vh` article makes this block grow to the bottom of the
+ * screen, so the ramp always runs to a page edge. An earlier version faded the
+ * ground out again below the further-reading row, which put an opaque stripe
+ * across the middle of the page with art above and below it.
+ *
+ * The ramp is in rem rather than percentages: a percentage stop would give a
+ * two-paragraph page a short, abrupt ramp and a long one a ramp running past
+ * the title. Fixed stops put the same gradient above every page's eyebrow. */
 .book-plate {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: var(--hf-z-sticky);
-    /* A floor under the plate keeps the scrim ramp the same length whether the
-       page runs two paragraphs or one line. Without it a short page gets a
-       compressed gradient and the title sits on bare shader. */
-    min-height: 48vh;
-    /* Everything below the program. The top of this box is scrim rather than
-       content, so it may run back up behind the program's last line without
-       covering anything. Inside, the reading column shrinks first, since it
-       can scroll and the parameter panel cannot. */
-    max-height: calc(100vh - var(--book-program-bottom) + var(--hf-space-8));
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: var(--hf-space-8) var(--book-gutter) var(--hf-space-6);
+    flex: 1 0 auto;
+    margin-top: var(--book-block-gap);
+    padding: var(--hf-space-10) var(--book-gutter) var(--hf-space-12);
     background: linear-gradient(
-        to top,
-        var(--book-scrim-floor) 0%,
-        var(--book-scrim-floor) 45%,
-        var(--book-scrim-mid) 78%,
-        var(--book-scrim-none) 100%
+        to bottom,
+        var(--book-scrim-none) 0,
+        var(--book-scrim-mid) 2rem,
+        var(--book-scrim-floor) 4.5rem,
+        var(--book-scrim-floor) 100%
     );
-    pointer-events: none;
 }
 
 .book-plate__inner {
     width: min(var(--book-measure), 100%);
-    flex: 0 1 auto;
-    min-height: 0;
-    /* Caps the reading column at just over half the viewport. Raised from 45vh
-       when the further-reading row was added: the row costs about one line
-       plus its rule, and without the extra room the longest pages started the
-       reader off scrolling on an ordinary laptop. It is a cap, not a height,
-       so short pages are unaffected. */
-    max-height: 51vh;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    pointer-events: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--hf-border) transparent;
 }
 
 .book-plate__eyebrow {
@@ -422,13 +446,13 @@ a:hover {
 
 .book-prose {
     font-size: var(--hf-size-md);
-    line-height: var(--hf-leading-normal);
+    line-height: var(--hf-leading-relaxed);
     color: var(--hf-text-normal);
     text-wrap: pretty;
 }
 
 .book-prose p + p {
-    margin-top: var(--hf-space-3);
+    margin-top: var(--hf-space-4);
 }
 
 .book-prose code {
@@ -448,20 +472,23 @@ a:hover {
     display: none;
 }
 
+/* Above the writing's ground, on bare shader, beside the program. The panel's
+   whole purpose is the loop between moving a control and seeing the picture
+   change, so the canvas has to be visible around it; sitting it on the scrim
+   would leave a reader dragging a slider with nothing to watch. */
 .book-controls.open {
     display: block;
-    width: min(var(--book-measure), 100%);
-    margin-bottom: var(--hf-space-3);
-    pointer-events: auto;
-    flex: 0 0 auto;
+    width: min(var(--book-measure), calc(100vw - var(--book-gutter) * 2));
+    margin-inline: var(--book-gutter);
+    margin-top: var(--book-block-gap);
 }
 
+/* No height cap. The old min(16vh, 11rem) existed because the panel was one of
+   three blocks dividing a single viewport, and it sliced the parameter list
+   mid-row — bloom's `tint` swatch was cut in half. In a scrolling column the
+   panel can simply be as tall as the effect it documents. */
 .book-controls effect-controls {
-    /* Deliberately shorter than Polymorphic's own min(40vh, 24rem): there the
-       panel sits over a canvas the reader can still see around it, and here it
-       is stacked above the writing. The widget scrolls its own body, so a long
-       parameter list stays reachable. */
-    max-height: min(16vh, 11rem);
+    max-height: none;
 }
 
 /* Further reading. A single wrapped row at the foot of the plate: enough to
@@ -754,16 +781,11 @@ body.book-index #canvas {
     }
 
     .book-program code-editor {
-        max-height: 32vh;
         --code-editor-font-size: var(--hf-size-sm);
     }
 
     .book-plate {
-        padding-top: var(--hf-space-10);
-    }
-
-    .book-plate__inner {
-        max-height: 52vh;
+        padding-block: var(--hf-space-10);
     }
 
     .book-prose {
@@ -771,21 +793,9 @@ body.book-index #canvas {
     }
 }
 
-/* A laptop in a short window still has to show the program and the writing.
-   Give the plate the room and let the program shrink. */
-@media (max-height: 44rem) {
-    .book-program code-editor {
-        max-height: 26vh;
-    }
-
-    .book-plate {
-        padding-top: var(--hf-space-8);
-    }
-
-    .book-plate__inner {
-        max-height: 48vh;
-    }
-}
+/* No short-viewport block any more. Height was only ever a problem while the
+   program, the panel and the writing were three pinned boxes dividing one
+   viewport; a scrolling column has as much room as it needs. */
 
 @media (prefers-reduced-motion: reduce) {
     #canvas,

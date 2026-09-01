@@ -2,7 +2,7 @@ Pans the picture continuously. `speedX` and `speedY` set the rate, `x` and `y`
 add a fixed offset, so the same effect covers both nudging something into place
 and scrolling it forever.
 
-The reason this exists separately from `translate` is aspect correction. On a
+The reason this exists separately from `translate()` is aspect correction. On a
 widescreen canvas a step sideways is a different physical distance from a step
 upward, so scrolling diagonally at equal speeds would drift at the wrong angle
 and slowly wander off the diagonal you asked for. This effect squares the

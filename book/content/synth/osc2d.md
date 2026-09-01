@@ -1,10 +1,10 @@
 Bands and stripes, driven by a waveform. It is the simplest generator here after
-`solid`, and useful as a source of moving structure for other effects to chew
+`solid()`, and useful as a source of moving structure for other effects to chew
 on.
 
 Every pixel is reduced to a single number based on how far up the screen it sits,
 and that number is fed to the chosen waveform. Everything at the same height gets
-the same answer, which is why the output is always stripes. `frequency` sets how
+the same answer, which is why the output is always stripes. `freq` sets how
 many, `speed` scrolls them, and `rotation` turns the whole field first so the
 bands can run at any angle.
 

@@ -11,7 +11,7 @@ The contour setting works differently. Instead of looking for any change it
 looks for one specific brightness level and marks only the pixels where the
 picture crosses it, which draws a contour line through a chosen tone rather than
 outlining everything. `blend` decides how the edges are combined back with the
-original, and `mixAmt` how much of it you see.
+original, and `mix` how much of it you see.
 
 Further reading:
 - Edge detection | https://en.wikipedia.org/wiki/Edge_detection

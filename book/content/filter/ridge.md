@@ -5,7 +5,7 @@ Pick a `level`. Values sitting exactly there come out white, and the further a
 value is from it in either direction, the darker it gets. Applied to a smooth
 gradient this draws a bright band along the contour where the gradient crosses
 your level. Applied to noise it turns every gentle slope into a sharp
-ridgeline, which is where the name comes from and why `noise` and its relatives
+ridgeline, which is where the name comes from and why `noise()` and its relatives
 have a `ridges` option of their own.
 
 There is a correction that stops an off-centre level breaking it. If `level` sits

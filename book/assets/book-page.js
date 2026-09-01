@@ -70,32 +70,14 @@ function resizeCanvas() {
 /**
  * Give the editor exactly the height its program needs. A one-line program in
  * a twelve-line box looks like a mistake, and a long program that scrolls on
- * arrival hides the very thing the page is about. CSS caps the result so a
- * long program can never crowd out the writing.
+ * arrival hides the very thing the page is about. CSS caps the result well
+ * above any program the book ships, so in practice nothing scrolls.
  */
 function sizeEditorToProgram() {
     const lines = (editor.value || '').split('\n').length
     const lineHeight = 1.6
     const chrome = 1.25
     editor.style.setProperty('--book-editor-height', `${(lines * lineHeight + chrome).toFixed(2)}em`)
-    publishProgramBottom()
-}
-
-/**
- * Tell the plate where the program ends, so the two fixed blocks divide the
- * viewport between them instead of guessing at each other's height. A short
- * program leaves the writing more room; a long one leaves it less.
- *
- * Measured after a frame, because the editor has just been resized and the new
- * height is not in the layout yet.
- */
-function publishProgramBottom() {
-    requestAnimationFrame(() => {
-        const block = document.querySelector('.book-program')
-        if (!block) return
-        const bottom = Math.round(block.getBoundingClientRect().bottom)
-        document.documentElement.style.setProperty('--book-program-bottom', `${bottom}px`)
-    })
 }
 
 function showError(message) {
@@ -417,7 +399,6 @@ async function main() {
             resizeRaf = 0
             const size = resizeCanvas()
             renderer.resize(size.width, size.height)
-            publishProgramBottom()
         })
     })
 

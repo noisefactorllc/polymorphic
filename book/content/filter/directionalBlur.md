@@ -1,5 +1,5 @@
 Smears the picture in a straight line, the way a photograph blurs when the
-camera is panned during the exposure. `angle` sets the direction, `blurDistance`
+camera is panned during the exposure. `angle` sets the direction, `distance`
 how far.
 
 The method is simple: take 32 samples spread along that line and average them.

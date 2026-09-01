@@ -7,7 +7,7 @@ out at exactly one, and that distance is squared. The squaring is what gives a
 vignette its particular look: most of the frame stays barely touched and the
 darkening rushes in near the edges, rather than fading evenly the whole way out.
 
-`vignetteBrightness` is the colour the edges head toward, and it does not have
+`brightness` is the colour the edges head toward, and it does not have
 to be black. Set it brighter than the picture and the effect reverses, closing a
 pale surround in around a darker centre. `alpha` sets how strong the whole thing
 is.

@@ -1,7 +1,7 @@
 The little numeric readout a camera or a broadcast monitor prints in the corner
 of its picture. Three to six digits, ticking over.
 
-The digits come from the same blocky bank-cheque font that `spookyTicker` uses.
+The digits come from the same blocky bank-cheque font that `spookyTicker()` uses.
 Nothing is remembered from one frame to the next; what the display reads is
 worked out fresh each time from the clock and the seed, which between them
 decide how many digits appear, what they say, and how fast they change.

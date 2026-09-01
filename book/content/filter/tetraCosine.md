@@ -1,11 +1,13 @@
-The same cosine gradient formula that `palette` uses, but with its four controls
+The same cosine gradient formula that `palette()` uses, but with its four controls
 exposed instead of hidden behind a list of presets. Brightness picks a position
-along the ramp; the four controls decide what the ramp looks like.
+along the ramp; the four controls decide what the ramp looks like. Each is a
+trio, one per colour channel.
 
-Each one does something you can predict. `offset` is the middle of the ramp,
-roughly its average colour. `amp` is how far it swings either side of that.
-`freq` is how many times it oscillates across the range of tones. `phase` slides
-each channel along independently.
+Each one does something you can predict. `offsetR`, `offsetG` and `offsetB` are
+the middle of the ramp, roughly its average colour. `ampR`, `ampG` and `ampB`
+are how far it swings either side of that. `freqR`, `freqG` and `freqB` are how
+many times each channel oscillates across the range of tones. `phaseR`, `phaseG`
+and `phaseB` slide each channel along independently.
 
 The interesting behaviour comes from setting the three channels' frequencies to
 different whole numbers. Because they come back into step at different rates,

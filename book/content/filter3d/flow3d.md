@@ -1,5 +1,5 @@
 Particles wandering through a volume, leaving trails behind them in three
-dimensions. It is the same idea as `flow` in the points chapter, but it reads a
+dimensions. It is the same idea as `flow()` in the points chapter, but it reads a
 volume and writes a volume rather than producing a picture, which is why it
 lives here.
 

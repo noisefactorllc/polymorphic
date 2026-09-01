@@ -1,8 +1,8 @@
-Perlin noise, the other great classic alongside `noise`. Same soft cloudy
+Perlin noise, the other great classic alongside `noise()`. Same soft cloudy
 character, built a different way, and the difference is visible once you know to
 look for it.
 
-`noise` puts a random value at each grid point and blends between them. Perlin
+`noise()` puts a random value at each grid point and blends between them. Perlin
 puts a random *direction* at each grid point instead, and asks each pixel how
 much it is leaning along its neighbours' directions. The consequence is that the
 value is always exactly zero at the grid points themselves, so the pattern never

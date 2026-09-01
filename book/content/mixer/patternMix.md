@@ -1,4 +1,4 @@
-The twelve tiling patterns from `pattern`, used as a stencil between two
+The twelve tiling patterns from `pattern()`, used as a stencil between two
 pictures instead of being drawn as a picture in their own right. Checkerboard,
 dots, hexagons, stripes, rings, spirals, triangles, hearts, waves and zigzags
 all work.

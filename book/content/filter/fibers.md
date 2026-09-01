@@ -7,12 +7,13 @@ positions. Each one reads the value underneath itself, turns that into a
 direction, takes a short step, and draws a line as it goes. Because neighbouring
 agents read similar values, their paths sweep along together in currents.
 
-`kink` is what separates a fibre from a drift. It multiplies the field value
-before it becomes a heading, so a high setting means small changes in the field
-swing the agent through many turns in a short distance, and the threads curl
-instead of running straight. Each strand also fades in and back out along its
-length, so the ends taper rather than stopping dead. `density` sets how many
-threads there are.
+The turn rate is what separates a fibre from a drift. The field value is
+multiplied before it becomes a heading, so small changes in the field swing an
+agent through many turns in a short distance and the threads curl rather than
+running straight. That multiplier is fixed here rather than exposed. Each strand
+also fades in and back out along its length, so the ends taper rather than
+stopping dead. `density` sets how many threads there are, `alpha` how strongly
+they sit over the picture, and `seed` picks a different tangle.
 
 Further reading:
 - Security paper | https://en.wikipedia.org/wiki/Security_paper

@@ -8,10 +8,11 @@
     "dev": "npm run build && node scripts/serve-book.mjs 3000",
     "build": "node scripts/build-book.mjs",
     "book:extract": "node scripts/extract-book-data.mjs",
-    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs && node scripts/check-book-params.mjs",
     "test:e2e": "playwright test",
-    "test": "node --test tests/unit/*.test.mjs",
-    "check:links": "node scripts/check-book-links.mjs"
+    "test": "node --test tests/unit/*.test.mjs && node scripts/check-book-params.mjs",
+    "check:links": "node scripts/check-book-links.mjs",
+    "check:params": "node scripts/check-book-params.mjs"
   },
   "author": "Noise Factor",
   "license": "UNLICENSED",

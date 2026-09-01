@@ -1,4 +1,4 @@
-`render3d` with the lighting opened up. The same two methods find the surface;
+`render3d()` with the lighting opened up. The same two methods find the surface;
 what changes is what happens once a ray has hit something.
 
 The base renderer applies a fixed, serviceable shading. This one puts the light

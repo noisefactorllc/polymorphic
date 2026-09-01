@@ -2,7 +2,7 @@ The scratches that appear on film that has been through a projector too many
 times.
 
 They are drawn by tiny agents that walk across the frame leaving a trail, the
-same machinery behind `fibers` and `strayHair`. What makes these read as
+same machinery behind `fibers()` and `strayHair()`. What makes these read as
 scratches rather than fibres is that the agents barely steer: they hold their
 heading and travel a long way, so the marks come out nearly straight. They are
 drawn in four passes, alternating between agents that all share one direction,

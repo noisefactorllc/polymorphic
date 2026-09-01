@@ -10,7 +10,7 @@ The samples are not weighted evenly. They are weighted by a curve that peaks in
 the middle of the sweep and falls to nothing at both ends, so the streak fades
 out rather than stopping abruptly at a hard edge.
 
-`strength` sets how far the samples reach. As with `directionalBlur`, the whole
+`strength` sets how far the samples reach. As with `directionalBlur()`, the whole
 set of samples is nudged by a random amount to prevent the fixed sample count
 showing up as ghosting.
 

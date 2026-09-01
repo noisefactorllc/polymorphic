@@ -1,4 +1,4 @@
-The opposite of `bulge`. The middle of the picture is sucked inward, as though
+The opposite of `bulge()`. The middle of the picture is sucked inward, as though
 the image were being pulled down a drain.
 
 It is the same operation with the sign flipped: each pixel's distance from the

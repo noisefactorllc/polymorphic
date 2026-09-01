@@ -1,6 +1,6 @@
 Noise filling a solid volume rather than a flat picture, and the starting point
 for most programs in these two chapters. The demonstration is two effects:
-`noise3d` fills the volume, and `render3d` turns it into an image.
+`noise3d()` fills the volume, and `render3d()` turns it into an image.
 
 Volumes have to be stored as flat pictures, because that is all a fragment shader
 can write to. A volume of side N is laid out as a tall strip, N wide and N

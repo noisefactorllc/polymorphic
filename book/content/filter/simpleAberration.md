@@ -1,7 +1,7 @@
 Colour fringing, the plain version. Red is pulled one way, blue the other, green
 stays put, and the amount is the same everywhere in the frame.
 
-That last part is what separates it from `chromaticAberration`, where the
+That last part is what separates it from `chromaticAberration()`, where the
 separation grows toward the corners because that is how a real lens fails.
 Because this one is uniform, it does not read as an optical fault at all. It
 reads as a registration error: colour plates misaligned on a printing press, or

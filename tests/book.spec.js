@@ -83,10 +83,8 @@ async function canvasHasImage(page) {
 }
 
 test.describe('The Book of Polymorphic DSL', () => {
-    // A stated desktop window, because one of the claims below is about
-    // layout: the writing has to fit without the reader arriving scrolled.
-    // Playwright's 1280x720 default is shorter than any laptop this is read
-    // on, and the plate is sized in vh.
+    // A stated desktop window, because some of the claims below are about
+    // layout. 1440x900 is the window the book is designed against.
     test.use({ viewport: { width: 1440, height: 900 } })
 
     test('contents lists every page exactly once', async ({ page }) => {
@@ -174,6 +172,47 @@ test.describe('The Book of Polymorphic DSL', () => {
         expect(carried).toBe(await page.locator('#dsl-editor').evaluate(el => el.value))
     })
 
+    // The panel is only useful if you can watch the picture while you move a
+    // control. It briefly was not: the panel was placed below the writing, on
+    // the plate's ground, which is 95% opaque — scrolling to it covered the
+    // canvas and a reader dragging a slider had nothing to see. The panel now
+    // sits above that ground, on bare shader beside the program.
+    //
+    // filter/grade is the page that makes this hardest: its panel is over
+    // 1000px tall, taller than the window. What saves it is width — the panel
+    // is one measure wide, so the canvas is never fully covered.
+    test('the canvas stays visible behind the parameter panel', async ({ page }) => {
+        await page.goto('/book/filter/grade/')
+        await page.waitForFunction(() => document.body.dataset.bookReady, { timeout: 45000 })
+        await expect(page.locator('effect-controls')).toBeVisible()
+
+        const view = await page.evaluate(() => {
+            const panel = document.querySelector('effect-controls')
+            // Put the panel just under the rail, where a reader turning knobs
+            // would have it.
+            window.scrollTo(0, window.scrollY + panel.getBoundingClientRect().top - 60)
+
+            const plate = document.querySelector('.book-plate').getBoundingClientRect()
+            const box = panel.getBoundingClientRect()
+            const vw = window.innerWidth
+            const vh = window.innerHeight
+            // Area of the viewport covered by neither the writing's opaque
+            // ground nor the panel itself. Whatever is left is live canvas.
+            const plateArea = Math.max(0, Math.min(plate.bottom, vh) - Math.max(plate.top, 0)) * vw
+            const panelArea = Math.max(0, Math.min(box.bottom, vh) - Math.max(box.top, 0))
+                * Math.min(box.width, vw)
+            return {
+                freeFraction: (vw * vh - plateArea - panelArea) / (vw * vh),
+                panelOnTheGround: Boolean(panel.closest('.book-plate')),
+            }
+        })
+
+        expect(view.panelOnTheGround,
+            'the panel is on the writing\'s ground, which hides the canvas').toBe(false)
+        expect(view.freeFraction,
+            'too little of the canvas is visible while using the panel').toBeGreaterThan(0.25)
+    })
+
     for (const effect of walk) {
         test(`${effect.chapter}/${effect.slug} compiles and renders`, async ({ page }) => {
             const consoleErrors = []
@@ -203,19 +242,33 @@ test.describe('The Book of Polymorphic DSL', () => {
             expect(await panel.locator('.ec-body > *').count(),
                 'parameter panel is empty').toBeGreaterThan(0)
 
-            // The writing has to fit the plate on a desktop window, measured
-            // with the panel put away: the panel takes room by design and the
-            // reader can close it, but the writing itself must not be so long
-            // that a page arrives already scrolled.
-            const plate = await page.evaluate(() => {
-                const host = document.getElementById('effect-controls-host')
-                const inner = document.querySelector('.book-plate__inner')
-                host?.classList.remove('open')
-                const measured = { content: inner.scrollHeight, box: inner.clientHeight }
-                host?.classList.add('open')
-                return measured
+            // The reading page is one scrolling column, so length is no longer
+            // the constraint it was when three pinned blocks divided the
+            // viewport. What must hold is that nothing is clipped: every block
+            // is as tall as its own content, and neither the writing nor the
+            // parameter panel is cut off by a box it cannot scroll.
+            const layout = await page.evaluate(() => {
+                const clip = (sel) => {
+                    const el = document.querySelector(sel)
+                    return el ? el.scrollHeight - el.clientHeight : null
+                }
+                const plate = document.querySelector('.book-plate').getBoundingClientRect()
+                return {
+                    prose: clip('.book-plate__inner'),
+                    panel: clip('effect-controls'),
+                    hScroll: document.documentElement.scrollWidth - window.innerWidth,
+                    // The writing's ground has to run to the bottom edge of the
+                    // screen. A ground that stopped short would put an opaque
+                    // band across the middle of the page with art above and
+                    // below it.
+                    groundShortOfEdge: window.innerHeight - plate.bottom,
+                }
             })
-            expect(plate.content, 'the writing overflows the plate').toBeLessThanOrEqual(plate.box + 1)
+            expect(layout.prose, 'the writing is clipped').toBeLessThanOrEqual(1)
+            expect(layout.panel, 'the parameter panel is clipped').toBeLessThanOrEqual(1)
+            expect(layout.hScroll, 'the page scrolls sideways').toBeLessThanOrEqual(0)
+            expect(layout.groundShortOfEdge,
+                'the writing\'s ground stops short of the bottom edge').toBeLessThanOrEqual(1)
 
             // Further reading. Every page sends the reader on somewhere.
             const links = page.locator('.book-plate__links a')

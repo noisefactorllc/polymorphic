@@ -3,7 +3,7 @@ exactly what it says: pick a colour, fill the screen.
 
 It earns its place as a starting point. A lot of effects need something to work
 on, and a plain colour is the clearest possible test of what they do to it. Run
-an effect over `solid` and whatever appears is entirely the effect's doing, with
+an effect over `solid()` and whatever appears is entirely the effect's doing, with
 no pattern underneath to confuse you.
 
 The one detail worth knowing is `alpha`. It does not just make the colour

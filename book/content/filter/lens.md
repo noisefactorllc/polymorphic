@@ -8,7 +8,7 @@ strongest in the middle and fades to nothing at the corners. That particular
 falloff is what gives lens distortion its recognisable shape rather than a
 uniform stretch.
 
-`lensDisplacement` picks which way and how much. Negative values also zoom in
+`displacement` picks which way and how much. Negative values also zoom in
 slightly, because pulling the picture inward would otherwise leave the corners
 empty. `aspectLens` decides whether the distortion is circular or follows the
 frame's proportions, and `antialias` supersamples where the stretch is worst.

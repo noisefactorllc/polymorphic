@@ -12,7 +12,7 @@ address wraps around when it runs off the end, raising it sweeps the lookup
 through the picture many times and multiplies the banding.
 
 To normalise brightness first the effect has to know the picture's own range,
-which it finds by reducing the image in stages the same way `normalize` does.
+which it finds by reducing the image in stages the same way `normalize()` does.
 
 Further reading:
 - Lookup table | https://en.wikipedia.org/wiki/Lookup_table
