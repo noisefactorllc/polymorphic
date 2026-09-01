@@ -778,6 +778,14 @@ body.book-index #canvas {
 
     .book-rail__folio {
         padding: 0 var(--hf-space-1);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* The effect's name and its place in the book earn the space on a phone;
+       the chapter is already the first thing the writing says. */
+    .book-rail__folio-chapter {
+        display: none;
     }
 
     .book-program code-editor {
@@ -790,6 +798,20 @@ body.book-index #canvas {
 
     .book-prose {
         font-size: var(--hf-size-base);
+    }
+
+    /* On a phone the panel is the full width of the column, so there is no
+       canvas beside it the way there is on a desktop; without help, moving a
+       control shows you nothing. Two things give the picture back. The panel
+       stops short of filling the screen and scrolls its own body past that,
+       and a band of bare shader sits between it and the writing's ground, so
+       what a control changes is directly under the control. */
+    .book-controls effect-controls {
+        max-height: min(46vh, 22rem);
+    }
+
+    .book-controls.open {
+        margin-bottom: 34vh;
     }
 }
 

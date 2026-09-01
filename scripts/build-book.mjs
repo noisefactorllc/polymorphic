@@ -261,7 +261,11 @@ ${head({ title, description, canonical, extraHead: `    <script type="applicatio
         <nav class="book-rail__nav" aria-label="Reader navigation">
             ${railStep(nav.prevChapter, 'Previous chapter', 'first_page')}
             ${railStep(nav.prev, 'Previous page', 'chevron_left')}
-            <span class="book-rail__folio"><b>${folio.position}</b> of ${folio.total} · ${esc(chapter.title)}</span>
+            <!-- The effect's own name leads here. A parameter-heavy page starts
+                 its title below the fold, so without this a reader landing from
+                 search sees a program and a panel with nothing saying what they
+                 are for. The chapter is the part that drops on a phone. -->
+            <span class="book-rail__folio"><b>${esc(effect.title)}</b> · ${folio.position} of ${folio.total}<span class="book-rail__folio-chapter"> · ${esc(chapter.title)}</span></span>
             ${railStep(nav.next, 'Next page', 'chevron_right')}
             ${railStep(nav.nextChapter, 'Next chapter', 'last_page')}
         </nav>

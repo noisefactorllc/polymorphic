@@ -181,37 +181,49 @@ test.describe('The Book of Polymorphic DSL', () => {
     // filter/grade is the page that makes this hardest: its panel is over
     // 1000px tall, taller than the window. What saves it is width — the panel
     // is one measure wide, so the canvas is never fully covered.
-    test('the canvas stays visible behind the parameter panel', async ({ page }) => {
-        await page.goto('/book/filter/grade/')
-        await page.waitForFunction(() => document.body.dataset.bookReady, { timeout: 45000 })
-        await expect(page.locator('effect-controls')).toBeVisible()
+    //
+    // A phone gets no canvas beside the panel, since the panel is the full
+    // width of the column there, so it is checked separately: the narrow
+    // layout answers with a height cap and a band of shader under the panel
+    // instead. Without those a phone sat at 13% and this passed on desktop
+    // alone.
+    for (const viewport of [
+        { width: 1440, height: 900, name: 'desktop' },
+        { width: 390, height: 844, name: 'phone' },
+    ]) {
+        test(`the canvas stays visible behind the parameter panel (${viewport.name})`, async ({ page }) => {
+            await page.setViewportSize({ width: viewport.width, height: viewport.height })
+            await page.goto('/book/filter/grade/')
+            await page.waitForFunction(() => document.body.dataset.bookReady, { timeout: 45000 })
+            await expect(page.locator('effect-controls')).toBeVisible()
 
-        const view = await page.evaluate(() => {
-            const panel = document.querySelector('effect-controls')
-            // Put the panel just under the rail, where a reader turning knobs
-            // would have it.
-            window.scrollTo(0, window.scrollY + panel.getBoundingClientRect().top - 60)
+            const view = await page.evaluate(() => {
+                const panel = document.querySelector('effect-controls')
+                // Put the panel just under the rail, where a reader turning
+                // knobs would have it.
+                window.scrollTo(0, window.scrollY + panel.getBoundingClientRect().top - 60)
 
-            const plate = document.querySelector('.book-plate').getBoundingClientRect()
-            const box = panel.getBoundingClientRect()
-            const vw = window.innerWidth
-            const vh = window.innerHeight
-            // Area of the viewport covered by neither the writing's opaque
-            // ground nor the panel itself. Whatever is left is live canvas.
-            const plateArea = Math.max(0, Math.min(plate.bottom, vh) - Math.max(plate.top, 0)) * vw
-            const panelArea = Math.max(0, Math.min(box.bottom, vh) - Math.max(box.top, 0))
-                * Math.min(box.width, vw)
-            return {
-                freeFraction: (vw * vh - plateArea - panelArea) / (vw * vh),
-                panelOnTheGround: Boolean(panel.closest('.book-plate')),
-            }
+                const plate = document.querySelector('.book-plate').getBoundingClientRect()
+                const box = panel.getBoundingClientRect()
+                const vw = window.innerWidth
+                const vh = window.innerHeight
+                // Area of the viewport covered by neither the writing's opaque
+                // ground nor the panel itself. Whatever is left is live canvas.
+                const plateArea = Math.max(0, Math.min(plate.bottom, vh) - Math.max(plate.top, 0)) * vw
+                const panelArea = Math.max(0, Math.min(box.bottom, vh) - Math.max(box.top, 0))
+                    * Math.min(box.width, vw)
+                return {
+                    freeFraction: (vw * vh - plateArea - panelArea) / (vw * vh),
+                    panelOnTheGround: Boolean(panel.closest('.book-plate')),
+                }
+            })
+
+            expect(view.panelOnTheGround,
+                'the panel is on the writing\'s ground, which hides the canvas').toBe(false)
+            expect(view.freeFraction,
+                'too little of the canvas is visible while using the panel').toBeGreaterThan(0.25)
         })
-
-        expect(view.panelOnTheGround,
-            'the panel is on the writing\'s ground, which hides the canvas').toBe(false)
-        expect(view.freeFraction,
-            'too little of the canvas is visible while using the panel').toBeGreaterThan(0.25)
-    })
+    }
 
     for (const effect of walk) {
         test(`${effect.chapter}/${effect.slug} compiles and renders`, async ({ page }) => {
