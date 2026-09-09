@@ -276,7 +276,17 @@ if (menuBarEl) {
                             },
                         },
                         { type: 'separator', id: 'onlineCollabMenuSeparator', hidden: () => !onlineCollabUiVisible },
-                        { id: 'goOnlineMenuItem', label: 'go online...', hidden: () => !onlineCollabUiVisible, onSelect: () => seanceDialog?.show() },
+                        {
+                            id: 'goOnlineMenuItem',
+                            // The dialog is modal, so while it is closed this
+                            // label was the only thing on screen that could
+                            // say a session is live, and it always read "go
+                            // online...". Someone could be broadcasting every
+                            // keystroke with nothing telling them so.
+                            label: () => onlineSessionMenuLabel(),
+                            hidden: () => !onlineCollabUiVisible,
+                            onSelect: () => seanceDialog?.show(),
+                        },
                     ],
                 },
             ],
@@ -361,6 +371,19 @@ function isFeatureEnabled(name) {
     } catch {
         return false
     }
+}
+
+/**
+ * Label for the collaboration menu item, which doubles as the app's only
+ * always-visible session indicator.
+ */
+function onlineSessionMenuLabel() {
+    const status = onlineAdapter?.getStatus?.() || 'offline'
+    const sessionId = onlineAdapter?.getSessionId?.() || ''
+    if (status === 'connecting') return 'connecting...'
+    if (status === 'readonly') return `online (read-only): ${sessionId}...`
+    if (status === 'online') return `online: ${sessionId}...`
+    return 'go online...'
 }
 
 function setOnlineCollaborationUiVisible(visible) {
@@ -870,7 +893,35 @@ function publishLocalDsl(source) {
     }
 }
 
+// A peer types at the SDK's proposal cadence, roughly nine edits a second.
+// Compiling each one drove nine full shader builds a second on every other
+// participant, while local typing has always waited for a 500ms pause. Remote
+// text now settles the same way, and a burst compiles once.
+const REMOTE_COMPILE_DEBOUNCE_MS = 250
+let remoteCompileTimer = null
+let remoteCompilePending = null
+
 async function applyCurrentDslFromOnline(source = 'remote') {
+    if (remoteCompilePending) {
+        // A compile is already scheduled or running for text that is at least
+        // as new as this one; the editor holds the latest either way.
+        remoteCompilePending.source = source
+        return remoteCompilePending.promise
+    }
+
+    const pending = { source }
+    pending.promise = new Promise((resolve) => {
+        remoteCompileTimer = setTimeout(async () => {
+            remoteCompileTimer = null
+            resolve(await runOnlineCompile(pending.source))
+            remoteCompilePending = null
+        }, REMOTE_COMPILE_DEBOUNCE_MS)
+    })
+    remoteCompilePending = pending
+    return pending.promise
+}
+
+async function runOnlineCompile(source) {
     if (hotReloadTimeout) {
         clearTimeout(hotReloadTimeout)
         hotReloadTimeout = null
@@ -908,9 +959,45 @@ function setupOnlineCollaboration() {
         getCurrentDsl: () => dslEditor?.value || '',
         applyCurrentDsl: applyCurrentDslFromOnline,
         showToast,
+        // Keep the menu label (the only always-visible session indicator) in
+        // step with the connection.
+        onStatus: (status) => {
+            refreshMenuBar()
+            if (status === 'connecting') showToast('Connecting to session...', 'info')
+        },
+        onModeration: () => refreshMenuBar(),
+        onRemoteEdit: (frame) => flashRemoteEdit(frame),
+        onRemoteMedia: (urls) => warnAboutRemoteMedia(urls),
+        onRemoteRejected: (inspection) => {
+            showToast('A remote update was refused: the program was too large', 'warning')
+            console.warn('[Polymorphic] refused remote document:', inspection.reason)
+        },
     })
     onlineAdapter.wireUi()
     // "go online..." is a menu-bar item wired via its config (seanceDialog.show)
+}
+
+// Remote text arrives in the same editor the local user types in, and until
+// now it looked exactly like something they had written themselves. Handfish's
+// editor has a distinct flash tone for it.
+function flashRemoteEdit(frame) {
+    const edit = frame?.edit
+    if (!edit || !dslEditor?.flashLines) return
+    const value = dslEditor.value || ''
+    const startLine = lineNumberAt(value, edit.start)
+    const endLine = lineNumberAt(value, Math.max(edit.start, edit.start + (edit.text?.length || 0) - 1))
+    dslEditor.flashLines(startLine, endLine, { tone: 'remote' })
+}
+
+// Anyone holding the link can add a media() url, and this browser will fetch
+// it: that discloses the viewer's address to a host the peer chose. Say so
+// once per session rather than fetching silently.
+let warnedAboutRemoteMedia = false
+function warnAboutRemoteMedia(urls) {
+    if (warnedAboutRemoteMedia || !urls?.length) return
+    warnedAboutRemoteMedia = true
+    showToast('This session loads media from another site. Go offline if you did not expect that.', 'warning')
+    console.warn('[Polymorphic] remote media sources in session text:', urls)
 }
 
 async function joinOnlineSessionFromUrlIfPresent() {
