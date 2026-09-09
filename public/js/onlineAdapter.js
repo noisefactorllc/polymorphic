@@ -2,6 +2,74 @@ export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
 export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js'
 
 const DEFAULT_DOC_ID = 'main'
+
+// A remote document larger than this is not something anyone typed. Compiling
+// it would stall the tab, so it is refused and the session keeps the last
+// program that worked.
+export const MAX_REMOTE_DSL_LENGTH = 200000
+
+// Server error codes that mean "this session will never accept you", as
+// opposed to a connection that might recover. A join that fails with one of
+// these has to stop retrying and clear ?seance= from the URL, or every reload
+// walks into the same wall.
+const TERMINAL_JOIN_CODES = new Set([
+    'unknown_session',
+    'dialect_mismatch',
+    'forbidden',
+    'unauthorized',
+])
+
+// Friendly text for the codes a user can actually hit. The server's own detail
+// string is written for an operator reading a log ("session dialect is
+// 'layers'"), not for someone who just clicked a link.
+const ERROR_COPY = {
+    unknown_session: 'That session has ended or never existed',
+    dialect_mismatch: 'That link is for a different kind of session',
+    forbidden: 'That session is not accepting you',
+    unauthorized: 'Seance could not identify this browser',
+    rate_limited: 'Too many attempts. Wait a minute and try again',
+    too_large: 'That program is too large to share',
+    readonly: 'You have been set to read-only in this session',
+}
+
+export function seanceErrorCode(error) {
+    return error?.code || error?.frame?.code || null
+}
+
+export function describeSeanceError(error) {
+    return ERROR_COPY[seanceErrorCode(error)] || error?.message || 'Unknown error'
+}
+
+export function isTerminalJoinError(error) {
+    return TERMINAL_JOIN_CODES.has(seanceErrorCode(error))
+}
+
+/**
+ * Look over a document that arrived from a peer before this app runs it.
+ *
+ * Polymorphic executes whatever is in the editor, and in a session that text
+ * can come from anyone holding the link. Two things are worth knowing before
+ * it is compiled: whether it is plausibly a program at all, and whether it
+ * asks this browser to fetch media from somewhere else, which discloses the
+ * viewer's address to a host the peer chose.
+ *
+ * @param {string} text
+ * @returns {{ok: boolean, reason: string|null, externalMedia: string[]}}
+ */
+export function inspectRemoteDsl(text) {
+    const value = String(text ?? '')
+    if (value.length > MAX_REMOTE_DSL_LENGTH) {
+        return { ok: false, reason: 'too-large', externalMedia: [] }
+    }
+
+    const externalMedia = []
+    for (const match of value.matchAll(/\burl\s*:\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+        const url = match[1] ?? match[2] ?? ''
+        if (/^(?:https?:)?\/\//i.test(url.trim())) externalMedia.push(url.trim())
+    }
+
+    return { ok: true, reason: null, externalMedia }
+}
 const VOLATILE_SHARE_PARAMS = ['code']
 const SESSION_ID_CASE_STORAGE_KEY = 'polymorphic.seance.sessionIdCaseMap'
 
@@ -56,6 +124,15 @@ export function shareBaseUrl(locationLike = globalThis.location) {
 }
 
 export async function applyRemoteDslText(text, context = {}, deps = {}) {
+    const inspection = inspectRemoteDsl(text)
+    if (!inspection.ok) {
+        deps.onRemoteRejected?.(inspection, context)
+        return { success: false, error: `remote document refused (${inspection.reason})` }
+    }
+    if (inspection.externalMedia.length) {
+        deps.onRemoteMedia?.(inspection.externalMedia, context)
+    }
+
     const editor = deps.editor
     if (editor && editor.value !== text) {
         editor.value = String(text ?? '')
@@ -80,6 +157,12 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     let bindCleanup = null
     let statusUnsub = null
     let errorUnsub = null
+    let extraUnsubs = []
+    // One session action at a time. takeOnline() awaits an SDK import and a
+    // POST before the SDK reports "connecting", and the dialog only disables
+    // its buttons on that status, so a double click used to create two
+    // sessions and orphan the first (two of ten creates per IP per hour).
+    let actionInFlight = false
 
     async function ensureOnline() {
         if (online) return online
@@ -107,7 +190,25 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         errorUnsub = online.on('error', (error) => {
             console.warn('[Polymorphic] Seance error:', error)
             deps.onError?.(error)
+            const code = seanceErrorCode(error)
+            if (code && code !== 'readonly') showToast(describeSeanceError(error), 'error')
         })
+        extraUnsubs = [
+            // Being silently unable to type is the confusing half of being
+            // moderated: the SDK drops the write and says nothing.
+            online.on('readonly-write', () => {
+                showToast('You are read-only in this session', 'warning')
+                deps.onReadonlyWrite?.()
+            }),
+            online.on('moderation', (frame) => {
+                if (frame?.action === 'readonly') refreshStatus()
+                deps.onModeration?.(frame)
+            }),
+            // Text that someone else wrote should not look like your own.
+            online.on('remote-edit', (frame) => {
+                deps.onRemoteEdit?.(frame)
+            }),
+        ]
         refreshStatus('offline')
         return online
     }
@@ -122,8 +223,13 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
         // Drive the unified seance-dialog's internal view via its state; the
         // dialog is shown/hidden by its own trigger (the "go online" menu
-        // item), so never toggle its visibility here.
-        dialog.state = isOnline ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
+        // item), so never toggle its visibility here. 'readonly' is passed
+        // through rather than folded into 'online': the dialog renders it as
+        // its own state, and a moderated user needs to see why the editor
+        // stopped taking their typing.
+        dialog.state = status === 'readonly'
+            ? 'readonly'
+            : isOnline ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
         dialog.sessionId = isOnline ? sessionId : ''
         dialog.sessionUrl = sessionUrl
     }
@@ -151,34 +257,71 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     async function takeOnline() {
-        const layer = await ensureOnline()
-        closeActiveSession(layer)
-        await layer.takeOnline(getInitialDocs(getCurrentDsl()))
-        rememberSessionId(layer.getSessionId())
-        writeSessionToBrowserUrl(layer.getSessionId())
-        refreshStatus()
-        showToast('Session is online', 'success')
-        return layer.getSessionId()
+        if (actionInFlight) return null
+        actionInFlight = true
+        try {
+            const layer = await ensureOnline()
+            closeActiveSession(layer)
+            await layer.takeOnline(getInitialDocs(getCurrentDsl()))
+            rememberSessionId(layer.getSessionId())
+            writeSessionToBrowserUrl(layer.getSessionId())
+            refreshStatus()
+            showToast('Session is online', 'success')
+            return layer.getSessionId()
+        } finally {
+            actionInFlight = false
+        }
     }
 
     async function joinSession(sessionId) {
         const normalized = String(sessionId || '').trim()
         if (!normalized) return null
-        const resolvedSessionId = await resolveJoinSessionId(normalized)
-        const layer = await ensureOnline()
-        closeActiveSession(layer)
-        await layer.joinSession(resolvedSessionId)
-        rememberSessionId(layer.getSessionId())
-        writeSessionToBrowserUrl(layer.getSessionId())
-        refreshStatus()
-        showToast('Joined session', 'success')
-        return layer.getSessionId()
+        if (actionInFlight) return null
+        actionInFlight = true
+        try {
+            const resolvedSessionId = await resolveJoinSessionId(normalized)
+            const layer = await ensureOnline()
+            closeActiveSession(layer)
+            await layer.joinSession(resolvedSessionId)
+            rememberSessionId(layer.getSessionId())
+            writeSessionToBrowserUrl(layer.getSessionId())
+            refreshStatus()
+            showToast('Joined session', 'success')
+            return layer.getSessionId()
+        } catch (err) {
+            handleJoinFailure(err)
+            return null
+        } finally {
+            actionInFlight = false
+        }
+    }
+
+    /**
+     * A join that can never succeed has to stop advertising itself. Leaving
+     * ?seance= in the URL meant every reload retried a dead session and
+     * reported the server's operator-facing detail string as if it were
+     * advice.
+     */
+    function handleJoinFailure(err) {
+        const terminal = isTerminalJoinError(err)
+        if (terminal) {
+            closeActiveSession()
+            writeSessionToBrowserUrl(null)
+            refreshStatus('offline')
+        }
+        console.error('[Polymorphic] Seance join failed:', err)
+        showToast(`Could not join session: ${describeSeanceError(err)}`, 'error')
     }
 
     async function joinFromUrl() {
         const sessionId = readSessionFromLocation(location)
         if (!sessionId) return null
         return joinSession(sessionId)
+    }
+
+    function isOnline() {
+        const status = online?.getStatus?.()
+        return status === 'online' || status === 'readonly'
     }
 
     function goOffline() {
@@ -237,13 +380,16 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         dialog?.addEventListener?.('take-online', () => {
             takeOnline().catch((err) => {
                 console.error('[Polymorphic] Take online failed:', err)
-                showToast(`Could not take online: ${err.message}`, 'error')
+                showToast(`Could not take online: ${describeSeanceError(err)}`, 'error')
             })
         })
         dialog?.addEventListener?.('join-session', (event) => {
+            // joinSession reports its own failures (it also has to clear a
+            // dead ?seance= from the URL), so this only guards against an
+            // unexpected throw.
             joinSession(event.detail?.sessionId).catch((err) => {
                 console.error('[Polymorphic] Join session failed:', err)
-                showToast(`Could not join session: ${err.message}`, 'error')
+                showToast(`Could not join session: ${describeSeanceError(err)}`, 'error')
             })
         })
         dialog?.addEventListener?.('go-offline', () => goOffline())
@@ -260,6 +406,8 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         bindCleanup?.()
         statusUnsub?.()
         errorUnsub?.()
+        for (const unsub of extraUnsubs) unsub?.()
+        extraUnsubs = []
         online?.goOffline?.()
         bindCleanup = null
         statusUnsub = null
@@ -269,6 +417,8 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
     return {
         config,
+        getStatus: () => online?.getStatus?.() || 'offline',
+        getSessionId: () => online?.getSessionId?.() || '',
         ensureOnline,
         takeOnline,
         joinSession,
@@ -277,6 +427,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         updateLocalText,
         copyShareUrl,
         openDialog,
+        isOnline,
         wireUi,
         refreshStatus,
         closeActiveSession,

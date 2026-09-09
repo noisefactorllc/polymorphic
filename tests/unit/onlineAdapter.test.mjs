@@ -4,9 +4,13 @@ import test from 'node:test'
 import {
     DEFAULT_SEANCE_SDK_URL,
     DEFAULT_SEANCE_URL,
+    MAX_REMOTE_DSL_LENGTH,
     applyRemoteDslText,
     createPolymorphicOnlineAdapter,
+    describeSeanceError,
     getInitialDocs,
+    inspectRemoteDsl,
+    isTerminalJoinError,
     resolveOnlineConfig,
     shareBaseUrl,
 } from '../../public/js/onlineAdapter.js'
@@ -175,4 +179,203 @@ test('local Seance harness paths can be inferred from SDK and Python overrides',
         '/tmp/custom-seance/bin/app.py',
     ])
     assert.equal(hasLocalSeanceHarness(paths, (path) => existing.has(path)), true)
+})
+
+
+// --- helpers ---------------------------------------------------------------
+
+function fakeLayer(overrides = {}) {
+    return {
+        status: 'offline',
+        sessionId: '',
+        calls: [],
+        handlers: {},
+        on(event, handler) {
+            this.handlers[event] = handler
+            return () => { delete this.handlers[event] }
+        },
+        bindEditor() { return () => {} },
+        async takeOnline() {
+            this.calls.push('takeOnline')
+            await new Promise((resolve) => setTimeout(resolve, 5))
+            this.status = 'online'
+            this.sessionId = `S${this.calls.length}`
+        },
+        async joinSession(sessionId) {
+            this.calls.push('joinSession')
+            this.status = 'online'
+            this.sessionId = sessionId
+        },
+        goOffline() { this.calls.push('goOffline'); this.status = 'offline' },
+        getStatus() { return this.status },
+        getSessionId() { return this.sessionId },
+        getShareUrl() { return this.sessionId ? `https://poly.test/?seance=${this.sessionId}` : null },
+        writeSessionToUrl(url, sessionId) {
+            const next = new URL(url)
+            if (sessionId) next.searchParams.set('seance', sessionId)
+            else next.searchParams.delete('seance')
+            return next.toString()
+        },
+        ...overrides,
+    }
+}
+
+function harness(layer, options = {}) {
+    const toasts = []
+    const urls = []
+    const dialog = { state: 'offline', sessionId: '', sessionUrl: '', addEventListener() {} }
+    const adapter = createPolymorphicOnlineAdapter({
+        editor: { value: 'search synth\n\nnoise().write(o0)' },
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        location: new URL(options.href || 'https://poly.test/?seance=OLD123'),
+        history: { replaceState(_state, _title, url) { urls.push(url) } },
+        dialog,
+        showToast: (message, type) => toasts.push({ message, type }),
+    })
+    return { adapter, toasts, urls, dialog }
+}
+
+// --- remote text inspection ------------------------------------------------
+
+test('inspectRemoteDsl reports media urls that point off this machine', () => {
+    const result = inspectRemoteDsl('search synth\n\nmedia(url: "https://tracker.example/pixel.png").write(o0)')
+
+    assert.equal(result.ok, true)
+    assert.deepEqual(result.externalMedia, ['https://tracker.example/pixel.png'])
+})
+
+test('inspectRemoteDsl leaves inline media alone', () => {
+    const result = inspectRemoteDsl('media(url: "data:image/png;base64,AAAA").write(o0)')
+
+    assert.equal(result.ok, true)
+    assert.deepEqual(result.externalMedia, [])
+})
+
+test('inspectRemoteDsl refuses a document nobody could have typed', () => {
+    const result = inspectRemoteDsl('x'.repeat(MAX_REMOTE_DSL_LENGTH + 1))
+
+    assert.equal(result.ok, false)
+    assert.equal(result.reason, 'too-large')
+})
+
+test('applyRemoteDslText refuses an oversize document without touching the editor', async () => {
+    const editor = { value: 'last good' }
+    const rejected = []
+    let compiled = false
+
+    const result = await applyRemoteDslText('x'.repeat(MAX_REMOTE_DSL_LENGTH + 1), { source: 'remote' }, {
+        editor,
+        applyCurrentDsl: async () => { compiled = true; return { success: true } },
+        onRemoteRejected: (inspection) => rejected.push(inspection.reason),
+    })
+
+    assert.equal(result.success, false)
+    assert.equal(editor.value, 'last good')
+    assert.equal(compiled, false)
+    assert.deepEqual(rejected, ['too-large'])
+})
+
+test('applyRemoteDslText reports remote media before running the program', async () => {
+    const seen = []
+    const order = []
+    const editor = { value: '' }
+
+    await applyRemoteDslText('media(url: "http://peer.example/a.png").write(o0)', { source: 'remote' }, {
+        editor,
+        applyCurrentDsl: async () => { order.push('compile'); return { success: true } },
+        onRemoteMedia: (urls) => { seen.push(...urls); order.push('warn') },
+    })
+
+    assert.deepEqual(seen, ['http://peer.example/a.png'])
+    assert.deepEqual(order, ['warn', 'compile'])
+})
+
+// --- server errors ----------------------------------------------------------
+
+test('server error codes become copy a person can act on', () => {
+    assert.equal(describeSeanceError({ code: 'dialect_mismatch', message: "session dialect is 'layers'" }),
+        'That link is for a different kind of session')
+    assert.equal(describeSeanceError({ frame: { code: 'unknown_session' } }),
+        'That session has ended or never existed')
+    // Anything unmapped still says something rather than nothing.
+    assert.equal(describeSeanceError(new Error('socket closed')), 'socket closed')
+})
+
+test('only the codes a retry cannot fix count as terminal', () => {
+    assert.equal(isTerminalJoinError({ code: 'unknown_session' }), true)
+    assert.equal(isTerminalJoinError({ code: 'dialect_mismatch' }), true)
+    assert.equal(isTerminalJoinError({ code: 'rate_limited' }), false)
+    assert.equal(isTerminalJoinError(new Error('connection closed')), false)
+})
+
+// --- session lifecycle ------------------------------------------------------
+
+test('a double click on take online creates one session, not two', async () => {
+    const layer = fakeLayer()
+    const { adapter } = harness(layer)
+
+    const [first, second] = await Promise.all([adapter.takeOnline(), adapter.takeOnline()])
+
+    assert.equal(layer.calls.filter((call) => call === 'takeOnline').length, 1)
+    assert.equal(first, 'S1')
+    assert.equal(second, null)
+})
+
+test('a dead session link is cleared from the URL instead of retried forever', async () => {
+    const layer = fakeLayer({
+        async joinSession() {
+            const error = new Error("session dialect is 'layers'")
+            error.code = 'unknown_session'
+            throw error
+        },
+    })
+    const { adapter, toasts, urls } = harness(layer)
+
+    const result = await adapter.joinFromUrl()
+
+    assert.equal(result, null)
+    assert.equal(urls.at(-1), 'https://poly.test/')
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Could not join session: That session has ended or never existed',
+        type: 'error',
+    })
+})
+
+test('a join failure that might recover leaves the session link in place', async () => {
+    const layer = fakeLayer({
+        async joinSession() {
+            const error = new Error('connection closed before session snapshot')
+            throw error
+        },
+    })
+    const { adapter, urls } = harness(layer)
+
+    await adapter.joinFromUrl()
+
+    assert.deepEqual(urls, [])
+})
+
+test('read-only reaches the dialog as its own state', async () => {
+    const layer = fakeLayer()
+    const { adapter, dialog } = harness(layer)
+
+    await adapter.takeOnline()
+    layer.status = 'readonly'
+    adapter.refreshStatus('readonly')
+
+    assert.equal(dialog.state, 'readonly')
+    assert.equal(dialog.sessionId, 'S1')
+})
+
+test('a read-only write attempt tells the user why nothing happened', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts } = harness(layer)
+
+    await adapter.ensureOnline()
+    layer.handlers['readonly-write']({ docId: 'main' })
+
+    assert.deepEqual(toasts.at(-1), {
+        message: 'You are read-only in this session',
+        type: 'warning',
+    })
 })
