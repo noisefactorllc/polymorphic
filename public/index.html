@@ -38,7 +38,13 @@
     }
     </script>
     <script type="importmap">
-        { "imports": { "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js" } }
+        {
+            "imports": {
+                "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js",
+                "/js/embed.js": "/js/embed.js?v=seance-0.2.2",
+                "/js/onlineAdapter.js": "/js/onlineAdapter.js?v=seance-0.2.2"
+            }
+        }
     </script>
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
@@ -1271,7 +1277,7 @@
     <!-- Marked.js for Markdown rendering -->
     <script src="/js/lib/marked.min.js"></script>
 
-    <script type="module" src="/js/embed.js"></script>
+    <script type="module" src="/js/embed.js?v=seance-0.2.2"></script>
 
     <script>
     if ('serviceWorker' in navigator) {
