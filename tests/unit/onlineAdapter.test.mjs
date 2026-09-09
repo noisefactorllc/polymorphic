@@ -22,13 +22,34 @@ test('online adapter uses the rolling major SDK URL by default', () => {
     assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js')
 })
 
-test('online adapter allows tests to override SDK and server URLs', () => {
+test('online adapter allows tests to override SDK and server URLs on a dev host', () => {
     const config = resolveOnlineConfig({
-        location: 'https://polymorphic.test/?seanceUrl=http%3A%2F%2F127.0.0.1%3A8123&seanceSdk=https%3A%2F%2Fseance.noisefactor.io%2Fsdk%2F0%2Findex.js',
+        location: 'http://localhost:3000/?seanceUrl=http%3A%2F%2F127.0.0.1%3A8123&seanceSdk=https%3A%2F%2Fseance.noisefactor.io%2Fsdk%2F0%2Findex.js',
     })
 
     assert.equal(config.seanceUrl, 'http://127.0.0.1:8123')
     assert.equal(config.sdkUrl, 'https://seance.noisefactor.io/sdk/0/index.js')
+})
+
+test('online adapter ignores URL overrides on a public origin', () => {
+    // sdkUrl reaches import(): honouring it off localhost would let any share
+    // link execute the sender's module on polymorphic.noisedeck.app.
+    const config = resolveOnlineConfig({
+        location: 'https://polymorphic.noisedeck.app/?seance=Ab12Cd&seanceSdk=https%3A%2F%2Fevil.example%2Fx.js&seanceUrl=https%3A%2F%2Fevil.example',
+    })
+
+    assert.equal(config.sdkUrl, DEFAULT_SEANCE_SDK_URL)
+    assert.equal(config.seanceUrl, DEFAULT_SEANCE_URL)
+})
+
+test('a window global still configures an embedder on a public origin', () => {
+    const config = resolveOnlineConfig({
+        location: 'https://polymorphic.noisedeck.app/',
+        globals: { seanceUrl: 'https://seance.example', sdkUrl: 'https://seance.example/sdk/0/index.js' },
+    })
+
+    assert.equal(config.seanceUrl, 'https://seance.example')
+    assert.equal(config.sdkUrl, 'https://seance.example/sdk/0/index.js')
 })
 
 test('getInitialDocs produces one default main DSL document from current editor text', () => {

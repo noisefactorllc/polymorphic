@@ -5,15 +5,33 @@ const DEFAULT_DOC_ID = 'main'
 const VOLATILE_SHARE_PARAMS = ['code']
 const SESSION_ID_CASE_STORAGE_KEY = 'polymorphic.seance.sessionIdCaseMap'
 
+// Hosts on which the ?seanceUrl= / ?seanceSdk= overrides are honoured. The
+// SDK URL is fed to import(), so on a public origin those params would let any
+// share link run arbitrary code here (and ?seanceUrl= would hand the whole
+// program to a server of the sender's choosing). They exist for the test
+// harness and local development, so they are read only when this page is
+// itself served from a development host. Same guard as noisedeck's
+// app/index.html.
+const LOCAL_DEV_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1', ''])
+
+export function isLocalDevLocation(locationLike) {
+    try {
+        return LOCAL_DEV_HOSTNAMES.has(urlFrom(locationLike).hostname)
+    } catch {
+        return false
+    }
+}
+
 export function resolveOnlineConfig(options = {}) {
     const location = urlFrom(options.location || globalThis.location)
     const globals = options.globals || globalThis.POLYMORPHIC_SEANCE || {}
+    const params = isLocalDevLocation(location) ? location.searchParams : new URLSearchParams()
 
     return {
-        seanceUrl: location.searchParams.get('seanceUrl')
+        seanceUrl: params.get('seanceUrl')
             || globals.seanceUrl
             || DEFAULT_SEANCE_URL,
-        sdkUrl: location.searchParams.get('seanceSdk')
+        sdkUrl: params.get('seanceSdk')
             || globals.sdkUrl
             || DEFAULT_SEANCE_SDK_URL,
     }
