@@ -509,6 +509,7 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
 
     // Compile and run
     const result = await recompileShader()
+    if (result.superseded) return
     if (!result.success) {
         showCompilerError(result.error)
     } else {
@@ -900,21 +901,32 @@ function publishLocalDsl(source) {
 const REMOTE_COMPILE_DEBOUNCE_MS = 250
 let remoteCompileTimer = null
 let remoteCompilePending = null
+let programStateDsl = null
 
 async function applyCurrentDslFromOnline(source = 'remote') {
     if (remoteCompilePending) {
-        // A compile is already scheduled or running for text that is at least
-        // as new as this one; the editor holds the latest either way.
         remoteCompilePending.source = source
+        remoteCompilePending.version++
         return remoteCompilePending.promise
     }
 
-    const pending = { source }
+    const pending = { source, version: 0 }
     pending.promise = new Promise((resolve) => {
         remoteCompileTimer = setTimeout(async () => {
             remoteCompileTimer = null
-            resolve(await runOnlineCompile(pending.source))
+            let result
+            let version
+            do {
+                version = pending.version
+                result = await runOnlineCompile(pending.source)
+                if (version !== pending.version) {
+                    // Keep continuous peer typing from driving shader builds
+                    // back-to-back when each build outlasts an edit interval.
+                    await new Promise(resolve => setTimeout(resolve, REMOTE_COMPILE_DEBOUNCE_MS))
+                }
+            } while (version !== pending.version)
             remoteCompilePending = null
+            resolve(result)
         }, REMOTE_COMPILE_DEBOUNCE_MS)
     })
     remoteCompilePending = pending
@@ -940,6 +952,7 @@ async function runOnlineCompile(source) {
     } finally {
         _compileInFlight = false
     }
+    if (result.superseded) return result
     if (!result.success) {
         console.warn(`Online ${source} compile failed:`, result.error)
         showCompilerError(result.error)
@@ -1030,6 +1043,7 @@ async function resetDsl() {
     updateResetButtonVisibility()
     // Recompile with original DSL
     const result = await recompileShader()
+    if (result.superseded) return
     if (!result.success) {
         showCompilerError(result.error)
     } else {
@@ -1412,27 +1426,48 @@ function resizeCanvas() {
  * Recompile the shader with current editor content
  * @param {string} [overrideDsl] - if provided, compile this DSL instead of the editor value
  */
+let shaderCompileQueue = Promise.resolve()
+let shaderCompileVersion = 0
+
 async function recompileShader(overrideDsl) {
     if (!renderer || !dslEditor) return { success: false, error: 'Not initialized' }
 
     const dsl = overrideDsl ?? dslEditor.value
+    const editorDsl = dslEditor.value
     if (!dsl.trim()) {
         return { success: false, error: 'Empty program' }
     }
 
+    const version = ++shaderCompileVersion
+    const previous = shaderCompileQueue
+    let release
+    shaderCompileQueue = new Promise(resolve => { release = resolve })
+    const superseded = () => version !== shaderCompileVersion || dslEditor.value !== editorDsl
     try {
+        // All entry points share the renderer, including history and parameter
+        // changes that do not participate in the editor's busy indicator.
+        await previous
+        if (superseded()) return { success: false, superseded: true }
         // Preload any new fonts used in text effects
         await preloadFontsForDsl(dsl)
+        if (superseded()) return { success: false, superseded: true }
 
         const result = await renderer.compile(dsl)
         if (result.success) {
+            // This is the program actually installed by the renderer, even
+            // when a newer draft is waiting. Keep controls truthful if that
+            // next draft fails; programStateDsl prevents rewriting its text.
             syncProgramStateFromDsl(dsl)
             refreshControlsPanelAfterDslChange(dsl)
         }
+        if (superseded()) return { success: false, superseded: true }
         return result
     } catch (err) {
+        if (superseded()) return { success: false, superseded: true }
         console.error('Recompile error:', err)
         return { success: false, error: err.message }
+    } finally {
+        release()
     }
 }
 
@@ -1486,6 +1521,7 @@ function syncProgramStateFromDsl(dsl) {
     suppressDslReact = true
     try {
         programState.fromDsl(dsl)
+        programStateDsl = dsl
     } catch (err) {
         console.warn('[Polymorphic] programState.fromDsl failed:', err)
     } finally {
@@ -1629,6 +1665,7 @@ function setupDslEditor() {
         try {
             _compileInFlight = true
             const result = await recompileShader()
+            if (result.superseded) return
             const value = dslEditor.value || ''
             const lineCount = value ? value.split('\n').length : 1
             if (!result.success) {
@@ -1668,6 +1705,7 @@ function setupDslEditor() {
             try {
                 _compileInFlight = true
                 const result = await recompileShader()
+                if (result.superseded) return
                 if (!result.success) showCompilerError(result.error)
                 else hideCompilerError()
             } finally {
@@ -1680,6 +1718,7 @@ function setupDslEditor() {
         try {
             _compileInFlight = true
             const result = await recompileShader(program)
+            if (result.superseded) return
             const value = dslEditor.value || ''
             const startLine = lineNumberAt(value, sel.start)
             const endLine = lineNumberAt(value, Math.max(sel.start, sel.end - 1))
@@ -1748,6 +1787,9 @@ function setupProgramState() {
     programState.on('change', () => {
         if (suppressDslReact) return
         if (!dslEditor || !programState) return
+        // Parameter controls still describe the last successful compile while
+        // a newer draft is loading (or has a compile error).
+        if (dslEditor.value !== programStateDsl) return
         let newDsl
         try {
             newDsl = programState.toDsl()
@@ -1765,6 +1807,7 @@ function setupProgramState() {
         suppressDslReact = true
         try {
             dslEditor.value = editorDsl
+            programStateDsl = editorDsl
             if (renderer?.canvasRenderer) {
                 renderer.canvasRenderer.currentDsl = newDsl
             }
@@ -1783,6 +1826,7 @@ function setupProgramState() {
             hotReloadTimeout = null
         }
         recompileShader().then((result) => {
+            if (result.superseded) return
             if (!result.success) {
                 showCompilerError(result.error)
             } else {
@@ -1813,6 +1857,7 @@ function scheduleHotReload() {
         try {
             _compileInFlight = true
             const result = await recompileShader()
+            if (result.superseded) return
             if (!result.success) {
                 console.warn('Hot reload compile failed:', result.error)
                 showCompilerError(result.error)
@@ -1885,6 +1930,7 @@ function snapshotBack() {
         // Recompile immediately, but don't re-snapshot
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
         recompileShader().then(r => {
+            if (r.superseded) return
             if (!r.success) showCompilerError(r.error)
             else hideCompilerError()
         })
@@ -1903,6 +1949,7 @@ function snapshotForward() {
         publishLocalDsl('snapshot-forward')
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
         recompileShader().then(r => {
+            if (r.superseded) return
             if (!r.success) showCompilerError(r.error)
             else hideCompilerError()
         })
@@ -2348,6 +2395,7 @@ function init() {
                     hotReloadTimeout = null
                 }
                 const r = await recompileShader()
+                if (r.superseded) return
                 if (!r.success) showCompilerError(r.error)
                 else hideCompilerError()
             }
@@ -2514,6 +2562,7 @@ async function hushSurfaces() {
     if (!dsl?.trim()) return
     renderer.stop()
     const r = await recompileShader()
+    if (r.superseded) return
     if (r.success) {
         renderer.start()
         showToast('Surfaces cleared', 'success')

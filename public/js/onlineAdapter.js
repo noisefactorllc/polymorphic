@@ -166,7 +166,10 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
     async function ensureOnline() {
         if (online) return online
-        if (!sdkPromise) sdkPromise = importSdk(config.sdkUrl)
+        if (!sdkPromise) sdkPromise = importSdk(config.sdkUrl).catch(error => {
+            sdkPromise = null
+            throw error
+        })
         const sdk = await sdkPromise
         online = sdk.createOnlineDslLayer({
             seanceUrl: config.seanceUrl,
@@ -194,6 +197,13 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             if (code && code !== 'readonly') showToast(describeSeanceError(error), 'error')
         })
         extraUnsubs = [
+            online.on('doc-reject', (info) => {
+                if (info?.reason === 'reconnect_ambiguous' || info?.reason === 'readonly_draft') {
+                    showToast('Sync paused to protect your edits. Copy your draft, rejoin the session, then apply your merged version.', 'warning')
+                } else if (info?.reason === 'missing_document') {
+                    showToast('This document is not part of the session. Copy your draft, then go offline and create a new session to share it.', 'warning')
+                }
+            }),
             // Being silently unable to type is the confusing half of being
             // moderated: the SDK drops the write and says nothing.
             online.on('readonly-write', () => {

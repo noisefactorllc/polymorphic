@@ -66,6 +66,10 @@ export async function startSeanceServer({ origin = 'http://localhost:3017' } = {
             SEANCE_DB: join(tmp, 'seance.db'),
             SEANCE_ALLOWED_ORIGINS: origin,
             SEANCE_TRUSTED_PROXIES: '',
+            // The suite creates a fresh anonymous identity for every browser
+            // context. Its isolated server must cover the whole suite, not
+            // stop admitting the eleventh browser at the production IP quota.
+            SEANCE_LIMIT_ANON_MINTS_PER_IP_HOUR: '100',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     })

@@ -235,6 +235,45 @@ function harness(layer, options = {}) {
     return { adapter, toasts, urls, dialog }
 }
 
+test('a failed SDK import can be retried without reloading the page', async () => {
+    const layer = fakeLayer()
+    let attempts = 0
+    const adapter = createPolymorphicOnlineAdapter({
+        editor: { value: 'noise().write(o0)' },
+        location: new URL('https://poly.test/'),
+        importSdk: async () => {
+            if (++attempts === 1) throw new Error('temporary network failure')
+            return { createOnlineDslLayer: () => layer }
+        },
+    })
+    await assert.rejects(adapter.takeOnline(), /temporary network failure/)
+    await adapter.takeOnline()
+    assert.equal(adapter.getStatus(), 'online')
+    assert.equal(attempts, 2)
+    adapter.dispose()
+})
+
+test('an ambiguous reconnect explains how to preserve and recover the local draft', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts } = harness(layer)
+    await adapter.ensureOnline()
+    for (const reason of ['reconnect_ambiguous', 'readonly_draft']) {
+        toasts.length = 0
+        layer.handlers['doc-reject']?.({ reason, docId: 'main' })
+        assert.match(toasts.at(-1)?.message || '', /copy.*draft.*rejoin/i)
+    }
+    adapter.dispose()
+})
+
+test('an absent session document explains how to keep and share the local draft', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts } = harness(layer)
+    await adapter.ensureOnline()
+    layer.handlers['doc-reject']?.({ reason: 'missing_document', docId: 'main' })
+    assert.match(toasts.at(-1)?.message || '', /not.*session.*copy.*draft.*new session/i)
+    adapter.dispose()
+})
+
 // --- remote text inspection ------------------------------------------------
 
 test('inspectRemoteDsl reports media urls that point off this machine', () => {

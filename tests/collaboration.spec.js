@@ -188,6 +188,39 @@ test('invalid remote DSL updates the editor while keeping the last good render v
   await expect(pageB.locator('#canvas')).toHaveClass(/visible/)
 })
 
+test('remote text received during a delayed compile reaches the renderer and controls', async ({ page, context }) => {
+  await preparePage(page)
+  await page.goto(appPath({ dsl: BASE_SKETCH }))
+  await waitForApp(page)
+  const sessionId = await takeOnline(page)
+  const guest = await context.newPage()
+  await preparePage(guest)
+  await guest.goto(appPath({ seance: sessionId }))
+  await waitForApp(guest)
+  await expect.poll(() => guest.evaluate(() => window.__poly.renderer.canvasRenderer.currentDsl), { timeout: 30000 }).toBe(BASE_SKETCH)
+  await guest.evaluate(() => {
+    const renderer = window.__poly.renderer
+    const compile = renderer.compile.bind(renderer)
+    window.__compileCalls = []
+    renderer.compile = async text => {
+      window.__compileCalls.push(text)
+      if (window.__compileCalls.length === 1) {
+        await new Promise(resolve => { window.__releaseCompile = resolve })
+      }
+      return compile(text)
+    }
+  })
+  await setEditorText(page, PEER_SKETCH)
+  await guest.waitForFunction(() => !!window.__releaseCompile)
+  await setEditorText(page, SERVER_SKETCH)
+  await expect.poll(() => editorText(guest), { timeout: 15000 }).toBe(SERVER_SKETCH)
+  await guest.evaluate(() => window.__releaseCompile())
+  await expect.poll(() => guest.evaluate(() => window.__poly.renderer.canvasRenderer.currentDsl), { timeout: 30000 }).toBe(SERVER_SKETCH)
+  await expect.poll(() => guest.evaluate(() => window.__compileCalls.length)).toBe(2)
+  expect(await editorText(guest)).toBe(SERVER_SKETCH)
+  expect(await guest.evaluate(() => window.__poly.programState.toDsl())).toContain('80')
+})
+
 async function preparePage(page) {
   await routeHandfishLocal(page)
   await routeSeanceSdkLocal(page)
