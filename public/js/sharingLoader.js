@@ -8,9 +8,8 @@
  */
 
 import {
+    CanvasRenderer,
     Effect,
-    registerEffect,
-    registerOp,
     registerStarterOps,
     mergeIntoEnums
 } from './noisemaker/bundle.js'
@@ -57,6 +56,24 @@ export async function fetchComposition(code) {
     return response.json()
 }
 
+/** Build the declarative definition shared by import, registration and export. */
+export function portableDefinition(data) {
+    const definition = {
+        name: data.name || data.func,
+        func: data.func || data.name,
+        namespace: 'user',
+        description: data.description || '',
+        tags: data.tags || ['user'],
+        globals: data.globals || {},
+        passes: data.passes || []
+    }
+    for (const key of ['starter', 'textures', 'outputTex3d', 'outputGeo',
+        'uniformLayout', 'uniformLayouts', 'defaultProgram', 'paramAliases', 'openCategories']) {
+        if (data[key] !== undefined) definition[key] = data[key]
+    }
+    return definition
+}
+
 /**
  * Register a portable effect from the sharing API response format
  * Effects come pre-parsed with shaders embedded.
@@ -67,33 +84,24 @@ export function registerPortableEffect(effectData) {
     const {
         name,
         func,
-        namespace = 'user',
-        description = '',
-        tags = ['user'],
+        namespace,
         globals = {},
         passes = [],
         shaders = {}
-    } = effectData
+    } = { ...portableDefinition(effectData), shaders: effectData.shaders || {} }
 
     const effectFunc = func || name
 
-    // Store the original effectData for re-sharing
+    // Retain the complete declarative contract for re-sharing
     const effectId = `${namespace}/${effectFunc}`
-    loadedPortableEffects.set(effectId, effectData)
+    loadedPortableEffects.set(effectId, { ...portableDefinition(effectData), shaders })
 
     // Construct a real Effect instance so lifecycle hooks (asyncInit, onInit,
     // onUpdate, onDestroy) inherit from Effect.prototype. Plain objects fail
     // the pipeline's `effectDef.asyncInit === Effect.prototype.asyncInit` guard
     // and crash compilation with `t.asyncInit is not a function`.
-    const instance = new Effect({
-        name,
-        namespace,
-        func: effectFunc,
-        description,
-        tags,
-        globals,
-        passes
-    })
+    const instance = new Effect(portableDefinition(effectData))
+    instance.starter = effectData.starter
     instance.shaders = shaders
 
     // Determine if this is a starter effect (no pipeline inputs)
@@ -116,26 +124,14 @@ export function registerPortableEffect(effectData) {
     // Build the full effect key (namespace.func)
     const fullEffectKey = `${namespace}.${effect.func}`
 
-    // Register the instance
-    registerEffect(effect.func, instance)
-    registerEffect(fullEffectKey, instance)
-    registerEffect(effect.id, instance)
-
-    // Register as DSL operator
-    const opSpec = {
-        name: effect.func,
-        args: buildOpArgs(instance, namespace)
+    // Use the engine's registration contract for parameter types and aliases.
+    const choicesToRegister = CanvasRenderer.prototype.registerEffectWithRuntime(effect)
+    if (choicesToRegister && Object.keys(choicesToRegister).length > 0) {
+        mergeIntoEnums(choicesToRegister)
     }
-    registerOp(fullEffectKey, opSpec)
 
     if (isStarter) {
         registerStarterOps([fullEffectKey])
-    }
-
-    // Register any choice enums
-    const choicesToRegister = buildChoiceEnums(instance, namespace)
-    if (Object.keys(choicesToRegister).length > 0) {
-        mergeIntoEnums(choicesToRegister)
     }
 
     console.log(`[sharingLoader] Registered portable effect: ${effectFunc}`)
@@ -148,11 +144,12 @@ export function registerPortableEffect(effectData) {
  * @private
  */
 function checkIsStarter(instance) {
+    if (typeof instance.starter === 'boolean') return instance.starter
     const passes = instance.passes || []
     if (passes.length === 0) return true
 
     const pipelineInputs = [
-        'inputTex', 'inputTex3d', 'src',
+        'inputTex', 'inputTex3d', 'inputGeo', 'src',
         'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'
     ]
 
@@ -165,74 +162,6 @@ function checkIsStarter(instance) {
     }
 
     return true
-}
-
-/**
- * Build operator args from effect globals
- * @private
- */
-function buildOpArgs(instance, namespace) {
-    const args = []
-    const globals = instance.globals || {}
-
-    for (const [paramName, paramDef] of Object.entries(globals)) {
-        const arg = {
-            name: paramName,
-            type: paramDef.type || 'Number'
-        }
-
-        // Handle enum/choice parameters
-        if (paramDef.choices) {
-            arg.type = 'Enum'
-            arg.enum = `${namespace}.${instance.func}.${paramName}`
-        } else if (paramDef.enum || paramDef.enumPath) {
-            arg.type = 'Enum'
-            arg.enum = paramDef.enum || paramDef.enumPath
-        }
-
-        // Add default value
-        if (paramDef.default !== undefined) {
-            arg.default = paramDef.default
-        }
-
-        args.push(arg)
-    }
-
-    return args
-}
-
-/**
- * Build choice enums from effect definition
- * @private
- */
-function buildChoiceEnums(instance, namespace) {
-    const enums = {}
-    const globals = instance.globals || {}
-
-    for (const [paramName, paramDef] of Object.entries(globals)) {
-        if (!paramDef.choices) continue
-
-        // Skip if enum already specified
-        if (paramDef.enum || paramDef.enumPath) continue
-
-        const enumPath = `${namespace}.${instance.func}.${paramName}`
-        
-        if (!enums[namespace]) enums[namespace] = {}
-        if (!enums[namespace][instance.func]) enums[namespace][instance.func] = {}
-        enums[namespace][instance.func][paramName] = {}
-
-        for (const [choiceName, choiceValue] of Object.entries(paramDef.choices)) {
-            // Skip documentation entries (end with ":")
-            if (choiceName.endsWith(':')) continue
-            
-            enums[namespace][instance.func][paramName][choiceName] = {
-                type: 'Number',
-                value: choiceValue
-            }
-        }
-    }
-
-    return enums
 }
 
 /**

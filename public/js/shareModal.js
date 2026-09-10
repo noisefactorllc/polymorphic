@@ -1,7 +1,7 @@
 // Share modal for Polymorphic
 // Posts to sharing.noisedeck.app API
 
-import { getLoadedPortableEffects } from './sharingLoader.js'
+import { getLoadedPortableEffects, portableDefinition } from './sharingLoader.js'
 
 /**
  * Build a portable effect ZIP as base64 from effect data
@@ -23,15 +23,7 @@ async function buildEffectZip(effectData) {
     const zip = new window.JSZip()
 
     // Create definition.json
-    const definition = {
-        name: effectData.name || effectData.func,
-        func: effectData.func || effectData.name,
-        namespace: effectData.namespace || 'user',
-        description: effectData.description || '',
-        tags: effectData.tags || ['user'],
-        globals: effectData.globals || {},
-        passes: effectData.passes || []
-    }
+    const definition = portableDefinition(effectData)
     zip.file('definition.json', JSON.stringify(definition, null, 2))
 
     // Add shaders

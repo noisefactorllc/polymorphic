@@ -18,7 +18,7 @@ import { restoreMediaUrls } from './noisemaker/dslSanitize.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
@@ -470,15 +470,9 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
 
     // Build effect data for registerPortableEffect
     const effectData = {
-        name: definition.name || definition.func || name,
-        func: definition.func || definition.name || name,
-        namespace: 'user',
-        description: definition.description || '',
-        tags: definition.tags || ['user'],
-        globals: definition.globals || {},
+        ...portableDefinition({ ...definition, name: definition.name || definition.func || name }),
         passes,
-        shaders,
-        asyncInit: async () => {}
+        shaders
     }
 
     // Register the effect
@@ -1245,15 +1239,7 @@ async function handleEditInApp(appName, appUrl) {
                     const zip = new window.JSZip()
 
                     // Create definition.json
-                    const definition = {
-                        name: effectData.name || effectData.func,
-                        func: effectData.func || effectData.name,
-                        namespace: effectData.namespace || 'user',
-                        description: effectData.description || '',
-                        tags: effectData.tags || ['user'],
-                        globals: effectData.globals || {},
-                        passes: effectData.passes || []
-                    }
+                    const definition = portableDefinition(effectData)
                     zip.file('definition.json', JSON.stringify(definition, null, 2))
 
                     // Add shaders
