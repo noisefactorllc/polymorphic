@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   ci:
@@ -22,12 +23,35 @@ jobs:
 
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
+      - name: Classify changed files
+        id: changes
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        with:
+          base: ${{ github.event.before || github.ref }}
+          predicate-quantifier: every
+          filters: |
+            product:
+              - '**'
+              - '!*.md'
+              - '!*.rst'
+              - '!*.adoc'
+              - '!docs/**'
+              - '!LICENSE*'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/PULL_REQUEST_TEMPLATE*'
+              - '!.github/dependabot.yml'
+              - '!.github/dependabot.yaml'
+              - '!.editorconfig'
+            documentation:
+              - '{*.md,*.rst,*.adoc,docs/**,book/**}'
+
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install
+        if: steps.changes.outputs.product == 'true'
         # --ignore-scripts blocks dependency lifecycle scripts (the install-time
         # code-exec vector for a compromised package). Modern native deps
         # (esbuild, sharp, rollup) ship prebuilt platform binaries as optional
@@ -37,6 +61,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Lint
+        if: steps.changes.outputs.product == 'true'
         run: |
           if jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
             npm run lint
@@ -45,6 +70,9 @@ jobs:
           fi
 
       - name: Build
+        if: steps.changes.outputs.product == 'true'
+        env:
+          POLYMORPHIC_LINT_DOCUMENTATION: ${{ steps.changes.outputs.documentation }}
         run: |
           if jq -e '.scripts.build' package.json >/dev/null 2>&1; then
             build_cmd=$(jq -r '.scripts.build' package.json)
@@ -58,20 +86,20 @@ jobs:
           fi
 
       - name: Unit tests
+        if: steps.changes.outputs.product == 'true'
         # continue-on-error so E2E tests that need a browser/server/DB don't
         # block patch auto-merge. Install + Lint + Build are the real gates
         # for dep-bump compatibility; tests are informational here.
         continue-on-error: true
         run: |
-          if jq -e '.scripts.test' package.json >/dev/null 2>&1; then
-            test_cmd=$(jq -r '.scripts.test' package.json)
-            if [ "$test_cmd" = 'echo "Error: no test specified" && exit 1' ]; then
-              echo "Placeholder test script — skipping"
-            elif echo "$test_cmd" | grep -qiE '(playwright|test-e2e)'; then
-              echo "E2E tests require browser/server — skipping in install CI"
-            else
-              npm test
-            fi
-          else
-            echo "No test script — skipping"
-          fi
+          tests=()
+          for test in tests/unit/*.test.mjs; do
+            [[ "$test" == 'tests/unit/book-data.test.mjs' ]] || tests+=("$test")
+          done
+          node --test "${tests[@]}"
+
+      - name: Documentation tests
+        if: steps.changes.outputs.documentation == 'true'
+        run: |
+          node --test tests/unit/book-data.test.mjs
+          node scripts/check-book-params.mjs

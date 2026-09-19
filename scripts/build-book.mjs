@@ -16,6 +16,8 @@
  * is that every page describes what its shader actually does; a page with
  * nothing under the title breaks that loudly, and a page telling the reader to
  * type a parameter that was renamed three versions ago breaks it quietly.
+ * Automated source-only builds set POLYMORPHIC_LINT_DOCUMENTATION=false
+ * to skip identifier prose lint. It defaults to true for local builds.
  * See scripts/check-book-params.mjs for the resolution rules.
  *
  * Output lands in dist/, NOT in public/. The standalone desktop and mobile
@@ -408,6 +410,11 @@ async function copyAssets() {
 }
 
 async function main() {
+    const lintSetting = process.env.POLYMORPHIC_LINT_DOCUMENTATION ?? 'true'
+    if (!['true', 'false'].includes(lintSetting)) {
+        throw new Error('POLYMORPHIC_LINT_DOCUMENTATION must be true or false')
+    }
+    const lintDocumentation = lintSetting === 'true'
     const { chapters, effects } = JSON.parse(await readFile(DATA, 'utf8'))
 
     // Reading order: chapters in book order, effects alphabetical within each.
@@ -432,9 +439,9 @@ async function main() {
     // Identifiers the prose puts in backticks that the engine does not define.
     // A page can compile, render and read perfectly while telling the reader
     // to type a parameter name that no longer exists, so the build checks the
-    // writing against the extracted definitions the same way it checks that
-    // the writing is there at all.
-    const index = buildIndex({ effects })
+    // writing against the extracted definitions. Automated source-only builds
+    // disable this prose lint; page generation and missing-input checks remain.
+    const index = lintDocumentation ? buildIndex({ effects }) : null
     const unresolved = []
     let written = 0
 
@@ -453,9 +460,11 @@ async function main() {
 
         const where = `${effect.chapter}/${effect.slug}`
         const split = splitProseFile(raw)
-        for (const paragraph of split.prose.trim().split(/\n\s*\n/).filter(Boolean)) {
-            for (const token of checkParagraph(paragraph, effect, index)) {
-                unresolved.push(`${where}: \`${token}\` is not a parameter, choice, or effect the engine defines`)
+        if (lintDocumentation) {
+            for (const paragraph of split.prose.trim().split(/\n\s*\n/).filter(Boolean)) {
+                for (const token of checkParagraph(paragraph, effect, index)) {
+                    unresolved.push(`${where}: \`${token}\` is not a parameter, choice, or effect the engine defines`)
+                }
             }
         }
         const prose = renderProse(split.prose, where)

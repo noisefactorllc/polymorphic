@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'public/**'
+      - 'book/**'
+      - 'scripts/**'
+      - 'package*.json'
+      - '.github/workflows/deploy.yml'
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -16,6 +22,15 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Classify documentation changes
+        id: changes
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        with:
+          base: ${{ github.event.before || github.ref }}
+          filters: |
+            documentation:
+              - '{*.md,*.rst,*.adoc,docs/**,book/**}'
 
       - name: Generate deployment metadata
         run: |
@@ -32,6 +47,8 @@ jobs:
       # either, since the script imports nothing but node builtins. A missing
       # prose file fails here rather than shipping a page with nothing on it.
       - name: Build the book
+        env:
+          POLYMORPHIC_LINT_DOCUMENTATION: ${{ steps.changes.outputs.documentation }}
         run: npm run build
 
       - name: Set up SSH
