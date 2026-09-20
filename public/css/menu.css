@@ -63,7 +63,7 @@
     --accent4: var(--hf-accent-hover, var(--hf-accent-4));
 
     /* Menu colors - mapped to Handfish tokens */
-    --menu-bg: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) 65%, transparent);
+    --menu-bg: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-header-opacity, 65%), transparent);
     --menu-text: var(--hf-text-normal, var(--hf-color-6));
     --menu-text-hover: var(--hf-text-bright, var(--hf-color-7));
     --menu-accent: var(--hf-accent, var(--hf-accent-3));
@@ -409,7 +409,7 @@
     right: 0;
     bottom: 0;
     background: var(--hf-bg-base, var(--hf-color-1));
-    z-index: var(--hf-z-fullscreen, 99999);
+    z-index: 99999;
     flex-direction: column;
     align-items: center;
     justify-content: center;

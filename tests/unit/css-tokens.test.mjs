@@ -19,8 +19,8 @@ function extractDeclarationValues(css) {
     // Strip comments
     const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '')
     const declarations = []
-    // Match property: value; inside rule blocks
-    const blockRegex = /\{([^}]+)\}/g
+    // Match innermost rule blocks containing declarations
+    const blockRegex = /\{([^{}]+)\}/g
     let blockMatch
     while ((blockMatch = blockRegex.exec(stripped)) !== null) {
         const blockContent = blockMatch[1]
@@ -30,7 +30,7 @@ function extractDeclarationValues(css) {
             if (colonIdx !== -1) {
                 const prop = rule.slice(0, colonIdx).trim()
                 const value = rule.slice(colonIdx + 1).trim()
-                if (prop && value) {
+                if (prop && value && !prop.startsWith('@')) {
                     declarations.push({ prop, value })
                 }
             }
@@ -89,12 +89,23 @@ test('public/css/menu.css maps theme variables to Handfish tokens', () => {
     assert.match(map.get('--accent4') || '', /var\(--hf-/)
 
     // Menu color aliases
-    assert.match(map.get('--menu-bg') || '', /var\(--hf-/)
+    assert.match(map.get('--menu-bg') || '', /var\(--hf-bg-surface/)
+    assert.match(map.get('--menu-bg') || '', /var\(--hf-header-opacity/)
     assert.match(map.get('--menu-text') || '', /var\(--hf-/)
     assert.match(map.get('--menu-text-hover') || '', /var\(--hf-/)
     assert.match(map.get('--menu-accent') || '', /var\(--hf-/)
     assert.match(map.get('--menu-accent-hover') || '', /var\(--hf-/)
     assert.match(map.get('--menu-border') || '', /var\(--hf-/)
+})
+
+test('public/css/menu.css tooltip uses Handfish design tokens', () => {
+    const css = readCss('menu.css')
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-bg-surface/)
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-text-bright/)
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-border-subtle/)
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-radius-sm/)
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-shadow-md/)
+    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-z-tooltip/)
 })
 
 test('public/css/sync.css uses Handfish tokens for dialog variables and backdrop', () => {
@@ -108,6 +119,10 @@ test('public/css/sync.css uses Handfish tokens for dialog variables and backdrop
     assert.match(map.get('--sync-muted') || '', /var\(--hf-/)
     assert.match(map.get('--sync-ready') || '', /var\(--hf-/)
     assert.match(map.get('--sync-live') || '', /var\(--hf-/)
+
+    // Backdrop tokens
+    assert.match(css, /\.sync-output-dialog::backdrop[\s\S]*?var\(--hf-backdrop/)
+    assert.match(css, /\.sync-output-dialog::backdrop[\s\S]*?var\(--hf-glass-blur/)
 })
 
 test('public/css/touch.css canvas-flash keyframe references Handfish accent token', () => {
