@@ -15,7 +15,7 @@
 import { numberLiteralAt, replaceRange } from './editorActions.js'
 
 const STYLES_ID = 'inline-scrubber-styles'
-if (!document.getElementById(STYLES_ID)) {
+if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     const style = document.createElement('style')
     style.id = STYLES_ID
     style.textContent = `
@@ -26,25 +26,35 @@ if (!document.getElementById(STYLES_ID)) {
         .scrubber-active-cursor * {
             cursor: ew-resize !important;
             user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        code-editor.scrubber-active,
+        code-editor.scrubber-active *,
+        code-editor.scrubber-active .code-editor-textarea,
+        code-editor.scrubber-active .code-editor-display {
+            user-select: none !important;
+            -webkit-user-select: none !important;
         }
         .scrubber-tooltip {
             position: fixed;
-            background: rgba(15, 17, 22, 0.96);
-            border: 1px solid rgba(165, 184, 255, 0.5);
-            color: #fff;
-            padding: 0.3rem 0.55rem;
-            border-radius: 6px;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
-            font-size: 0.75rem;
+            background: var(--hf-bg-surface, rgba(15, 17, 22, 0.96));
+            backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            border: 1px solid var(--hf-border, rgba(165, 184, 255, 0.5));
+            color: var(--hf-text-bright, #fff);
+            padding: var(--hf-space-1, 0.3rem) var(--hf-space-2, 0.55rem);
+            border-radius: var(--hf-radius-md, 6px);
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
+            font-size: var(--hf-size-sm, 0.75rem);
             pointer-events: none;
             z-index: 5500;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            box-shadow: var(--hf-shadow-lg, 0 4px 16px rgba(0,0,0,0.4));
             transition: opacity 0.1s;
         }
         .scrubber-tooltip-hint {
-            font-size: 0.625rem;
-            color: #aaa;
-            margin-top: 0.15rem;
+            font-size: var(--hf-size-xs, 0.625rem);
+            color: var(--hf-text-dim, #aaa);
+            margin-top: var(--hf-space-1, 0.15rem);
         }
     `
     document.head.appendChild(style)
@@ -79,12 +89,55 @@ export function attachScrubber(editor, options = {}) {
     let tooltip = null
     let throttleId = null
     let lastChangeTime = 0
-    let savedSelectionStart = 0
-    let savedSelectionEnd = 0
+    let lastPointerX = null
+    let lastPointerY = null
     // Touch/pen pending state — wait for long-press or drag before engaging,
     // so simple taps fall through to native textarea focus/caret placement.
     let pendingTouch = null
     let pendingTimer = null
+
+    function preventSelect(evt) {
+        evt.preventDefault()
+    }
+
+    function applyUserSelectGuard() {
+        if (typeof document !== 'undefined') {
+            document.body?.classList?.add('scrubber-active-cursor')
+            document.addEventListener('selectstart', preventSelect)
+        }
+        if (editor) {
+            editor.classList?.add('scrubber-active')
+            if (editor.style) {
+                editor.style.userSelect = 'none'
+                editor.style.webkitUserSelect = 'none'
+            }
+        }
+        if (ta?.style) {
+            ta.style.userSelect = 'none'
+            ta.style.webkitUserSelect = 'none'
+        }
+        if (typeof window !== 'undefined' && window.getSelection) {
+            try { window.getSelection()?.removeAllRanges?.() } catch { /* ignore */ }
+        }
+    }
+
+    function removeUserSelectGuard() {
+        if (typeof document !== 'undefined') {
+            document.body?.classList?.remove('scrubber-active-cursor')
+            document.removeEventListener('selectstart', preventSelect)
+        }
+        if (editor) {
+            editor.classList?.remove('scrubber-active')
+            if (editor.style) {
+                editor.style.userSelect = ''
+                editor.style.webkitUserSelect = ''
+            }
+        }
+        if (ta?.style) {
+            ta.style.userSelect = ''
+            ta.style.webkitUserSelect = ''
+        }
+    }
 
     function findLiteralAtPointer(clientX, clientY) {
         // Use the textarea's built-in caret-from-point (if available) or fall
@@ -118,7 +171,20 @@ export function attachScrubber(editor, options = {}) {
         return v.toFixed(decimals)
     }
 
+    function updateHover(clientX, clientY, altPressed) {
+        if (clientX == null || clientY == null) return
+        const lit = findLiteralAtPointer(clientX, clientY)
+        const shouldHover = !!lit && Boolean(altPressed)
+        if (shouldHover !== hovering) {
+            hovering = shouldHover
+            ta.classList.toggle('scrubber-hover-target', hovering)
+        }
+    }
+
     function onPointerMove(e) {
+        lastPointerX = e.clientX
+        lastPointerY = e.clientY
+
         // Touch/pen pending: promote to engaged once drag exceeds threshold.
         if (pendingTouch && e.pointerId === pendingTouch.id) {
             const dx = e.clientX - pendingTouch.x
@@ -142,13 +208,7 @@ export function attachScrubber(editor, options = {}) {
             return
         }
         // Idle hover detection — show pointer change
-        const lit = findLiteralAtPointer(e.clientX, e.clientY)
-        const altPressed = e.altKey
-        const shouldHover = !!lit && altPressed
-        if (shouldHover !== hovering) {
-            hovering = shouldHover
-            ta.classList.toggle('scrubber-hover-target', hovering)
-        }
+        updateHover(e.clientX, e.clientY, e.altKey)
     }
 
     function applyValue(newRaw) {
@@ -159,6 +219,9 @@ export function attachScrubber(editor, options = {}) {
         // Restore the selection to the new literal so subsequent scrubs feel sticky
         ta.selectionStart = range.start
         ta.selectionEnd = range.end
+        if (typeof window !== 'undefined' && window.getSelection) {
+            try { window.getSelection()?.removeAllRanges?.() } catch { /* ignore */ }
+        }
 
         // Throttle recompile to ~50fps
         const now = performance.now()
@@ -196,9 +259,7 @@ export function attachScrubber(editor, options = {}) {
         originalRaw = lit.raw
         range = { start: lit.start, end: lit.end }
         stepSize = inferStep(lit.raw)
-        savedSelectionStart = ta.selectionStart
-        savedSelectionEnd = ta.selectionEnd
-        document.body.classList.add('scrubber-active-cursor')
+        applyUserSelectGuard()
         updateTooltip(e.clientX, e.clientY, lit.raw)
         onScrubStart()
         try { ta.setPointerCapture?.(e.pointerId) } catch { /* ignore */ }
@@ -242,7 +303,7 @@ export function attachScrubber(editor, options = {}) {
         }
         if (!scrubbing) return
         scrubbing = false
-        document.body.classList.remove('scrubber-active-cursor')
+        removeUserSelectGuard()
         if (tooltip) {
             tooltip.remove()
             tooltip = null
@@ -253,6 +314,9 @@ export function attachScrubber(editor, options = {}) {
             try { Promise.resolve(recompile()).catch(() => {}) } catch { /* ignore */ }
         }
         onScrubEnd()
+        if (lastPointerX != null && lastPointerY != null) {
+            updateHover(lastPointerX, lastPointerY, Boolean(e?.altKey))
+        }
     }
 
     function onKeyDown(e) {
@@ -262,6 +326,25 @@ export function attachScrubber(editor, options = {}) {
             range = null
             onPointerUp()
             try { Promise.resolve(recompile()).catch(() => {}) } catch { /* ignore */ }
+            return
+        }
+        if (e.key === 'Alt' && !scrubbing && lastPointerX != null) {
+            updateHover(lastPointerX, lastPointerY, true)
+        }
+    }
+
+    function onKeyUp(e) {
+        if (e.key === 'Alt' && !scrubbing && lastPointerX != null) {
+            updateHover(lastPointerX, lastPointerY, false)
+        }
+    }
+
+    function onPointerLeave() {
+        if (!scrubbing) {
+            hovering = false
+            lastPointerX = null
+            lastPointerY = null
+            ta.classList.remove('scrubber-hover-target')
         }
     }
 
@@ -269,20 +352,23 @@ export function attachScrubber(editor, options = {}) {
     ta.addEventListener('pointerdown', onPointerDown)
     ta.addEventListener('pointerup', onPointerUp)
     ta.addEventListener('pointercancel', onPointerUp)
-    ta.addEventListener('pointerleave', () => {
-        if (!scrubbing) {
-            hovering = false
-            ta.classList.remove('scrubber-hover-target')
-        }
-    })
-    document.addEventListener('keydown', onKeyDown)
+    ta.addEventListener('pointerleave', onPointerLeave)
+    if (typeof document !== 'undefined') {
+        document.addEventListener('keydown', onKeyDown)
+        document.addEventListener('keyup', onKeyUp)
+    }
 
     return function detach() {
+        removeUserSelectGuard()
         ta.removeEventListener('pointermove', onPointerMove)
         ta.removeEventListener('pointerdown', onPointerDown)
         ta.removeEventListener('pointerup', onPointerUp)
         ta.removeEventListener('pointercancel', onPointerUp)
-        document.removeEventListener('keydown', onKeyDown)
+        ta.removeEventListener('pointerleave', onPointerLeave)
+        if (typeof document !== 'undefined') {
+            document.removeEventListener('keydown', onKeyDown)
+            document.removeEventListener('keyup', onKeyUp)
+        }
         if (tooltip) tooltip.remove()
     }
 }
