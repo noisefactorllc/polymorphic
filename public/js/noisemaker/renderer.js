@@ -221,10 +221,8 @@ export class PolymorphicRenderer {
             let errorMessage = 'Unknown compilation error'
             if (typeof err === 'string') {
                 errorMessage = err
-            } else if (err instanceof Error) {
-                errorMessage = err.message || err.toString()
             } else if (err && typeof err === 'object') {
-                errorMessage = err.message || err.error || JSON.stringify(err)
+                errorMessage = err.detail || err.message || (err instanceof Error ? err.toString() : null) || err.error || JSON.stringify(err)
             }
             
             return { success: false, error: errorMessage }

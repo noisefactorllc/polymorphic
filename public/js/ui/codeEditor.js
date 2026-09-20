@@ -46,6 +46,12 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             box-sizing: border-box;
         }
 
+        code-editor .code-editor-gutter .line-number.error-line {
+            color: var(--hf-red, #ff7b72);
+            font-weight: 700;
+            opacity: 1;
+        }
+
         code-editor .code-editor-textarea {
             position: absolute;
             top: 0;
@@ -121,6 +127,15 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             background: var(--code-editor-bg, transparent);
             -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
+        }
+
+        code-editor .code-editor-display .code-line.error-line {
+            background: linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--hf-red, #ff7b72) 22%, transparent) 0%,
+                transparent 100%
+            );
+            box-shadow: inset 3px 0 0 var(--hf-red, #ff7b72);
         }
 
         code-editor .code-editor-display .code-segment {

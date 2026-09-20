@@ -309,8 +309,8 @@
             right: 1em;
             padding: 0;
             background: transparent;
-            color: #ff6b6b;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block';
+            color: var(--hf-red, #ff7b72);
+            font-family: var(--code-editor-font, 'Noto Sans Mono', 'Noto Sans Mono Block');
             font-size: 12px;
             line-height: 1.45;
             z-index: 260;
@@ -328,15 +328,15 @@
         
         #compiler-error span {
             display: inline;
-            background: rgba(0, 0, 0, 0.85);
-            color: #ff6b6b;
+            background: color-mix(in srgb, var(--hf-bg, #000) 85%, transparent);
+            color: var(--hf-red, #ff7b72);
             -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
             padding: 0 0.15em;
         }
         
         #compiler-error span:hover {
-            background: rgba(0, 0, 0, 0.95);
+            background: color-mix(in srgb, var(--hf-bg, #000) 95%, transparent);
         }
 
         /* Doc Reader Panel */
@@ -1100,7 +1100,7 @@
     </div>
     
     <!-- Compiler Error Display -->
-    <div id="compiler-error"></div>
+    <div id="compiler-error" role="alert" tabindex="0" aria-live="assertive"></div>
     
     <!-- Doc Reader Panel -->
     <div id="doc-reader-panel">

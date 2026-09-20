@@ -42,7 +42,7 @@ import { configureViewportWindow, openViewportWindow } from './ui/viewportWindow
 import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
-import { parseErrorLocation } from './ui/errorBanner.js'
+import { parseErrorLocation, formatErrorLabel } from './ui/errorBanner.js'
 import { createPolymorphicOnlineAdapter } from './onlineAdapter.js'
 import './ui/codeEditor.js'  // Polymorphic editor CSS; handfish registers and owns the element behavior.
 import './ui/effectControls.js' // Register <effect-controls> custom element
@@ -648,25 +648,75 @@ perlin(scale: 75, octaves: 2)
 
 render(o0)`
 
+let activeErrorLoc = null
+let markerTimeout = null
+
+function applyErrorLineMarker() {
+    if (!activeErrorLoc || !dslEditor) return
+    const lineEl = dslEditor.querySelector?.(`.code-editor-display [data-line-number="${activeErrorLoc.line}"]`)
+    if (lineEl) lineEl.classList.add('error-line')
+    const gutterEl = dslEditor.querySelector?.('.code-editor-gutter')
+    if (gutterEl && gutterEl.children && gutterEl.children[activeErrorLoc.line - 1]) {
+        gutterEl.children[activeErrorLoc.line - 1].classList.add('error-line')
+    }
+}
+
+function setErrorLineMarker(loc) {
+    clearErrorLineMarker()
+    activeErrorLoc = loc
+    applyErrorLineMarker()
+    if (markerTimeout) clearTimeout(markerTimeout)
+    markerTimeout = setTimeout(() => {
+        if (activeErrorLoc === loc) applyErrorLineMarker()
+        markerTimeout = null
+    }, 750)
+}
+
+function clearErrorLineMarker() {
+    activeErrorLoc = null
+    if (markerTimeout) {
+        clearTimeout(markerTimeout)
+        markerTimeout = null
+    }
+    if (!dslEditor) return
+    const prevLineEls = dslEditor.querySelectorAll?.('.code-editor-display .error-line')
+    if (prevLineEls) {
+        for (const el of prevLineEls) el.classList.remove('error-line')
+    }
+    const prevGutterEls = dslEditor.querySelectorAll?.('.code-editor-gutter .error-line')
+    if (prevGutterEls) {
+        for (const el of prevGutterEls) el.classList.remove('error-line')
+    }
+}
+
 /**
- * Show compiler error with line-level span wrapping
+ * Show compiler error with line-level span wrapping and editor diagnostic marker
  */
 function showCompilerError(errorText) {
     if (!compilerErrorEl) return
     const loc = parseErrorLocation(errorText)
-    let label = errorText
-    if (loc) label = `line ${loc.line}:${loc.col} — ${errorText}`
+    const label = formatErrorLabel(errorText, loc)
     const escaped = label.replace(/</g, '&lt;').replace(/>/g, '&gt;')
     compilerErrorEl.innerHTML = `<span>${escaped}</span>`
     compilerErrorEl.classList.add('visible')
+    if (loc) {
+        compilerErrorEl.title = `Click to jump to line ${loc.line}, column ${loc.col}`
+        setErrorLineMarker(loc)
+    } else {
+        compilerErrorEl.removeAttribute('title')
+        clearErrorLineMarker()
+    }
 }
 
 /**
- * Hide compiler error
+ * Hide compiler error and clear editor diagnostic markers
  */
 function hideCompilerError() {
-    if (!compilerErrorEl) return
-    compilerErrorEl.classList.remove('visible')
+    if (compilerErrorEl) {
+        compilerErrorEl.classList.remove('visible')
+        compilerErrorEl.removeAttribute('title')
+    }
+    clearErrorLineMarker()
 }
 
 /**
@@ -1623,6 +1673,9 @@ function setupDslEditor() {
     // Hot reload: recompile DSL 500ms after user stops typing
     // The code-editor component dispatches 'input' events when content changes
     dslEditor.addEventListener('input', () => {
+        // Clear stale diagnostic line markers when user edits code
+        clearErrorLineMarker()
+
         // Update reset button visibility
         updateResetButtonVisibility()
 
@@ -1657,7 +1710,12 @@ function setupDslEditor() {
             if (!result.success) {
                 console.warn('Manual compile failed:', result.error)
                 showCompilerError(result.error)
-                dslEditor.flashLines?.(1, lineCount, { error: true })
+                const loc = parseErrorLocation(result.error)
+                if (loc) {
+                    dslEditor.flashLines?.(loc.line, loc.line, { error: true })
+                } else {
+                    dslEditor.flashLines?.(1, lineCount, { error: true })
+                }
             } else {
                 hideCompilerError()
                 dslEditor.flashLines?.(1, lineCount)
@@ -1710,8 +1768,23 @@ function setupDslEditor() {
             const endLine = lineNumberAt(value, Math.max(sel.start, sel.end - 1))
             if (!result.success) {
                 console.warn('Block eval failed:', result.error)
-                showCompilerError(result.error)
-                dslEditor.flashLines?.(startLine, endLine, { error: true })
+                const loc = parseErrorLocation(result.error)
+                if (loc) {
+                    const headerLines = /^\s*search\s+/m.test(sel.text.trim()) ? 0 : 2
+                    const leadingWs = sel.text.slice(0, sel.text.length - sel.text.trimStart().length)
+                    const leadingLines = (leadingWs.match(/\n/g) || []).length
+                    const snippetLine = loc.line - headerLines
+                    const docLine = Math.max(startLine, Math.min(endLine, startLine + leadingLines + (snippetLine - 1)))
+                    const docLoc = { line: docLine, col: loc.col }
+
+                    const mappedError = result.error.replace(/\bline\s+\d+/i, `line ${docLine}`)
+                    showCompilerError(mappedError)
+                    dslEditor.flashLines?.(docLine, docLine, { error: true })
+                    setErrorLineMarker(docLoc)
+                } else {
+                    showCompilerError(result.error)
+                    dslEditor.flashLines?.(startLine, endLine, { error: true })
+                }
             } else {
                 hideCompilerError()
                 dslEditor.flashLines?.(startLine, endLine)
@@ -2345,6 +2418,12 @@ function init() {
     
     // Set up compiler error click-to-jump (or fallback copy)
     if (compilerErrorEl) {
+        compilerErrorEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                compilerErrorEl.click()
+            }
+        })
         compilerErrorEl.addEventListener('click', () => {
             const text = compilerErrorEl.textContent
             const loc = parseErrorLocation(text)
@@ -2352,13 +2431,42 @@ function init() {
                 const ta = dslEditor.getTextarea?.()
                 if (!ta) return
                 const lines = ta.value.split('\n')
+                const targetLineIndex = Math.max(0, Math.min(loc.line - 1, lines.length - 1))
                 let offset = 0
-                for (let i = 0; i < Math.min(loc.line - 1, lines.length); i++) {
+                for (let i = 0; i < targetLineIndex; i++) {
                     offset += lines[i].length + 1
                 }
-                offset += Math.max(0, loc.col - 1)
+                const targetLineText = lines[targetLineIndex] || ''
+                const colOffset = Math.max(0, Math.min(loc.col - 1, targetLineText.length))
+                offset += colOffset
+
+                // Determine token boundary to highlight the offending identifier or token
+                let endOffset = offset
+                if (colOffset < targetLineText.length) {
+                    const char = targetLineText[colOffset]
+                    if (/[a-zA-Z0-9_]/.test(char)) {
+                        while (endOffset < offset + (targetLineText.length - colOffset) &&
+                               /[a-zA-Z0-9_]/.test(targetLineText[colOffset + (endOffset - offset)])) {
+                            endOffset++
+                        }
+                    } else if (!/\s/.test(char)) {
+                        endOffset = offset + 1
+                    }
+                }
+
+                // Scroll error line into view if outside visible viewport
+                const lineHeight = parseFloat(window.getComputedStyle?.(ta).lineHeight) || 22
+                const lineTop = targetLineIndex * lineHeight
+                const viewHeight = ta.clientHeight || 200
+                if (lineTop < ta.scrollTop || lineTop > ta.scrollTop + viewHeight - lineHeight) {
+                    ta.scrollTop = Math.max(0, lineTop - viewHeight / 3)
+                    dslEditor.syncScroll?.()
+                }
+
                 ta.focus()
-                ta.selectionStart = ta.selectionEnd = offset
+                ta.setSelectionRange(offset, Math.max(offset, endOffset))
+                dslEditor.flashLines?.(loc.line, loc.line, { error: true })
+                setErrorLineMarker(loc)
             } else {
                 navigator.clipboard?.writeText(text).catch(() => {})
             }
