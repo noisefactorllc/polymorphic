@@ -55,20 +55,20 @@
     /* Font family definitions */
     --font-accent: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
 
-    /* Neutral colors */
-    --color2: #141414;
-    --color6: #d0d0d0;
-    --color7: #f0f0f0;
-    --accent3: #c0c0c0;
-    --accent4: #e0e0e0;
+    /* Neutral colors - mapped to Handfish tokens */
+    --color2: var(--hf-color-2);
+    --color6: var(--hf-text-normal, var(--hf-color-6));
+    --color7: var(--hf-text-bright, var(--hf-color-7));
+    --accent3: var(--hf-accent, var(--hf-accent-3));
+    --accent4: var(--hf-accent-hover, var(--hf-accent-4));
 
-    /* Menu colors */
-    --menu-bg: rgba(20, 20, 20, 0.65);
-    --menu-text: #d0d0d0;
-    --menu-text-hover: #f0f0f0;
-    --menu-accent: #c0c0c0;
-    --menu-accent-hover: #e0e0e0;
-    --menu-border: rgba(255, 255, 255, 0.1);
+    /* Menu colors - mapped to Handfish tokens */
+    --menu-bg: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) 65%, transparent);
+    --menu-text: var(--hf-text-normal, var(--hf-color-6));
+    --menu-text-hover: var(--hf-text-bright, var(--hf-color-7));
+    --menu-accent: var(--hf-accent, var(--hf-accent-3));
+    --menu-accent-hover: var(--hf-accent-hover, var(--hf-accent-4));
+    --menu-border: var(--hf-border-subtle, color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent));
 }
 
 /* Menu Bar Container (was #menu; the component wraps its bar in .hf-menubar) */
@@ -300,7 +300,7 @@
 
 #menu .hf-menubar-btn:hover {
     color: var(--menu-text-hover);
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 6%, transparent);
     opacity: 1;
 }
 
@@ -364,19 +364,21 @@
     top: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-family: 'Nunito', 'Nunito Block';
-    font-size: 11px;
-    font-weight: 500;
+    background: var(--hf-bg-surface, var(--hf-color-2));
+    color: var(--hf-text-bright, var(--hf-color-7));
+    padding: var(--hf-space-1, 4px) var(--hf-space-2, 8px);
+    border: 1px solid var(--hf-border-subtle, var(--hf-border));
+    border-radius: var(--hf-radius-sm, 4px);
+    box-shadow: var(--hf-shadow-md);
+    font-family: var(--hf-font-family, 'Nunito', 'Nunito Block');
+    font-size: var(--hf-size-xs, 11px);
+    font-weight: var(--hf-weight-medium, 500);
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.15s ease, visibility 0.15s ease;
+    transition: opacity var(--hf-transition, 0.15s ease), visibility var(--hf-transition, 0.15s ease);
     pointer-events: none;
-    z-index: 9999;
+    z-index: var(--hf-z-tooltip, 9999);
 }
 
 .tooltip:hover::before {
@@ -406,15 +408,15 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: #0a0a0a;
-    z-index: 99999;
+    background: var(--hf-bg-base, var(--hf-color-1));
+    z-index: var(--hf-z-fullscreen, 99999);
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #d0d0d0;
-    font-family: 'Nunito', 'Nunito Block';
+    color: var(--hf-text-normal, var(--hf-color-6));
+    font-family: var(--hf-font-family, 'Nunito', 'Nunito Block');
     text-align: center;
-    padding: 2rem;
+    padding: var(--hf-space-8, 2rem);
 }
 
 #rotate-device-overlay .rotate-icon {

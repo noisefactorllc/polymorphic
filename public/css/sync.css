@@ -1,10 +1,10 @@
 .sync-output-dialog {
-    --sync-panel: var(--hf-color-2, #131927);
-    --sync-line: var(--hf-color-3, #2b3445);
-    --sync-copy: var(--hf-color-6, #d9deeb);
-    --sync-muted: var(--hf-color-5, #9aa4b2);
-    --sync-ready: var(--hf-accent-3, #38bdf8);
-    --sync-live: var(--hf-red, #ef4444);
+    --sync-panel: var(--hf-bg-surface, var(--hf-color-2));
+    --sync-line: var(--hf-border-subtle, var(--hf-color-3));
+    --sync-copy: var(--hf-text-normal, var(--hf-color-6));
+    --sync-muted: var(--hf-text-dim, var(--hf-color-5));
+    --sync-ready: var(--hf-accent, var(--hf-accent-3));
+    --sync-live: var(--hf-red);
     position: relative;
     width: min(35rem, calc(100vw - 2rem));
     max-width: 35rem;
@@ -16,8 +16,8 @@
 }
 
 .sync-output-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.62);
-    backdrop-filter: blur(4px);
+    background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
+    backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
 }
 
 .sync-tally-rail {
