@@ -481,7 +481,7 @@ Group related effects together:
 noise()
   .subchain(name: "color grading") {
     .palette()
-    .hs(rotation: 45)
+    .adjust(rotation: 45)
   }
   .write(o0)
 \`\`\`
