@@ -126,15 +126,22 @@ for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts ${back
         await output.connect()
         await output.start('Polymorphic native receiver')
     })
-    await expect.poll(() => page.evaluate(async () => {
+    const receiverStatus = () => page.evaluate(async () => {
         const output = window.__poly.syncOutputController
         const client = output._client, sender = output._sender
-        if (!sender) return false
+        if (!sender) return { state: output.state, accepted: false }
         const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
             { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
         window.nativeReceiverStats = stats
-        return Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum))
-    })).toBe(true)
+        return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
+            accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+    })
+    try {
+        await expect.poll(async () => (await receiverStatus()).accepted).toBe(true)
+    } catch (error) {
+        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
+        throw error
+    }
     const stats = await page.evaluate(() => window.nativeReceiverStats)
     expect(Number(stats.rejected)).toBe(0)
     expect(Number(stats.failed)).toBe(0)
