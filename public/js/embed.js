@@ -2594,9 +2594,9 @@ function setupCommandPalette() {
             const visible = toggleDocReader()
             if (docToggleBtn) docToggleBtn.classList.toggle('active', visible)
         },
-        savePNG: () => savePNG?.click?.(),
-        saveJPG: () => saveJPG?.click?.(),
-        shareProgram: () => shareProgram?.click?.(),
+        savePNG: () => document.getElementById('savePNG')?.click?.(),
+        saveJPG: () => document.getElementById('saveJPG')?.click?.(),
+        shareProgram: () => document.getElementById('shareProgram')?.click?.(),
         loadProgram: () => openProgramModal('load'),
         saveProgram: () => openProgramModal('save'),
         openDocs: () => {

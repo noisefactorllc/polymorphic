@@ -14,7 +14,7 @@
 import { loadManifest, getEffects, fuzzySearch } from '../manifest.js'
 
 const STYLES_ID = 'command-palette-styles'
-if (!document.getElementById(STYLES_ID)) {
+if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     const style = document.createElement('style')
     style.id = STYLES_ID
     style.textContent = `
@@ -70,6 +70,7 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .cmd-palette-input::placeholder { color: #555; }
         .cmd-palette-list {
+            position: relative;
             list-style: none;
             margin: 0;
             padding: 0.4rem 0;
@@ -248,6 +249,7 @@ class CommandPalette {
 
         if (!this._overlay) this._build()
         this._overlay.classList.add('visible')
+        this._input?.setAttribute('aria-expanded', 'true')
         this._input.value = ''
         this._refresh()
         // Focus next tick so overlay transition picks up
@@ -261,6 +263,8 @@ class CommandPalette {
         this._open = false
         if (this._overlay) this._overlay.classList.remove('visible')
         document.removeEventListener('keydown', this._boundKeydown, true)
+        this._input?.setAttribute('aria-expanded', 'false')
+        this._input?.removeAttribute('aria-activedescendant')
         // Return focus to wherever it came from
         try { this._previousFocus?.focus?.() } catch { /* ignore */ }
     }
@@ -273,12 +277,20 @@ class CommandPalette {
         this._overlay = document.createElement('div')
         this._overlay.className = 'cmd-palette-overlay'
         this._overlay.innerHTML = `
-            <div class="cmd-palette" role="dialog" aria-label="Command palette">
+            <div class="cmd-palette" role="dialog" aria-modal="true" aria-label="Command palette">
                 <div class="cmd-palette-input-wrap">
-                    <span class="icon-material">search</span>
-                    <input class="cmd-palette-input" placeholder="Search effects, actions…" autocomplete="off" spellcheck="false">
+                    <span class="icon-material" aria-hidden="true">search</span>
+                    <input class="cmd-palette-input"
+                           role="combobox"
+                           aria-autocomplete="list"
+                           aria-expanded="false"
+                           aria-haspopup="listbox"
+                           aria-controls="cmd-palette-list"
+                           placeholder="Search effects, actions…"
+                           autocomplete="off"
+                           spellcheck="false">
                 </div>
-                <ul class="cmd-palette-list"></ul>
+                <ul class="cmd-palette-list" id="cmd-palette-list" role="listbox" aria-label="Commands and effects"></ul>
                 <div class="cmd-palette-footer">
                     <span><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> select <kbd>esc</kbd> close</span>
                     <span>polymorphic</span>
@@ -304,6 +316,15 @@ class CommandPalette {
         this._currentItems = items
         this._activeIdx = 0
         this._render(items)
+        const linear = this._linearItems()
+        if (linear.length > 0 && this._input) {
+            this._input.setAttribute('aria-activedescendant', 'cmd-palette-item-0')
+        } else if (this._input) {
+            this._input.removeAttribute('aria-activedescendant')
+        }
+        if (this._list) {
+            this._list.scrollTop = 0
+        }
     }
 
     _buildItems(query) {
@@ -391,6 +412,7 @@ class CommandPalette {
             if (it.section) {
                 const sec = document.createElement('li')
                 sec.className = 'cmd-palette-section'
+                sec.setAttribute('role', 'presentation')
                 sec.textContent = it.section
                 fragment.appendChild(sec)
                 continue
@@ -398,12 +420,16 @@ class CommandPalette {
             if (it.empty) {
                 const empty = document.createElement('li')
                 empty.className = 'cmd-palette-empty'
+                empty.setAttribute('role', 'presentation')
                 empty.textContent = this._manifestLoaded ? 'No matches.' : 'Loading effects…'
                 fragment.appendChild(empty)
                 continue
             }
             liIndex += 1
             const li = document.createElement('li')
+            li.id = `cmd-palette-item-${liIndex}`
+            li.setAttribute('role', 'option')
+            li.setAttribute('aria-selected', liIndex === this._activeIdx ? 'true' : 'false')
             li.className = 'cmd-palette-item' + (liIndex === this._activeIdx ? ' active' : '')
             li.dataset.idx = String(liIndex)
 
@@ -457,44 +483,99 @@ class CommandPalette {
     }
 
     _setActive(idx) {
-        this._activeIdx = idx
+        const linear = this._linearItems()
+        const count = linear.length
+        if (count === 0) {
+            this._activeIdx = 0
+            return
+        }
+        this._activeIdx = Math.max(0, Math.min(count - 1, idx))
         const items = this._list.querySelectorAll('.cmd-palette-item')
-        items.forEach((el, i) => el.classList.toggle('active', i === idx))
+        items.forEach((el, i) => {
+            const isActive = i === this._activeIdx
+            el.classList.toggle('active', isActive)
+            el.setAttribute('aria-selected', isActive ? 'true' : 'false')
+        })
+        if (this._input) {
+            this._input.setAttribute('aria-activedescendant', `cmd-palette-item-${this._activeIdx}`)
+        }
         this._scrollActiveIntoView()
     }
 
     _scrollActiveIntoView() {
+        if (!this._list) return
         const items = this._list.querySelectorAll('.cmd-palette-item')
         const el = items[this._activeIdx]
         if (!el) return
+        if (typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+            return
+        }
         const cont = this._list
         const top = el.offsetTop
         const bottom = top + el.offsetHeight
-        if (top < cont.scrollTop) cont.scrollTop = top
-        else if (bottom > cont.scrollTop + cont.clientHeight) cont.scrollTop = bottom - cont.clientHeight
+        if (top < cont.scrollTop) {
+            cont.scrollTop = top
+        } else if (bottom > cont.scrollTop + cont.clientHeight) {
+            cont.scrollTop = bottom - cont.clientHeight
+        }
     }
 
     _handleKeydown(e) {
         if (!this._open) return
+        if (e.key === 'Tab') {
+            e.preventDefault()
+            return
+        }
         if (e.key === 'Escape') {
             e.preventDefault()
             this.close()
             return
         }
+        const linear = this._linearItems()
+        const count = linear.length
         if (e.key === 'ArrowDown') {
             e.preventDefault()
-            const max = this._linearItems().length - 1
-            this._setActive(Math.min(max, this._activeIdx + 1))
+            if (count === 0) return
+            if (this._activeIdx >= count - 1) {
+                this._setActive(0)
+                if (this._list) this._list.scrollTop = 0
+            } else {
+                this._setActive(this._activeIdx + 1)
+            }
             return
         }
         if (e.key === 'ArrowUp') {
             e.preventDefault()
-            this._setActive(Math.max(0, this._activeIdx - 1))
+            if (count === 0) return
+            if (this._activeIdx <= 0) {
+                this._setActive(count - 1)
+                if (this._list) this._list.scrollTop = this._list.scrollHeight
+            } else {
+                this._setActive(this._activeIdx - 1)
+            }
+            return
+        }
+        if (e.key === 'PageDown') {
+            e.preventDefault()
+            if (count === 0) return
+            const pageSize = 6
+            const next = Math.min(count - 1, this._activeIdx + pageSize)
+            this._setActive(next)
+            return
+        }
+        if (e.key === 'PageUp') {
+            e.preventDefault()
+            if (count === 0) return
+            const pageSize = 6
+            const prev = Math.max(0, this._activeIdx - pageSize)
+            this._setActive(prev)
             return
         }
         if (e.key === 'Enter') {
             e.preventDefault()
-            const item = this._linearItems()[this._activeIdx]
+            if (count === 0) return
+            const item = linear[this._activeIdx]
             if (item) this._invoke(item)
             return
         }
@@ -532,3 +613,5 @@ function buildEffectSnippet(effect) {
 }
 
 export const commandPalette = new CommandPalette()
+export { CommandPalette }
+export default commandPalette
