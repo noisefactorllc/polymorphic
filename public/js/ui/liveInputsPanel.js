@@ -789,7 +789,7 @@ class LiveInputsPanel {
             const dataUrl = await fileToDataURL(file)
             // Insert a real media(url:...) snippet — Polymorphic already renders that
             this._setSourceStatus(`image: ${file.name}`, 'connected')
-            this._onInsert(`media(url: "${dataUrl}").write(o0)`)
+            await this._onInsert(dataUrl, { as: 'image' })
             this._markActiveSourceBtn(btn)
             return
         }

@@ -15,6 +15,7 @@ initEscapeHandler()
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { ProgramState, getEffect } from './noisemaker/bundle.js'
 import { restoreMediaUrls } from './noisemaker/dslSanitize.js'
+import { insertImageSource } from './noisemaker/imageSource.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
@@ -824,7 +825,7 @@ async function handleDroppedFile(file) {
             r.readAsDataURL(file)
         })
         if (dslEditor) {
-            insertAtCursor(dslEditor, `\n\nmedia(url: "${dataUrl}").write(o0)\n\nrender(o0)`)
+            await insertImageFile(dataUrl)
             publishLocalDsl('drop-media')
             showToast(`Loaded image: ${file.name}`, 'success')
         }
@@ -836,6 +837,11 @@ async function handleDroppedFile(file) {
         return
     }
     showToast(`Unsupported file type: ${file.type || 'unknown'}`, 'warning')
+}
+
+async function insertImageFile(dataUrl) {
+    await renderer.inner.loadEffects(['synth/media'])
+    insertImageSource(dslEditor, dataUrl, getEffect('synth.media').globals)
 }
 
 /**
@@ -2113,8 +2119,11 @@ async function startShader() {
         // Initialize panels that depend on the renderer
         liveInputsPanel.init({
             renderer,
-            onInsert: (snippet) => {
-                if (dslEditor) insertAtCursor(dslEditor, snippet)
+            onInsert: async (snippet, opts) => {
+                if (dslEditor) {
+                    if (opts?.as === 'image') await insertImageFile(snippet)
+                    else insertAtCursor(dslEditor, snippet)
+                }
                 publishLocalDsl('live-inputs')
                 liveInputsPanel.flashSnippet?.(snippet)
             }
