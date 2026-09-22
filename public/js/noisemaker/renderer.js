@@ -77,7 +77,11 @@ export class PolymorphicRenderer {
      * @returns {string} Current backend ('webgl2' or 'webgpu')
      */
     get backend() {
-        return this._renderer.backend === 'wgsl' ? 'webgpu' : 'webgl2'
+        const pipelineBackend = this._renderer?.pipeline?.backend?.getName?.()
+        if (pipelineBackend) {
+            return pipelineBackend.toLowerCase() === 'webgpu' ? 'webgpu' : 'webgl2'
+        }
+        return (this.preferWebGPU && this._renderer?.backend === 'wgsl') ? 'webgpu' : 'webgl2'
     }
 
     /**
@@ -133,6 +137,25 @@ export class PolymorphicRenderer {
      */
     async init() {
         if (this._initialized) return
+
+        if (this.preferWebGPU) {
+            const hasWebGPU = typeof navigator !== 'undefined' && Boolean(navigator.gpu)
+            let supported = false
+            if (hasWebGPU) {
+                try {
+                    const adapter = await navigator.gpu.requestAdapter()
+                    supported = Boolean(adapter)
+                } catch {
+                    supported = false
+                }
+            }
+            if (!supported) {
+                this.preferWebGPU = false
+                if (this._renderer) {
+                    this._renderer._preferWebGPU = false
+                }
+            }
+        }
 
         await this._renderer.loadManifest()
         this._renderer.setLoopDuration(this.loopDuration)

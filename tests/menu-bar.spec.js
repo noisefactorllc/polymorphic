@@ -16,7 +16,6 @@ import { installHandfishLocal } from './handfishLocal.js'
 
 test.use({
     permissions: ['clipboard-read', 'clipboard-write'],
-    launchOptions: { args: ['--enable-unsafe-swiftshader'] },
 })
 
 installHandfishLocal(test)

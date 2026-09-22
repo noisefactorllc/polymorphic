@@ -1,9 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
 
-test.use({
-    launchOptions: { args: ['--enable-unsafe-swiftshader'] },
-})
 
 installHandfishLocal(test)
 

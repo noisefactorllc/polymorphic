@@ -38,6 +38,7 @@ import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker } from './ui/outputPicker.js'
 import { SyncOutputController } from './syncOutput.js'
 import { createSyncOutputDialog } from './ui/syncOutputDialog.js'
+import { resolveBackendPreference, isWebGPUFallback, WEBGPU_FALLBACK_MESSAGE } from './backendFallback.js'
 import { configureViewportWindow, openViewportWindow } from './ui/viewportWindow.js'
 import { scenes } from './ui/scenes.js'
 import { attachTouchControls } from './ui/touchControls.js'
@@ -1114,14 +1115,18 @@ function showToast(message, type = 'info') {
     if (existing) existing.remove()
 
     const colors = {
-        info: 'rgba(102, 126, 234, 0.95)',
-        success: 'rgba(74, 222, 128, 0.95)',
-        warning: 'rgba(251, 191, 36, 0.95)',
-        error: 'rgba(239, 68, 68, 0.95)'
+        info: 'var(--hf-blue, rgba(102, 126, 234, 0.95))',
+        success: 'var(--hf-green, rgba(74, 222, 128, 0.95))',
+        warning: 'var(--hf-yellow, rgba(251, 191, 36, 0.95))',
+        error: 'var(--hf-red, rgba(239, 68, 68, 0.95))'
     }
+    const textColor = type === 'warning' ? 'var(--hf-color-1, #111)' : '#fff'
 
     const toast = document.createElement('div')
     toast.className = 'polymorphic-toast'
+    toast.dataset.type = type
+    toast.setAttribute('role', 'status')
+    toast.setAttribute('aria-live', 'polite')
     toast.textContent = message
     toast.style.cssText = `
         position: fixed;
@@ -1129,12 +1134,13 @@ function showToast(message, type = 'info') {
         left: 50%;
         transform: translateX(-50%);
         background: ${colors[type] || colors.info};
-        color: white;
+        color: ${textColor};
         padding: 12px 24px;
-        border-radius: 8px;
+        border-radius: var(--hf-radius, 8px);
         font-size: 14px;
+        font-family: inherit;
         z-index: 10001;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        box-shadow: var(--hf-shadow-lg, 0 4px 12px rgba(0,0,0,0.3));
         animation: toast-in 0.3s ease;
     `
     document.body.appendChild(toast)
@@ -2064,10 +2070,8 @@ async function startShader() {
 
     // Determine backend preference: ?backend= URL param wins, else localStorage,
     // else default WebGL2.
-    const params = new URLSearchParams(window.location.search)
-    const urlBackend = params.get('backend')
     const storedBackend = (() => { try { return localStorage.getItem('polymorphic-backend') } catch { return null } })()
-    const preferWebGPU = (urlBackend === 'webgpu') || (!urlBackend && storedBackend === 'webgpu')
+    const { urlBackend, preferWebGPU } = resolveBackendPreference(window.location.search, storedBackend)
 
     // Create renderer
     renderer = new PolymorphicRenderer(canvas, {
@@ -2092,6 +2096,15 @@ async function startShader() {
 
         // Initialize the renderer
         await renderer.init()
+
+        // Notify user if WebGPU was requested (via URL param or stored preference)
+        // but the environment does not support it and fell back to WebGL2.
+        if (isWebGPUFallback({ preferWebGPU, actualBackend: renderer.backend })) {
+            showToast(WEBGPU_FALLBACK_MESSAGE, 'info')
+            if (storedBackend === 'webgpu') {
+                try { localStorage.removeItem('polymorphic-backend') } catch { /* ignore */ }
+            }
+        }
 
         // ProgramState needs the underlying CanvasRenderer (with manifest/enums).
         // Set it up before any compile so we can populate state from the result.
@@ -2249,6 +2262,9 @@ async function startShader() {
 
     } catch (err) {
         console.error('Initialization error:', err)
+        if (storedBackend === 'webgpu') {
+            try { localStorage.removeItem('polymorphic-backend') } catch { /* ignore */ }
+        }
         showError(`Failed to initialize: ${err.message}`)
     }
 }
@@ -2519,6 +2535,8 @@ function init() {
             shortcutsDialog,
             get onlineAdapter() { return onlineAdapter },
             get renderer() { return renderer },
+            get backend() { return renderer?.backend },
+            showToast,
             get programState() { return programState }
         }
     }
