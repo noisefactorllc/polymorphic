@@ -2,7 +2,7 @@
  * Recorder
  *
  * Captures the canvas to a WebM video file via `canvas.captureStream()` +
- * `MediaRecorder`. Records at the highest supported codec and downloads on stop.
+ * `MediaRecorder`. Prefers VP9 for real-time capture and downloads on stop.
  *
  * Single global recorder. Toggle via menu icon, palette action ("record"),
  * or via the public start()/stop() API.
@@ -306,14 +306,15 @@ class Recorder {
 
 function pickBestMimeType() {
     if (!('MediaRecorder' in window) || !MediaRecorder.isTypeSupported) return null
-    // Codec preference, best-quality first. AV1 wins where supported (Chrome
-    // ≥ 113 with hardware support), otherwise VP9 is the modern default.
+    // Prefer VP9 for real-time capture. Advertising AV1 support does not
+    // guarantee that its encoder can keep up with fast generative content.
+    // Keep AV1 as a fallback when VP9 is unavailable.
     // Avoid Opus audio in the type — we don't capture audio, so keeping the
     // type pure-video lets the browser pick a leaner muxer.
     const candidates = [
+        'video/webm;codecs=vp9',
         'video/webm;codecs=av01',
         'video/webm;codecs=av1',
-        'video/webm;codecs=vp9',
         'video/webm;codecs=vp8',
         'video/webm',
         'video/mp4;codecs=h264',
