@@ -61,6 +61,24 @@ test('does not show fallback toast when default WebGL2 backend is loaded', async
   await expect(toast).toHaveCount(0)
 })
 
+test('reports the active hardware WebGPU pipeline in the performance overlay', async ({ page }) => {
+  await page.goto(`/?backend=webgpu&dsl=${encodeURIComponent(SKETCH)}`)
+  const hardware = await page.evaluate(async () => {
+    const adapter = await navigator.gpu?.requestAdapter()
+    return Boolean(adapter && !adapter.info?.isFallbackAdapter)
+  })
+  test.skip(!hardware, 'A physical WebGPU adapter is required')
+  await page.waitForFunction(() => window.__poly?.renderer?.inner?.pipeline)
+  const backends = await page.evaluate(() => {
+    const renderer = window.__poly.renderer
+    window.__poly.perfOverlay.open()
+    return { wrapper: renderer.backend, actual: renderer.inner.pipeline.backend.getName().toLowerCase() }
+  })
+  expect(backends).toEqual({ wrapper: 'webgpu', actual: 'webgpu' })
+  await expect(page.locator('.perf-overlay [data-id="backend"]')).toHaveText('webgpu')
+  await expect(page.locator('.polymorphic-toast')).toHaveCount(0)
+})
+
 test('cleans up stored backend preference and notifies user when stored WebGPU falls back', async ({ page }) => {
   // Deterministically ensure WebGPU is unavailable to trigger fallback
   await page.addInitScript(() => {
