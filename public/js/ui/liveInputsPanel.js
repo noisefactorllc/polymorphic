@@ -86,18 +86,18 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             right: 1rem;
             bottom: 1rem;
             width: 280px;
-            background: rgba(10, 12, 17, 0.92);
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 92%), transparent);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            color: #e3e3e3;
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius, 8px);
+            color: var(--hf-text-normal, var(--hf-color-6));
             font-family: 'Nunito', 'Nunito Block', sans-serif;
             z-index: 200;
             display: none;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+            box-shadow: var(--hf-shadow-xl, 0 12px 32px rgba(0,0,0,0.45));
         }
         .live-inputs-panel.visible { display: flex; }
         .live-inputs-header {
@@ -105,34 +105,34 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             align-items: center;
             justify-content: space-between;
             padding: 0.55rem 0.85rem;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
         }
         .live-inputs-title {
             font-size: 0.8125rem;
             font-weight: 600;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
             text-transform: lowercase;
             letter-spacing: 0.04em;
         }
         .live-inputs-close {
             background: transparent;
             border: none;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             cursor: pointer;
             padding: 0.15em 0.4em;
             font-size: 1rem;
             transition: color 0.15s;
         }
-        .live-inputs-close:hover { color: #fff; }
+        .live-inputs-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
         .live-inputs-body {
             padding: 0.5rem 0.85rem 0.75rem;
             overflow-y: auto;
             scrollbar-width: thin;
-            scrollbar-color: rgba(255,255,255,0.15) transparent;
+            scrollbar-color: var(--hf-border-subtle, var(--hf-color-4)) transparent;
         }
         .live-inputs-body::-webkit-scrollbar { width: 6px; }
         .live-inputs-body::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.15);
+            background: var(--hf-border-subtle, var(--hf-color-4));
             border-radius: 3px;
         }
         .live-input-section {
@@ -149,32 +149,32 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: #aaa;
+            color: var(--hf-text-muted, var(--hf-color-4));
         }
         .live-input-status {
             font-size: 0.6875rem;
-            color: #555;
+            color: var(--hf-text-muted, var(--hf-color-4));
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
         }
-        .live-input-status.connected { color: #4ade80; }
-        .live-input-status.error { color: #ff6b6b; }
+        .live-input-status.connected { color: var(--hf-green); }
+        .live-input-status.error { color: var(--hf-red); }
         .live-input-toggle {
-            background: rgba(165, 184, 255, 0.18);
-            border: 1px solid rgba(165, 184, 255, 0.35);
-            color: #d9deeb;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 35%, transparent);
+            color: var(--hf-text-bright, var(--color7));
             font-family: inherit;
             font-size: 0.6875rem;
             font-weight: 500;
             padding: 0.3rem 0.65rem;
-            border-radius: 6px;
+            border-radius: var(--hf-radius-md, 6px);
             cursor: pointer;
             transition: all 0.15s;
         }
-        .live-input-toggle:hover { background: rgba(165, 184, 255, 0.32); }
+        .live-input-toggle:hover { background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 32%, transparent); }
         .live-input-toggle.active {
-            background: rgba(74, 222, 128, 0.22);
-            border-color: rgba(74, 222, 128, 0.5);
-            color: #c4f5d4;
+            background: color-mix(in srgb, var(--hf-green) 22%, transparent);
+            border-color: color-mix(in srgb, var(--hf-green) 50%, transparent);
+            color: var(--hf-green);
         }
         .level-bars {
             display: grid;
@@ -183,11 +183,11 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             align-items: center;
             font-size: 0.6875rem;
             line-height: 1;
-            color: #aaa;
+            color: var(--hf-text-dim, var(--hf-color-5));
             margin-bottom: 0.18rem;
         }
         .level-bar-track {
-            background: rgba(255,255,255,0.05);
+            background: var(--hf-bg-elevated, var(--hf-color-3));
             height: 6px;
             border-radius: 3px;
             overflow: hidden;
@@ -204,7 +204,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         .level-bar-value {
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
             font-size: 0.6875rem;
-            color: #888;
+            color: var(--hf-text-muted, var(--hf-color-4));
             text-align: right;
         }
         .live-input-spectrum {
@@ -224,36 +224,36 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         .live-input-snippet {
             display: flex;
             align-items: center;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 4px;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-sm, 4px);
             padding: 0.25rem 0.5rem;
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
             font-size: 0.6875rem;
-            color: #ccc;
+            color: var(--hf-text-normal, var(--hf-color-6));
             cursor: pointer;
             margin-top: 0.4rem;
             transition: background 0.12s, border-color 0.12s;
         }
         .live-input-snippet:hover {
-            background: rgba(102,126,234,0.12);
-            border-color: rgba(165,184,255,0.4);
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 15%, transparent);
+            border-color: var(--hf-accent, var(--accent3));
         }
         .live-input-snippet-label {
             flex: 1;
-            color: #d9deeb;
+            color: var(--hf-text-bright, var(--hf-color-7));
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .live-input-snippet-add {
             font-size: 0.625rem;
-            color: #a5b8ff;
+            color: var(--hf-accent, var(--accent3));
             margin-left: 0.5rem;
         }
         .live-input-help {
             font-size: 0.625rem;
-            color: #666;
+            color: var(--hf-text-muted, var(--hf-color-4));
             line-height: 1.45;
             margin-top: 0.35rem;
         }
@@ -264,25 +264,25 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             margin-top: 0.35rem;
             min-height: 24px;
             padding: 0.3rem;
-            background: rgba(0,0,0,0.3);
-            border-radius: 4px;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border-radius: var(--hf-radius-sm, 4px);
         }
         .midi-cc-pill {
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
             font-size: 0.625rem;
-            background: rgba(165, 184, 255, 0.14);
-            color: #d9deeb;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 14%, transparent);
+            color: var(--hf-text-bright, var(--hf-color-7));
             padding: 0.15rem 0.4rem;
-            border-radius: 3px;
+            border-radius: var(--hf-radius-sm, 3px);
             white-space: nowrap;
             cursor: pointer;
             transition: background 0.1s;
         }
         .midi-cc-pill:hover {
-            background: rgba(165, 184, 255, 0.28);
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 28%, transparent);
         }
         .midi-cc-empty {
-            color: #555;
+            color: var(--hf-text-muted, var(--hf-color-4));
             font-size: 0.625rem;
             font-style: italic;
             padding: 0.1rem;
@@ -298,10 +298,10 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             align-items: center;
             gap: 0.35rem;
             padding: 0.4rem 0.5rem;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 6px;
-            color: #d9deeb;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-md, 6px);
+            color: var(--hf-text-normal, var(--hf-color-6));
             font-family: inherit;
             font-size: 0.6875rem;
             cursor: pointer;
@@ -309,31 +309,31 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .source-btn .icon-material { font-size: 14px; }
         .source-btn:hover {
-            background: rgba(102,126,234,0.16);
-            border-color: rgba(165,184,255,0.4);
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
+            border-color: var(--hf-accent, var(--accent3));
         }
         .source-btn.active {
-            background: rgba(74, 222, 128, 0.18);
-            border-color: rgba(74, 222, 128, 0.45);
-            color: #c4f5d4;
+            background: color-mix(in srgb, var(--hf-green) 20%, transparent);
+            border-color: color-mix(in srgb, var(--hf-green) 50%, transparent);
+            color: var(--hf-green);
         }
         .source-btn[data-stop] {
             grid-column: span 2;
             justify-content: center;
-            background: rgba(255,107,107,0.07);
-            border-color: rgba(255,107,107,0.18);
-            color: #ffb4b4;
+            background: color-mix(in srgb, var(--hf-red) 12%, transparent);
+            border-color: color-mix(in srgb, var(--hf-red) 30%, transparent);
+            color: var(--hf-red);
         }
         .source-btn[data-stop]:hover {
-            background: rgba(255,107,107,0.16);
-            border-color: rgba(255,107,107,0.4);
+            background: color-mix(in srgb, var(--hf-red) 22%, transparent);
+            border-color: var(--hf-red);
         }
         .live-input-help code {
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
-            color: #a5b8ff;
-            background: rgba(165,184,255,0.06);
+            color: var(--hf-accent, var(--accent3));
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 10%, transparent);
             padding: 0 0.25em;
-            border-radius: 3px;
+            border-radius: var(--hf-radius-sm, 3px);
         }
         .live-input-device-row {
             display: flex;
@@ -343,19 +343,19 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .live-input-device-label {
             font-size: 0.6875rem;
-            color: #888;
+            color: var(--hf-text-muted, var(--hf-color-4));
             white-space: nowrap;
         }
         .live-input-device-select {
             flex: 1;
             min-width: 0;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid rgba(165,184,255,0.25);
-            color: #d9deeb;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            color: var(--hf-text-normal, var(--hf-color-6));
             font-family: inherit;
             font-size: 0.6875rem;
             padding: 0.25rem 0.4rem;
-            border-radius: 4px;
+            border-radius: var(--hf-radius-sm, 4px);
             cursor: pointer;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -363,7 +363,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .live-input-device-select:focus {
             outline: none;
-            border-color: rgba(165,184,255,0.6);
+            border-color: var(--hf-border-focus, var(--hf-accent, var(--accent3)));
         }
         .live-input-device-select:disabled {
             opacity: 0.5;
@@ -371,7 +371,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .live-input-device-current {
             font-size: 0.625rem;
-            color: #4ade80;
+            color: var(--hf-green);
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
             margin-top: 0.25rem;
             white-space: nowrap;

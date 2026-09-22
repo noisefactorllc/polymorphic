@@ -129,3 +129,96 @@ test('public/css/touch.css canvas-flash keyframe references Handfish accent toke
     const css = readCss('touch.css')
     assert.match(css, /canvas-flash[\s\S]*?var\(--hf-accent/)
 })
+
+test('public/css/menu.css menu dropdown panel uses elevation shadow and hover token', () => {
+    const css = readCss('menu.css')
+    assert.match(
+        css,
+        /#menu \.hf-menubar-panel\b[\s\S]*?box-shadow:\s*var\(--hf-shadow/,
+        'menu dropdown panel must use an elevation shadow token'
+    )
+    assert.match(
+        css,
+        /#menu \.hf-menubar-panel \.hf-menu-item:hover[\s\S]*?background-color:\s*(?:var\(--hf-|color-mix)/,
+        'menu item hover must provide a visible surface highlight'
+    )
+})
+
+test('public/index.html modal dialogs and panels use Handfish semantic tokens', () => {
+    const htmlPath = path.resolve(__dirname, '../../public/index.html')
+    const html = fs.readFileSync(htmlPath, 'utf8')
+
+    // #programModal should use semantic Handfish tokens for theme contrast
+    assert.match(
+        html,
+        /#programModal\s*\{[\s\S]*?color:\s*var\(--hf-text-normal/,
+        '#programModal must use var(--hf-text-normal) or semantic token for body text'
+    )
+    assert.doesNotMatch(
+        html,
+        /#programModal\s*\{[\s\S]*?color:\s*#d9deeb/,
+        '#programModal must not hardcode light text color #d9deeb'
+    )
+    assert.match(
+        html,
+        /\.control-select\s*\{[\s\S]*?background:\s*var\(--hf-bg-elevated/,
+        '.control-select must use var(--hf-bg-elevated) or semantic background token'
+    )
+    assert.doesNotMatch(
+        html,
+        /\.control-select\s*\{[\s\S]*?background:\s*#131927/,
+        '.control-select must not hardcode dark background #131927'
+    )
+
+    // #share-modal should use semantic Handfish tokens
+    assert.match(
+        html,
+        /\.share-modal-content\s*\{[\s\S]*?var\(--hf-bg-surface/,
+        '.share-modal-content must use var(--hf-bg-surface) for theme adaptability'
+    )
+    assert.doesNotMatch(
+        html,
+        /\.share-modal-content\s*\{[\s\S]*?background:\s*rgba\(10,\s*10,\s*15/,
+        '.share-modal-content must not hardcode dark rgba background'
+    )
+
+    // #doc-reader-panel should use semantic Handfish tokens
+    assert.match(
+        html,
+        /#doc-reader-panel\s*\{[\s\S]*?var\(--hf-bg-surface/,
+        '#doc-reader-panel must use var(--hf-bg-surface) for theme adaptability'
+    )
+    assert.doesNotMatch(
+        html,
+        /#doc-reader-panel\s*\{[\s\S]*?background:\s*rgba\(0,\s*0,\s*0/,
+        '#doc-reader-panel must not hardcode dark rgba background'
+    )
+})
+
+test('public/js/ui/gallery.js uses Handfish semantic tokens and no hardcoded error hexes', () => {
+    const galleryPath = path.resolve(__dirname, '../../public/js/ui/gallery.js')
+    const galleryCode = fs.readFileSync(galleryPath, 'utf8')
+
+    assert.doesNotMatch(
+        galleryCode,
+        /#ff7b72/,
+        'gallery.js must not contain hardcoded #ff7b72 color literal; use var(--hf-red)'
+    )
+    assert.match(
+        galleryCode,
+        /\.gallery-modal\s*\{[\s\S]*?var\(--hf-bg-surface/,
+        '.gallery-modal must use var(--hf-bg-surface)'
+    )
+})
+
+test('public/js/ui/shortcutsDialog.js uses Handfish semantic tokens', () => {
+    const shortcutsPath = path.resolve(__dirname, '../../public/js/ui/shortcutsDialog.js')
+    const shortcutsCode = fs.readFileSync(shortcutsPath, 'utf8')
+
+    assert.match(
+        shortcutsCode,
+        /\.shortcuts-modal\s*\{[\s\S]*?var\(--hf-bg-surface/,
+        '.shortcuts-modal must use var(--hf-bg-surface)'
+    )
+})
+

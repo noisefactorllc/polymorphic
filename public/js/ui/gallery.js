@@ -49,15 +49,15 @@ if (!document.getElementById(STYLES_ID)) {
             overflow-y: auto;
         }
         .gallery-modal {
-            background: rgba(10, 12, 17, 0.96);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 14px;
-            box-shadow: 0 20px 60px -10px rgba(0,0,0,0.6);
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 96%), transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-lg, 14px);
+            box-shadow: var(--hf-shadow-xl, 0 20px 60px -10px rgba(0,0,0,0.6));
             width: min(900px, calc(100vw - 2rem));
             max-height: calc(100vh - 5vh - 2rem);
             display: flex;
             flex-direction: column;
-            color: #e3e3e3;
+            color: var(--hf-text-normal, var(--hf-color-6));
             font-family: 'Nunito', 'Nunito Block', sans-serif;
             overflow: hidden;
         }
@@ -66,37 +66,38 @@ if (!document.getElementById(STYLES_ID)) {
             align-items: center;
             justify-content: space-between;
             padding: 0.85rem 1.1rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
         }
         .gallery-title {
             font-size: 1rem;
             font-weight: 700;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: 'Comfortaa', 'Comfortaa Block', sans-serif;
             padding-bottom: 0.85rem;
         }
         .gallery-actions { display: flex; gap: 0.4rem; padding-bottom: 0.6rem; }
         .gallery-btn {
-            background: rgba(165,184,255,0.18);
-            border: 1px solid rgba(165,184,255,0.35);
-            color: #d9deeb;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 35%, transparent);
+            color: var(--hf-text-bright, var(--color7));
             font-family: inherit;
             font-size: 0.75rem;
             padding: 0.35rem 0.7rem;
-            border-radius: 6px;
+            border-radius: var(--hf-radius-md, 6px);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
             transition: all 0.15s;
         }
-        .gallery-btn:hover { background: rgba(165,184,255,0.32); }
+        .gallery-btn:hover { background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 32%, transparent); }
         .gallery-btn .icon-material { font-size: 16px; }
         .gallery-close {
-            background: transparent; border: none; color: #888; cursor: pointer;
+            background: transparent; border: none; color: var(--hf-text-dim, var(--hf-color-5)); cursor: pointer;
             padding: 0.2em 0.5em; font-size: 1.2rem;
+            transition: color 0.15s;
         }
-        .gallery-close:hover { color: #fff; }
+        .gallery-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
 
         /* Tab strip */
         .gallery-tabs {
@@ -104,12 +105,12 @@ if (!document.getElementById(STYLES_ID)) {
             gap: 0.25rem;
             padding: 0 1.1rem;
             margin-top: -0.4rem;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
         }
         .gallery-tab {
             background: transparent;
             border: none;
-            color: #aaa;
+            color: var(--hf-text-dim, var(--hf-color-5));
             font-family: inherit;
             font-size: 0.8125rem;
             padding: 0.5rem 0.85rem;
@@ -117,10 +118,10 @@ if (!document.getElementById(STYLES_ID)) {
             cursor: pointer;
             transition: color 0.15s, border-color 0.15s;
         }
-        .gallery-tab:hover { color: #fff; }
+        .gallery-tab:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
         .gallery-tab.active {
-            color: #fff;
-            border-bottom-color: #a5b8ff;
+            color: var(--hf-text-bright, var(--hf-color-7));
+            border-bottom-color: var(--hf-accent, var(--accent3));
         }
 
         .gallery-body {
@@ -139,22 +140,22 @@ if (!document.getElementById(STYLES_ID)) {
         .gallery-loading {
             padding: 3rem 1rem;
             text-align: center;
-            color: #777;
+            color: var(--hf-text-muted, var(--hf-color-4));
             font-size: 0.875rem;
         }
         .gallery-error {
             padding: 1rem 1.1rem;
             margin: 1rem 1.1rem;
-            background: rgba(255,107,107,0.08);
-            border: 1px solid rgba(255,107,107,0.25);
-            border-radius: 6px;
-            color: #ffb4b4;
+            background: color-mix(in srgb, var(--hf-red) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-red) 30%, transparent);
+            border-radius: var(--hf-radius-md, 6px);
+            color: var(--hf-red);
             font-size: 0.8125rem;
         }
         .gallery-card {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 10px;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius, 10px);
             cursor: pointer;
             transition: all 0.18s;
             overflow: hidden;
@@ -162,9 +163,9 @@ if (!document.getElementById(STYLES_ID)) {
             flex-direction: column;
         }
         .gallery-card:hover {
-            border-color: rgba(165, 184, 255, 0.6);
+            border-color: var(--hf-accent, var(--accent3));
             transform: translateY(-2px);
-            box-shadow: 0 10px 24px -6px rgba(0,0,0,0.4);
+            box-shadow: var(--hf-shadow-lg, 0 10px 24px -6px rgba(0,0,0,0.4));
         }
         .gallery-card.loading {
             opacity: 0.5;
@@ -172,7 +173,7 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .gallery-card-thumb {
             aspect-ratio: 16 / 9;
-            background: #0a0a0f;
+            background: var(--hf-bg-base, #0a0a0f);
             position: relative;
             overflow: hidden;
         }
@@ -193,9 +194,9 @@ if (!document.getElementById(STYLES_ID)) {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #555;
+            color: var(--hf-text-muted, var(--hf-color-4));
             font-size: 0.75rem;
-            background: linear-gradient(135deg, #1c1f2c, #0f1117);
+            background: color-mix(in srgb, var(--hf-bg-base, #0f1117) 80%, transparent);
         }
         .gallery-card-body {
             padding: 0.65rem 0.85rem 0.85rem;
@@ -203,7 +204,7 @@ if (!document.getElementById(STYLES_ID)) {
         .gallery-card-title {
             font-size: 0.875rem;
             font-weight: 600;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
             margin-bottom: 0.15rem;
             white-space: nowrap;
             overflow: hidden;
@@ -211,23 +212,23 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .gallery-card-tagline {
             font-size: 0.75rem;
-            color: #aaa;
+            color: var(--hf-text-dim, var(--hf-color-5));
             line-height: 1.4;
         }
         .gallery-card-meta {
             font-size: 0.6875rem;
-            color: #888;
+            color: var(--hf-text-muted, var(--hf-color-4));
             display: flex;
             gap: 0.4rem;
             align-items: center;
             margin-top: 0.25rem;
         }
         .gallery-card-meta-app {
-            color: #a5b8ff;
+            color: var(--hf-accent, var(--accent3));
             text-transform: lowercase;
-            background: rgba(165, 184, 255, 0.08);
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 10%, transparent);
             padding: 0.05rem 0.4rem;
-            border-radius: 3px;
+            border-radius: var(--hf-radius-sm, 3px);
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
         }
         .gallery-card-tags {
@@ -238,10 +239,10 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .gallery-card-tag {
             font-size: 0.6rem;
-            color: #a5b8ff;
-            background: rgba(165, 184, 255, 0.08);
+            color: var(--hf-accent, var(--accent3));
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 10%, transparent);
             padding: 0.1rem 0.4rem;
-            border-radius: 3px;
+            border-radius: var(--hf-radius-sm, 3px);
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
@@ -908,7 +909,7 @@ class Gallery {
                 card.classList.remove('loading')
                 card.querySelector('.gallery-card-meta')?.insertAdjacentHTML(
                     'beforeend',
-                    `<span style="color:#ff7b72">load failed</span>`
+                    `<span style="color: var(--hf-red)">load failed</span>`
                 )
             }
         }
@@ -1067,7 +1068,7 @@ class Gallery {
             console.error('[Gallery] Failed to load blaster item:', err)
             if (card) {
                 card.classList.remove('loading')
-                card.querySelector('.gallery-card-meta')?.insertAdjacentHTML('beforeend', `<span style="color:#ff7b72">load failed</span>`)
+                card.querySelector('.gallery-card-meta')?.insertAdjacentHTML('beforeend', `<span style="color: var(--hf-red)">load failed</span>`)
             }
         }
     }

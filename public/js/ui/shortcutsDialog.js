@@ -31,13 +31,13 @@ if (!document.getElementById(STYLES_ID)) {
             opacity: 1;
         }
         .shortcuts-modal {
-            background: rgba(10, 12, 17, 0.96);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            box-shadow: 0 18px 48px -10px rgba(0,0,0,0.6);
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 96%), transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-lg, 12px);
+            box-shadow: var(--hf-shadow-xl, 0 18px 48px -10px rgba(0,0,0,0.6));
             width: min(640px, calc(100vw - 2rem));
             max-height: calc(100vh - 12vh);
-            color: #e3e3e3;
+            color: var(--hf-text-normal, var(--hf-color-6));
             font-family: 'Nunito', 'Nunito Block', sans-serif;
             overflow: hidden;
             display: flex;
@@ -48,19 +48,20 @@ if (!document.getElementById(STYLES_ID)) {
             align-items: center;
             justify-content: space-between;
             padding: 0.7rem 1rem;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
         }
         .shortcuts-title {
             font-size: 0.95rem;
             font-weight: 600;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: 'Comfortaa', 'Comfortaa Block', sans-serif;
         }
         .shortcuts-close {
-            background: transparent; border: none; color: #888; cursor: pointer;
+            background: transparent; border: none; color: var(--hf-text-dim, var(--hf-color-5)); cursor: pointer;
             padding: 0.2em 0.5em; font-size: 1.1rem;
+            transition: color 0.15s;
         }
-        .shortcuts-close:hover { color: #fff; }
+        .shortcuts-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
         .shortcuts-body {
             padding: 1rem 1.1rem 1.1rem;
             overflow-y: auto;
@@ -80,7 +81,7 @@ if (!document.getElementById(STYLES_ID)) {
             font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: #aaa;
+            color: var(--hf-text-muted, var(--hf-color-4));
             font-weight: 700;
         }
         .shortcut-row {
@@ -90,19 +91,19 @@ if (!document.getElementById(STYLES_ID)) {
             gap: 0.7rem;
             font-size: 0.8125rem;
         }
-        .shortcut-desc { color: #d9deeb; }
+        .shortcut-desc { color: var(--hf-text-normal, var(--hf-color-6)); }
         .shortcut-keys {
             display: inline-flex;
             gap: 0.2rem;
         }
         .shortcut-keys kbd {
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #fff;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
             font-size: 0.6875rem;
             padding: 0.12rem 0.45rem;
-            border-radius: 4px;
+            border-radius: var(--hf-radius-sm, 4px);
             white-space: nowrap;
         }
     `

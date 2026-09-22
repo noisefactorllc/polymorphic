@@ -34,13 +34,14 @@ if (!document.getElementById(STYLES_ID)) {
         }
         
         .import-url-dialog {
-            background: rgba(15, 17, 20, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 98%), transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius, 8px);
             width: 450px;
             max-width: 90vw;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: var(--hf-shadow-xl, 0 25px 50px -12px rgba(0, 0, 0, 0.5));
             overflow: hidden;
+            color: var(--hf-text-normal, var(--hf-color-6));
         }
         
         .import-url-header {
@@ -48,14 +49,14 @@ if (!document.getElementById(STYLES_ID)) {
             align-items: center;
             justify-content: space-between;
             padding: 0.75rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            background: linear-gradient(180deg, rgba(102, 126, 234, 0.15) 0%, rgba(102, 126, 234, 0.05) 100%);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            background: color-mix(in srgb, var(--hf-accent-bg, var(--hf-accent-1)) 40%, transparent);
         }
         
         .import-url-title {
             font-size: 0.875rem;
             font-weight: 600;
-            color: #d9deeb;
+            color: var(--hf-text-bright, var(--hf-color-7));
             text-transform: lowercase;
             letter-spacing: 0.05em;
         }
@@ -63,18 +64,18 @@ if (!document.getElementById(STYLES_ID)) {
         .import-url-close {
             background: transparent;
             border: none;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             cursor: pointer;
             font-size: 1rem;
             padding: 0.25em 0.5em;
             line-height: 1;
             opacity: 0.7;
-            transition: opacity 0.15s ease;
+            transition: opacity 0.15s ease, color 0.15s ease;
         }
         
         .import-url-close:hover {
             opacity: 1;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
         }
         
         .import-url-content {
@@ -83,7 +84,7 @@ if (!document.getElementById(STYLES_ID)) {
         
         .import-url-description {
             font-size: 0.75rem;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             margin-bottom: 1rem;
             line-height: 1.5;
         }
@@ -95,7 +96,7 @@ if (!document.getElementById(STYLES_ID)) {
         .import-url-label {
             display: block;
             font-size: 0.75rem;
-            color: #aaa;
+            color: var(--hf-text-normal, var(--hf-color-6));
             margin-bottom: 0.5rem;
             text-transform: lowercase;
         }
@@ -105,29 +106,30 @@ if (!document.getElementById(STYLES_ID)) {
             padding: 0.625rem 0.75rem;
             font-size: 0.8125rem;
             font-family: 'Noto Sans Mono', 'Noto Sans Mono Block';
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-            color: #fff;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-sm, 4px);
+            color: var(--hf-text-normal, var(--hf-color-6));
             outline: none;
             transition: border-color 0.15s ease;
             box-sizing: border-box;
         }
         
         .import-url-input:focus {
-            border-color: rgba(165, 184, 255, 0.5);
+            border-color: var(--hf-border-focus, var(--hf-accent, var(--accent3)));
         }
         
         .import-url-input::placeholder {
-            color: #555;
+            color: var(--hf-text-muted, var(--hf-color-4));
         }
         
         .import-url-info {
             font-size: 0.75rem;
-            color: #aaa;
+            color: var(--hf-text-normal, var(--hf-color-6));
             padding: 0.75rem;
-            background: rgba(165, 184, 255, 0.1);
-            border-radius: 4px;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 25%, transparent);
+            border-radius: var(--hf-radius-sm, 4px);
             margin-bottom: 1rem;
             display: none;
         }
@@ -138,10 +140,11 @@ if (!document.getElementById(STYLES_ID)) {
         
         .import-url-error {
             font-size: 0.75rem;
-            color: #ff6b6b;
+            color: var(--hf-red);
             padding: 0.75rem;
-            background: rgba(255, 107, 107, 0.1);
-            border-radius: 4px;
+            background: color-mix(in srgb, var(--hf-red) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-red) 30%, transparent);
+            border-radius: var(--hf-radius-sm, 4px);
             margin-bottom: 1rem;
             display: none;
         }
@@ -161,18 +164,18 @@ if (!document.getElementById(STYLES_ID)) {
             font-size: 0.8125rem;
             font-weight: 500;
             border: none;
-            border-radius: 4px;
+            border-radius: var(--hf-radius-sm, 4px);
             cursor: pointer;
             transition: all 0.15s ease;
         }
         
         .import-url-btn-primary {
-            background: rgba(165, 184, 255, 0.2);
-            color: #a5b8ff;
+            background: var(--hf-accent, var(--accent3));
+            color: var(--hf-bg-base, var(--hf-color-1));
         }
         
         .import-url-btn-primary:hover:not(:disabled) {
-            background: rgba(165, 184, 255, 0.3);
+            background: var(--hf-accent-hover, var(--accent4));
         }
         
         .import-url-btn-primary:disabled {
@@ -182,11 +185,13 @@ if (!document.getElementById(STYLES_ID)) {
         
         .import-url-btn-secondary {
             background: transparent;
-            color: #888;
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            color: var(--hf-text-dim, var(--hf-color-5));
         }
         
         .import-url-btn-secondary:hover {
-            color: #fff;
+            border-color: var(--hf-accent, var(--accent3));
+            color: var(--hf-text-bright, var(--hf-color-7));
         }
     `
     document.head.appendChild(styleEl)

@@ -32,13 +32,14 @@ if (!document.getElementById(STYLES_ID)) {
         }
         
         .import-effect-dialog {
-            background: rgba(15, 17, 20, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 98%), transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius, 8px);
             width: 400px;
             max-width: 90vw;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: var(--hf-shadow-xl, 0 25px 50px -12px rgba(0, 0, 0, 0.5));
             overflow: hidden;
+            color: var(--hf-text-normal, var(--hf-color-6));
         }
         
         .import-effect-header {
@@ -46,14 +47,14 @@ if (!document.getElementById(STYLES_ID)) {
             align-items: center;
             justify-content: space-between;
             padding: 0.75rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            background: linear-gradient(180deg, rgba(102, 126, 234, 0.15) 0%, rgba(102, 126, 234, 0.05) 100%);
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            background: color-mix(in srgb, var(--hf-accent-bg, var(--hf-accent-1)) 40%, transparent);
         }
         
         .import-effect-title {
             font-size: 0.875rem;
             font-weight: 600;
-            color: #d9deeb;
+            color: var(--hf-text-bright, var(--hf-color-7));
             text-transform: lowercase;
             letter-spacing: 0.05em;
         }
@@ -61,18 +62,18 @@ if (!document.getElementById(STYLES_ID)) {
         .import-effect-close {
             background: transparent;
             border: none;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             cursor: pointer;
             font-size: 1rem;
             padding: 0.25em 0.5em;
             line-height: 1;
             opacity: 0.7;
-            transition: opacity 0.15s ease;
+            transition: opacity 0.15s ease, color 0.15s ease;
         }
         
         .import-effect-close:hover {
             opacity: 1;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
         }
         
         .import-effect-content {
@@ -81,40 +82,40 @@ if (!document.getElementById(STYLES_ID)) {
         
         .import-effect-description {
             font-size: 0.75rem;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             margin-bottom: 1rem;
             line-height: 1.5;
         }
         
         .import-effect-dropzone {
-            border: 2px dashed rgba(165, 184, 255, 0.3);
-            border-radius: 6px;
+            border: 2px dashed color-mix(in srgb, var(--hf-accent, var(--accent3)) 40%, transparent);
+            border-radius: var(--hf-radius-md, 6px);
             padding: 2rem 1rem;
             text-align: center;
             cursor: pointer;
             transition: all 0.15s ease;
-            background: rgba(0, 0, 0, 0.2);
+            background: var(--hf-bg-elevated, var(--hf-color-3));
         }
         
         .import-effect-dropzone:hover,
         .import-effect-dropzone.dragover {
-            border-color: rgba(165, 184, 255, 0.6);
-            background: rgba(165, 184, 255, 0.05);
+            border-color: var(--hf-accent, var(--accent3));
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 10%, transparent);
         }
         
         .import-effect-dropzone-icon {
             font-size: 2rem;
-            color: #667eea;
+            color: var(--hf-accent, var(--accent3));
             margin-bottom: 0.5rem;
         }
         
         .import-effect-dropzone-text {
             font-size: 0.75rem;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
         }
         
         .import-effect-dropzone-text strong {
-            color: #667eea;
+            color: var(--hf-accent, var(--accent3));
         }
         
         .import-effect-file-input {
@@ -124,8 +125,9 @@ if (!document.getElementById(STYLES_ID)) {
         .import-effect-info {
             margin-top: 1rem;
             padding: 0.75rem;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 6px;
+            background: var(--hf-bg-elevated, var(--hf-color-3));
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-md, 6px);
             display: none;
         }
         
@@ -136,23 +138,23 @@ if (!document.getElementById(STYLES_ID)) {
         .import-effect-info-name {
             font-size: 0.875rem;
             font-weight: 600;
-            color: #d9deeb;
+            color: var(--hf-text-bright, var(--hf-color-7));
             margin-bottom: 0.25rem;
         }
         
         .import-effect-info-details {
             font-size: 0.6875rem;
-            color: #888;
+            color: var(--hf-text-muted, var(--hf-color-4));
         }
         
         .import-effect-error {
             margin-top: 1rem;
             padding: 0.75rem;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 6px;
+            background: color-mix(in srgb, var(--hf-red) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-red) 30%, transparent);
+            border-radius: var(--hf-radius-md, 6px);
             font-size: 0.75rem;
-            color: #f87171;
+            color: var(--hf-red);
             display: none;
         }
         
@@ -169,7 +171,7 @@ if (!document.getElementById(STYLES_ID)) {
         .import-effect-btn {
             flex: 1;
             padding: 0.5rem 1rem;
-            border-radius: 6px;
+            border-radius: var(--hf-radius-md, 6px);
             font-size: 0.75rem;
             font-weight: 600;
             cursor: pointer;
@@ -177,14 +179,14 @@ if (!document.getElementById(STYLES_ID)) {
         }
         
         .import-effect-btn-primary {
-            background: rgba(165, 184, 255, 0.3);
-            border: 1px solid rgba(165, 184, 255, 0.5);
-            color: #d9deeb;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 25%, transparent);
+            border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 50%, transparent);
+            color: var(--hf-text-bright, var(--hf-color-7));
         }
         
         .import-effect-btn-primary:hover:not(:disabled) {
-            background: rgba(165, 184, 255, 0.5);
-            border-color: #a5b8ff;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 40%, transparent);
+            border-color: var(--hf-accent, var(--accent3));
         }
         
         .import-effect-btn-primary:disabled {
@@ -194,13 +196,13 @@ if (!document.getElementById(STYLES_ID)) {
         
         .import-effect-btn-secondary {
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #888;
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            color: var(--hf-text-dim, var(--hf-color-5));
         }
         
         .import-effect-btn-secondary:hover {
-            border-color: rgba(255, 255, 255, 0.3);
-            color: #d9deeb;
+            border-color: var(--hf-accent, var(--accent3));
+            color: var(--hf-text-bright, var(--hf-color-7));
         }
     `
     document.head.appendChild(styleEl)
