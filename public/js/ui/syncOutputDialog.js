@@ -1,7 +1,8 @@
 const PROVIDER_NAMES = Object.freeze({
     syphon: 'Syphon',
     spout: 'Spout',
-    ndi: 'NDI'
+    ndi: 'NDI',
+    camera: 'Sync Camera'
 })
 
 const RECOVERY_MESSAGES = Object.freeze({
@@ -14,11 +15,10 @@ const RECOVERY_MESSAGES = Object.freeze({
     SYNC_PAIRING_DURABILITY: 'Sync could not confirm durable pairing storage. Resolve its storage warning and connect again.',
     SYNC_PAIRING_ORIGIN_LIMIT: 'Sync has reached its paired-origin limit. Revoke an old origin and connect again.',
     SYNC_TIMEOUT: 'Sync did not respond in time. Check the companion and try again.',
-    SYNC_PROVIDER_UNAVAILABLE: 'Sync has no available output provider. Enable Syphon, Spout, or NDI and reconnect.',
+    SYNC_PROVIDER_UNAVAILABLE: 'Sync has no available output provider. Enable an output provider in Sync and reconnect.',
     SYNC_RENDERER_UNAVAILABLE: 'The active Noisemaker renderer does not expose the Sync output seam.',
     SYNC_EXPORT_UNAVAILABLE: 'The active graphics backend cannot export frames for Sync.',
     SYNC_AUTHENTICATION: 'Sync rejected this pairing. Connect again to pair this origin.',
-    SYNC_RECOVERY_EXHAUSTED: 'Sync could not recover the output after three attempts. Reconnect and start again.',
     SYNC_SENDER_CLOSED: 'The Sync sender closed unexpectedly. Reconnect to create a new sender.',
     SYNC_RENDERER_REPLACED: 'The graphics backend or context changed. Reconnect before restarting the sender.',
     SYNC_STOP_TIMEOUT: 'The Sync sender did not close in time. Reconnect before starting another output.',
@@ -83,7 +83,7 @@ export function deriveSyncOutputView(state = {}, {
     const blocked = policy?.status === 'blocked'
     const presentation = presentationForState(state)
     const recovering = state.status === 'recovering'
-    const policyBlocked = blocked && !recovering
+    const policyBlocked = blocked && !['sending', 'recovering', 'stopping'].includes(state.status)
     const actionKind = policyBlocked ? 'connect' : presentation.action
     const stats = state.stats || {}
     const recovery = policyBlocked
@@ -124,7 +124,8 @@ export async function runSyncOutputAction(kind, {
     name = '',
     policyBlocked = false,
     onConnectIntent = () => {},
-    afterPaint = () => Promise.resolve()
+    afterPaint = () => Promise.resolve(),
+    isCurrent = () => true
 } = {}) {
     if (policyBlocked) return undefined
     switch (kind) {
@@ -133,7 +134,7 @@ export async function runSyncOutputAction(kind, {
     case 'connect':
         onConnectIntent()
         await afterPaint()
-        return controller.connect()
+        return isCurrent() ? controller.connect() : undefined
     case 'start':
         return controller.start(name)
     case 'stop':
@@ -278,6 +279,7 @@ export function createSyncOutputDialog({
 
     const runAction = async () => {
         const view = deriveSyncOutputView(state, { policy })
+        if (destroyed || pendingAction || view.action.disabled) return
         try {
             await runSyncOutputAction(view.action.kind, {
                 controller,
@@ -288,7 +290,8 @@ export function createSyncOutputDialog({
                     connectNoticeVisible = true
                     render()
                 },
-                afterPaint
+                afterPaint,
+                isCurrent: () => !destroyed
             })
         } catch {
             // Controller state owns the actionable recovery presentation.

@@ -1,3 +1,7 @@
+import { SharedAudio } from '../audio.js'
+import { connectSyncAudio, refreshSyncAudioDevices, isSyncAudioSource } from '../sync/audioInput.js'
+import { createSyncCameraSession } from '../sync/cameraSession.js'
+
 /**
  * Live Inputs Panel
  *
@@ -52,141 +56,22 @@ export function recentCcsFromMidiState(midiState) {
  * the system default which silently routes the wrong source on multi-mic
  * setups.
  */
-class LocalAudioInput {
-    constructor(renderer) {
+export class LocalAudioInput extends SharedAudio {
+    constructor(renderer, options) {
+        super(options)
         this._renderer = renderer
-        this._audioState = null
-        this._audioContext = null
-        this._analyser = null
-        this._source = null
-        this._stream = null
-        this._fftData = null
-        this._timeDomainData = null
-        this._animationId = null
-        this._enabled = false
-        this._deviceId = ''
-        this._deviceLabel = ''
-        this._onStatusChange = null
+        this.setSensitivity(1)
+        this.addDeck({ ensureAudioState: () => renderer._audioState || renderer.setAudioState() })
     }
 
-    static isSupported() {
-        return !!(typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof AudioContext !== 'undefined')
+    _loop() {
+        this.refreshDeckStates()
+        super._loop()
     }
 
-    onStatusChange(cb) { this._onStatusChange = cb }
-
-    get enabled() { return this._enabled }
-    get currentDeviceId() { return this._deviceId }
-    get currentDeviceLabel() { return this._deviceLabel }
-
-    /**
-     * Enable audio capture from the given deviceId (or default if empty).
-     * If already enabled with a different deviceId, stops the existing
-     * stream and re-acquires.
-     */
-    async enable(deviceId = '') {
-        if (this._enabled && deviceId === this._deviceId) return true
-        if (this._enabled) await this.disable()
-        if (!LocalAudioInput.isSupported()) {
-            this._notify('Audio input not supported')
-            return false
-        }
-        const constraints = {
-            audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-            }
-        }
-        if (deviceId) constraints.audio.deviceId = { exact: deviceId }
-        try {
-            this._stream = await navigator.mediaDevices.getUserMedia(constraints)
-        } catch (err) {
-            console.error('[LocalAudioInput] getUserMedia failed:', err)
-            this._notify(`Audio access denied: ${err.message || err.name}`)
-            return false
-        }
-        // Capture the actually-used deviceId/label from the granted track
-        const track = this._stream.getAudioTracks()[0]
-        const settings = track?.getSettings?.() || {}
-        this._deviceId = settings.deviceId || deviceId || ''
-        this._deviceLabel = track?.label || 'default'
-
-        this._audioContext = new AudioContext()
-        this._analyser = this._audioContext.createAnalyser()
-        this._analyser.fftSize = 256
-        this._analyser.smoothingTimeConstant = 0.8
-        this._source = this._audioContext.createMediaStreamSource(this._stream)
-        this._source.connect(this._analyser)
-        this._fftData = new Uint8Array(this._analyser.frequencyBinCount)
-        this._timeDomainData = new Uint8Array(this._analyser.fftSize)
-        this._audioState = this._renderer.setAudioState()
-        this._enabled = true
-        this._update()
-        this._notify(`Audio enabled: ${this._deviceLabel}`)
-        return true
-    }
-
-    async disable() {
-        if (!this._enabled) return
-        if (this._animationId) {
-            cancelAnimationFrame(this._animationId)
-            this._animationId = null
-        }
-        try { this._source?.disconnect() } catch { /* ignore */ }
-        this._source = null
-        if (this._stream) {
-            for (const t of this._stream.getTracks()) t.stop()
-            this._stream = null
-        }
-        if (this._audioContext) {
-            try { await this._audioContext.close() } catch { /* ignore */ }
-            this._audioContext = null
-        }
-        this._analyser = null
-        this._fftData = null
-        this._timeDomainData = null
-        this._enabled = false
-        if (this._audioState) {
-            this._audioState.low = 0
-            this._audioState.mid = 0
-            this._audioState.high = 0
-            this._audioState.vol = 0
-            this._audioState.spectrum?.fill?.(0)
-            this._audioState.waveform?.fill?.(0.5)
-        }
-        this._notify('Audio disabled')
-    }
-
-    /** Switch to a new device while running. */
     async switchDevice(deviceId) {
-        if (!this._enabled) {
-            this._deviceId = deviceId
-            return
-        }
-        await this.enable(deviceId)
-    }
-
-    _update() {
-        if (!this._enabled) return
-        this._analyser.getByteFrequencyData(this._fftData)
-        this._audioState.setSpectrum?.(this._fftData)
-        this._analyser.getByteTimeDomainData(this._timeDomainData)
-        this._audioState.setWaveform?.(this._timeDomainData)
-        const f = this._fftData
-        const low = (f[0] + f[1] + f[2] + f[3]) / 4 / 255
-        const mid = (f[4] + f[6] + f[8] + f[10]) / 4 / 255
-        const high = (f[16] + f[20] + f[24] + f[28]) / 4 / 255
-        const vol = (low + mid + high) / 3
-        this._audioState.low = low
-        this._audioState.mid = mid
-        this._audioState.high = high
-        this._audioState.vol = vol
-        this._animationId = requestAnimationFrame(() => this._update())
-    }
-
-    _notify(msg) {
-        if (typeof this._onStatusChange === 'function') this._onStatusChange(msg)
+        if (!this.enabled) { this._deviceId = deviceId; return false }
+        return this.enable(deviceId)
     }
 }
 
@@ -514,6 +399,10 @@ class LiveInputsPanel {
         this._renderer = null
         this._innerRenderer = null
         this._audioMgr = null
+        this._audioOpening = false
+        this._audioSelectionGeneration = 0
+        this._audioRefreshGeneration = 0
+        this._cameraRefreshGeneration = 0
         this._midiMgr = null
         this._raf = null
         this._onInsert = null
@@ -560,7 +449,7 @@ class LiveInputsPanel {
             <div class="live-inputs-body">
                 <section class="live-input-section" data-id="audio">
                     <div class="live-input-section-header">
-                        <span class="live-input-section-title">audio (mic)</span>
+                        <span class="live-input-section-title">audio input</span>
                         <button class="live-input-toggle" data-id="audio-toggle">enable</button>
                     </div>
                     <div class="live-input-device-row">
@@ -569,6 +458,8 @@ class LiveInputsPanel {
                             <option value="">default</option>
                         </select>
                     </div>
+                    <button class="live-input-toggle" data-id="sync-audio-connect">Connect Sync audio</button>
+                    <div class="live-input-status" data-id="sync-audio-status" role="status"></div>
                     <div class="live-input-device-current" data-id="audio-current"></div>
                     <div class="level-bars"><span>low</span><div class="level-bar-track"><div class="level-bar-fill" data-id="lowFill"></div></div><span class="level-bar-value" data-id="lowVal">0.00</span></div>
                     <div class="level-bars"><span>mid</span><div class="level-bar-track"><div class="level-bar-fill" data-id="midFill"></div></div><span class="level-bar-value" data-id="midVal">0.00</span></div>
@@ -595,6 +486,10 @@ class LiveInputsPanel {
                     <div class="live-input-section-header">
                         <span class="live-input-section-title">sources</span>
                         <span class="live-input-status" data-id="source-status">none</span>
+                    </div>
+                    <div class="live-input-device-row">
+                        <span class="live-input-device-label">camera</span>
+                        <select class="live-input-device-select" data-id="camera-device"><option value="">system default</option></select>
                     </div>
                     <div class="source-buttons">
                         <button class="source-btn" data-source="webcam"><span class="icon-material">videocam</span><span>webcam</span></button>
@@ -657,11 +552,22 @@ class LiveInputsPanel {
         // When the user picks a different audio source, hot-swap if the
         // mic is already running; otherwise we'll honour the choice on
         // the next "enable" click.
+        this._panel.querySelector('[data-id=sync-audio-connect]').addEventListener('click', async event => {
+            const button = event.currentTarget
+            const status = this._panel.querySelector('[data-id=sync-audio-status]')
+            button.disabled = true
+            status.textContent = 'Connecting to Sync. Approve audio access in the companion.'
+            try {
+                const devices = await connectSyncAudio()
+                await this._refreshAudioDevices()
+                status.textContent = devices.length ? 'Select a Sync input, then enable audio.' : 'Sync has no audio inputs.'
+            } catch (error) { status.textContent = error.message || 'Sync audio could not connect.' }
+            finally { button.disabled = false }
+        })
         this._audioDeviceSelect?.addEventListener('change', async () => {
-            if (this._audioMgr?.enabled) {
+            if (this._audioMgr?.enabled || this._audioOpening) {
                 const id = this._audioDeviceSelect.value || ''
-                await this._audioMgr.switchDevice(id)
-                this._updateAudioDeviceLabel(this._audioMgr.currentDeviceLabel)
+                await this._enableAudio(id)
             }
         })
 
@@ -672,9 +578,15 @@ class LiveInputsPanel {
         this._refreshAudioDevices()
         navigator.mediaDevices?.addEventListener?.('devicechange', () => {
             this._refreshAudioDevices()
+            void this._refreshCameras()
         })
         this._panel.querySelectorAll('.live-input-snippet').forEach(el => {
             el.addEventListener('click', () => this._insertSnippet(el.dataset.snippet))
+        })
+        this._cameraSelect = this._panel.querySelector('[data-id=camera-device]')
+        void this._refreshCameras()
+        this._cameraSelect.addEventListener('change', () => {
+            if (this._activeSourceKind === 'webcam') this._panel.querySelector('[data-source=webcam]').click()
         })
         this._sourceStatus = this._panel.querySelector('[data-id=source-status]')
         this._panel.querySelectorAll('.source-btn').forEach(btn => {
@@ -698,6 +610,9 @@ class LiveInputsPanel {
         // Bumped each time _startTextureLoop is called so old closures can detect
         // they've been superseded and stop scheduling.
         this._sourceLoopGen = 0
+        this._sourceGeneration = 0
+        this._cameraQueue = null
+        this._sourceCleanup = Promise.resolve()
     }
 
     /**
@@ -719,12 +634,16 @@ class LiveInputsPanel {
     async useObjectUrl(url, label = 'video') {
         if (!url) return
         this.open()
-        this._stopActiveSource()
+        const cleanup = this._stopActiveSource()
+        const generation = this._sourceGeneration
+        await cleanup
+        if (generation !== this._sourceGeneration) { URL.revokeObjectURL(url); return }
         this._currentObjectUrl = url
         this._videoEl.srcObject = null
         this._videoEl.src = url
         this._videoEl.loop = true
         try { await this._videoEl.play() } catch { /* may need user gesture */ }
+        if (generation !== this._sourceGeneration) return
         this._startTextureLoop(this._videoEl)
         this._setSourceStatus(`video: ${label}`, 'connected')
         this._maybeInsertMediaSnippet()
@@ -738,64 +657,92 @@ class LiveInputsPanel {
      * so the user has a usable hook in their DSL.
      */
     async _activateSource(kind, btn) {
-        // Stop existing source first
-        this._stopActiveSource()
-
-        if (kind === 'stop') {
-            this._setSourceStatus('none')
-            return
-        }
-
-        if (kind === 'webcam') {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-            this._currentStream = stream
-            this._videoEl.srcObject = stream
-            await this._videoEl.play()
-            this._startTextureLoop(this._videoEl)
-            this._setSourceStatus('webcam streaming', 'connected')
-            this._maybeInsertMediaSnippet()
-            this._markActiveSourceBtn(btn)
-            return
-        }
-        if (kind === 'screen') {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
-            this._currentStream = stream
-            this._videoEl.srcObject = stream
-            await this._videoEl.play()
-            this._startTextureLoop(this._videoEl)
-            this._setSourceStatus('screen streaming', 'connected')
-            this._maybeInsertMediaSnippet()
-            this._markActiveSourceBtn(btn)
-            return
-        }
-        if (kind === 'video') {
-            const file = await pickFile('video/*')
-            if (!file) return
-            const url = URL.createObjectURL(file)
-            this._currentObjectUrl = url
-            this._videoEl.srcObject = null
-            this._videoEl.src = url
-            this._videoEl.loop = true
-            await this._videoEl.play()
-            this._startTextureLoop(this._videoEl)
-            this._setSourceStatus(`video: ${file.name}`, 'connected')
-            this._maybeInsertMediaSnippet()
-            this._markActiveSourceBtn(btn)
-            return
-        }
-        if (kind === 'image') {
-            const file = await pickFile('image/*')
-            if (!file) return
-            const dataUrl = await fileToDataURL(file)
-            // Insert a real media(url:...) snippet — Polymorphic already renders that
-            this._setSourceStatus(`image: ${file.name}`, 'connected')
-            await this._onInsert(dataUrl, { as: 'image' })
-            this._markActiveSourceBtn(btn)
-            return
+        const cleanup = this._stopActiveSource()
+        const generation = this._sourceGeneration
+        await cleanup
+        if (generation !== this._sourceGeneration) return
+        if (kind === 'stop') { this._setSourceStatus('none'); return }
+        try {
+            if (kind === 'webcam' || kind === 'screen') {
+                const deviceId = this._cameraSelect?.value
+                const stream = kind === 'webcam'
+                    ? await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true, audio: false })
+                    : await navigator.mediaDevices.getDisplayMedia({ video: true })
+                if (generation !== this._sourceGeneration) { stream.getTracks().forEach(track => track.stop()); return }
+                this._currentStream = stream
+                this._videoEl.srcObject = stream
+                await this._videoEl.play()
+                if (generation !== this._sourceGeneration) return
+                this._activeSourceKind = kind
+                if (kind === 'webcam') {
+                    const queue = await createSyncCameraSession(stream.getVideoTracks()[0], {
+                        stream,
+                        isCurrent: () => generation === this._sourceGeneration && this._currentStream === stream,
+                        upload: frame => this._uploadMediaFrame(frame),
+                        onError: error => {
+                            if (generation !== this._sourceGeneration) return
+                            void this._stopActiveSource()
+                            this._setSourceStatus(`${error.message}. Select webcam to retry.`, 'error')
+                        }
+                    })
+                    if (generation !== this._sourceGeneration) { await queue?.stop(); return }
+                    this._cameraQueue = queue
+                    void this._refreshCameras()
+                }
+                this._maybeInsertMediaSnippet()
+                this._startTextureLoop(this._videoEl)
+                this._setSourceStatus(`${stream.getVideoTracks()[0]?.label || kind} streaming`, 'connected')
+                this._markActiveSourceBtn(btn)
+                return
+            }
+            if (kind === 'video') {
+                const file = await pickFile('video/*')
+                if (!file || generation !== this._sourceGeneration) return
+                await this.useObjectUrl(URL.createObjectURL(file), file.name)
+                return
+            }
+            if (kind === 'image') {
+                const file = await pickFile('image/*')
+                if (!file || generation !== this._sourceGeneration) return
+                const dataUrl = await fileToDataURL(file)
+                if (generation !== this._sourceGeneration) return
+                this._setSourceStatus(`image: ${file.name}`, 'connected')
+                await this._onInsert(dataUrl, { as: 'image' })
+                if (generation === this._sourceGeneration) this._markActiveSourceBtn(btn)
+            }
+        } catch (error) {
+            if (generation !== this._sourceGeneration) return
+            await this._stopActiveSource()
+            throw error
         }
     }
 
+    async _refreshCameras() {
+        const generation = ++this._cameraRefreshGeneration
+        const select = this._cameraSelect
+        if (!select) return
+        try {
+            const devices = await navigator.mediaDevices?.enumerateDevices() || []
+            if (generation !== this._cameraRefreshGeneration) return
+            const selected = select.value
+            const selectedLabel = [...select.options].find(option => option.value === selected)?.text || 'Camera'
+            select.replaceChildren(new Option('system default', ''))
+            for (const device of devices.filter(device => device.kind === 'videoinput')) {
+                select.add(new Option(device.label || 'Camera', device.deviceId))
+            }
+            if (selected && ![...select.options].some(option => option.value === selected)) {
+                select.add(new Option(`${selectedLabel.replace(/ \(unavailable\)$/, '')} (unavailable)`, selected))
+            }
+            if ([...select.options].some(option => option.value === selected)) select.value = selected
+        } catch { /* The default camera remains available before permission. */ }
+    }
+
     _stopActiveSource() {
+        this._sourceGeneration++
+        this._activeSourceKind = null
+        const queue = this._cameraQueue
+        this._cameraQueue = null
+        if (queue) this._sourceCleanup = Promise.all([this._sourceCleanup, queue.stop()]).then(() => {})
         // Bump the generation so any in-flight texture loop closure stops scheduling.
         this._sourceLoopGen++
         if (this._sourceFrameLoop) {
@@ -816,6 +763,7 @@ class LiveInputsPanel {
             this._videoEl.removeAttribute('src')
         }
         this._panel?.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'))
+        return this._sourceCleanup
     }
 
     _markActiveSourceBtn(btn) {
@@ -834,8 +782,17 @@ class LiveInputsPanel {
         const value = editor?.value || ''
         // Only insert if no media() call exists yet
         if (!/media\s*\(/.test(value)) {
-            this._onInsert('\n\nmedia(url: "live").write(o0)\n\nrender(o0)')
+            this._onInsert('\n\nmedia().write(o0)\n\nrender(o0)')
         }
+    }
+
+    _uploadMediaFrame(frame) {
+        const step = this._renderer.mediaStepIndex
+        if (step == null) throw new Error('Camera media effect is unavailable')
+        const result = this._innerRenderer.updateTextureFromSource(`imageTex_step_${step}`, frame, { flipY: false })
+        const canvas = this._renderer.canvasRenderer.canvas
+        this._innerRenderer.applyStepParameterValues?.({ [`step_${step}`]: { imageSize: [canvas.width, canvas.height] } })
+        return result
     }
 
     _startTextureLoop(videoEl) {
@@ -850,12 +807,9 @@ class LiveInputsPanel {
             if (generation !== this._sourceLoopGen) return
             this._sourceFrameLoop = requestAnimationFrame(update)
             if (videoEl.paused || videoEl.videoWidth === 0) return
-            // For now we always write to step 0 — Polymorphic sketches with a
-            // single media() call always end up there. Multi-media support is a
-            // followup that needs an engine-level "find media step" accessor.
-            try {
-                innerRenderer.updateTextureFromSource?.('imageTex_step_0', videoEl, { flipY: false })
-            } catch { /* ignore */ }
+            if (this._renderer.mediaStepIndex == null) return
+            if (this._cameraQueue) { this._cameraQueue.consume(); return }
+            try { this._uploadMediaFrame(videoEl) } catch { /* Mid-compile. */ }
         }
         update()
     }
@@ -899,34 +853,34 @@ class LiveInputsPanel {
 
     isOpen() { return this._open }
 
+    async _enableAudio(id) {
+        const generation = ++this._audioSelectionGeneration
+        this._audioOpening = true
+        const ok = await this._audioMgr.enable(id)
+        if (generation !== this._audioSelectionGeneration) return
+        this._audioOpening = false
+        if (ok) await this._refreshAudioDevices()
+    }
+
     async _toggleAudio() {
         if (!this._innerRenderer) return
         if (!this._audioMgr) {
             this._audioMgr = new LocalAudioInput(this._innerRenderer)
-            this._audioMgr.onStatusChange(msg => {
-                this._setAudioStatus(msg, this._audioMgr.enabled ? 'connected' : '')
+            this._audioMgr.onStatusChange((msg, enabled, error) => {
+                this._setAudioStatus(msg, enabled ? 'connected' : '')
+                this._audioToggle.classList.toggle('active', enabled)
+                this._audioToggle.textContent = enabled ? 'disable' : 'enable'
+                this._updateAudioDeviceLabel(enabled ? this._audioMgr.currentDeviceLabel : '')
+                if (error) { this._audioSelectionGeneration++; this._audioOpening = false }
             })
         }
-        if (this._audioMgr.enabled) {
+        if (this._audioMgr.enabled || this._audioOpening) {
+            this._audioSelectionGeneration++
+            this._audioOpening = false
             await this._audioMgr.disable()
-            this._audioToggle.classList.remove('active')
-            this._audioToggle.textContent = 'enable'
-            this._updateAudioDeviceLabel('')
             return
         }
-        const wantedId = this._audioDeviceSelect?.value || ''
-        const ok = await this._audioMgr.enable(wantedId)
-        this._audioToggle.classList.toggle('active', !!ok)
-        this._audioToggle.textContent = ok ? 'disable' : 'enable'
-        if (ok) {
-            // Refresh device list — labels are only available after permission
-            await this._refreshAudioDevices()
-            this._updateAudioDeviceLabel(this._audioMgr.currentDeviceLabel)
-            // Sync the dropdown to the actual chosen device
-            if (this._audioDeviceSelect && this._audioMgr.currentDeviceId) {
-                this._audioDeviceSelect.value = this._audioMgr.currentDeviceId
-            }
-        }
+        await this._enableAudio(this._audioDeviceSelect?.value || '')
     }
 
     /**
@@ -937,8 +891,14 @@ class LiveInputsPanel {
     async _refreshAudioDevices() {
         if (!this._audioDeviceSelect) return
         try {
-            const devices = await navigator.mediaDevices.enumerateDevices()
-            const inputs = devices.filter(d => d.kind === 'audioinput')
+            const generation = ++this._audioRefreshGeneration
+            const selection = this._audioSelectionGeneration
+            let devices = []
+            try { devices = await navigator.mediaDevices?.enumerateDevices() || [] } catch {}
+            const native = await refreshSyncAudioDevices()
+            if (generation !== this._audioRefreshGeneration || selection !== this._audioSelectionGeneration) return
+            const inputs = [...devices.filter(d => d.kind === 'audioinput'),
+                ...native.filter(d => d.connected).map(d => ({ deviceId: d.id, label: d.name }))]
             const previous = this._audioDeviceSelect.value
             this._audioDeviceSelect.innerHTML = ''
             // Always include a "system default" entry
@@ -951,6 +911,13 @@ class LiveInputsPanel {
                 opt.value = d.deviceId
                 opt.textContent = d.label || `(unnamed input ${d.deviceId.slice(0, 6)})`
                 this._audioDeviceSelect.appendChild(opt)
+            }
+            // Retain unavailable native inputs so Enable never falls back to the microphone.
+            if (isSyncAudioSource(previous) && !inputs.some(input => input.deviceId === previous)) {
+                const unavailable = document.createElement('option')
+                unavailable.value = previous
+                unavailable.textContent = `${native.find(input => input.id === previous)?.name || 'Sync input'} (unavailable)`
+                this._audioDeviceSelect.appendChild(unavailable)
             }
             // Restore selection if still valid
             if (previous && [...this._audioDeviceSelect.options].some(o => o.value === previous)) {
@@ -1000,6 +967,16 @@ class LiveInputsPanel {
             this._raf = requestAnimationFrame(tick)
         }
         tick()
+    }
+
+    dispose() {
+        this._cameraRefreshGeneration++
+        this._audioSelectionGeneration++
+        this._audioRefreshGeneration++
+        this._audioOpening = false
+        void this._audioMgr?.disable()
+        void this._stopActiveSource()
+        this._stopMeterLoop()
     }
 
     _stopMeterLoop() {

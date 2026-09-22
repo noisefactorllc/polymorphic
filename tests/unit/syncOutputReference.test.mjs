@@ -308,7 +308,7 @@ describe('SyncOutputController passive discovery', () => {
 
         assert.equal(first, second)
         assert.equal(controller.state.status, 'checking')
-        await Promise.resolve()
+        await flushMicrotasks()
         assert.deepEqual(provider.calls, [
             ['createClient', {}],
             'probe'
@@ -413,7 +413,7 @@ describe('SyncOutputController explicit connection', () => {
         assert.equal(first, second)
         assert.equal(controller.state.status, 'checking')
         assert.equal(pairCalls, 0)
-        await Promise.resolve()
+        await flushMicrotasks()
         assert.equal(pairCalls, 1)
 
         pairing.resolve({ protocolVersion: 1, token })
@@ -1738,7 +1738,7 @@ describe('SyncOutputController bounded recovery', () => {
         assert.equal(fixture.timers.intervals.size, 0)
     })
 
-    test('uses exactly 250ms, 1000ms, and 4000ms before a fixed exhausted result', async () => {
+    test('continues transport recovery after 250ms, 1000ms, and 4000ms', async () => {
         const initial = senderFixture()
         const unavailable = () => recoveryProbe({
             available: false,
@@ -1764,9 +1764,10 @@ describe('SyncOutputController bounded recovery', () => {
             await flushMicrotasks(12)
         }
 
-        assert.equal(fixture.controller.state.status, 'error')
-        assert.equal(fixture.controller.state.error.code, 'SYNC_RECOVERY_EXHAUSTED')
-        assert.equal(fixture.controller.state.error.message.includes('private'), false)
+        assert.equal(fixture.controller.state.status, 'recovering')
+        assert.equal(fixture.controller.state.error, null)
+        assert.deepEqual([...fixture.timers.timeouts.values()].map(timer => timer.delay), [10_000])
+        await fixture.controller.stop()
         assert.equal(fixture.timers.timeouts.size, 0)
         assert.equal(fixture.timers.intervals.size, 0)
         assert.equal(fixture.provider.calls.length, 5)

@@ -87,6 +87,8 @@ export class PolymorphicRenderer {
     /**
      * @returns {CanvasRenderer} Underlying CanvasRenderer (for ProgramState integration)
      */
+    get mediaStepIndex() { return this._liveMediaStepIndex ?? null }
+
     get canvasRenderer() {
         return this._renderer
     }
@@ -205,6 +207,7 @@ export class PolymorphicRenderer {
 
             // Compile the DSL
             await this._renderer.compile(engineDsl)
+            this._liveMediaStepIndex = this._findMediaStepIndex(engineDsl)
 
             // Check for text effects and render text textures (supports multiple).
             // Parameters and step indices come from the same parse of the DSL the
@@ -310,7 +313,7 @@ export class PolymorphicRenderer {
 
             // Find the media effect
             for (const effect of effects) {
-                if (effect.name === 'media' || effect.fullName === 'synth.media' || effect.effectKey === 'media') {
+                if (effect.name === 'media' || effect.fullName === 'synth.media' || effect.effectKey === 'media' || effect.effectKey === 'synth.media' || effect.effectKey === 'synth/media') {
                     // Use effect.temp which matches the pipeline's texture binding
                     const stepIndex = effect.temp !== undefined ? effect.temp : effect.stepIndex
                     return stepIndex
@@ -320,7 +323,7 @@ export class PolymorphicRenderer {
             console.warn('Failed to parse DSL for media step index:', err)
         }
 
-        return 0 // Default to step 0
+        return null
     }
 
     /**

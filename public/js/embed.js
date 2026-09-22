@@ -68,6 +68,7 @@ const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE
 // Renderer reference (set after initialization)
 let renderer = null
 let syncOutputDialog = null
+let syncOutputController = null
 
 // ProgramState (single source of truth for effect parameter values)
 let programState = null
@@ -2089,7 +2090,8 @@ async function startShader() {
             console.error('Render error:', err)
         }
     })
-    const syncOutputController = new SyncOutputController({
+    syncOutputController?.dispose()
+    syncOutputController = new SyncOutputController({
         renderer: renderer.inner,
         getCanvas: () => canvas
     })
@@ -2266,6 +2268,8 @@ async function startShader() {
         // the GL context there would leave a dead canvas on restore.
         window.addEventListener('pagehide', (e) => {
             if (e.persisted) return
+            syncOutputController?.dispose()
+            liveInputsPanel.dispose()
             renderer.dispose()
         })
 
@@ -2533,6 +2537,7 @@ function init() {
     if (typeof window !== 'undefined') {
         window.__poly = {
             liveInputsPanel,
+            get syncOutputController() { return syncOutputController },
             recorder,
             perfOverlay,
             tempoController,
