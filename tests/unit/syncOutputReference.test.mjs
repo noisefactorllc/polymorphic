@@ -1484,8 +1484,10 @@ describe('SyncOutputController live lifecycle', () => {
         await fixture.controller.stop()
 
         assert.equal(fixture.timers.intervals.size, 0)
+        assert.equal(fixture.controller.state.stats.sent, 100)
+        sender.sender.stats.sent = 101
         callback()
-        assert.equal(fixture.controller.state.stats.sent, 6)
+        assert.equal(fixture.controller.state.stats.sent, 100)
     })
 
     test('always closes the client when renderer removal reports a failure', async () => {
