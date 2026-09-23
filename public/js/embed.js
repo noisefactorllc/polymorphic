@@ -2214,10 +2214,17 @@ async function startShader() {
         recorder.init({
             canvas,
             quality: 'standard',
-            onChange: ({ recording }) => {
+            onChange: ({ recording, stoppedReason }) => {
                 recordToggleBtn?.classList.toggle('recording', recording)
                 refreshMenuBar()
                 statusRow.setRecording(recording)
+                if (!recording && stoppedReason && stoppedReason !== 'manual') {
+                    if (stoppedReason === 'duration_limit') {
+                        showToast('Recording stopped: reached 15-minute duration limit', 'info')
+                    } else if (stoppedReason === 'memory_limit') {
+                        showToast('Recording stopped: reached memory safety limit', 'info')
+                    }
+                }
             }
         })
 

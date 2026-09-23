@@ -222,3 +222,54 @@ test('public/js/ui/shortcutsDialog.js uses Handfish semantic tokens', () => {
     )
 })
 
+test('public/js/ui/recorder.js uses Handfish semantic tokens and contains zero raw color literals or !important', () => {
+    const recorderPath = path.resolve(__dirname, '../../public/js/ui/recorder.js')
+    const recorderCode = fs.readFileSync(recorderPath, 'utf8')
+
+    const styleMatch = recorderCode.match(/style\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, 'recorder.js must define injected style.textContent')
+    const css = styleMatch[1]
+
+    assert.doesNotMatch(
+        css,
+        /!important/,
+        'recorder.js injected CSS must not use !important'
+    )
+    assert.doesNotMatch(
+        css,
+        /#[0-9a-fA-F]{3,8}\b/,
+        'recorder.js injected CSS must not contain raw hex color literals'
+    )
+    assert.doesNotMatch(
+        css,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        'recorder.js injected CSS must not contain raw rgb/rgba/hsl/hsla literals'
+    )
+    assert.match(
+        css,
+        /var\(--hf-red\)/,
+        'recorder.js must use var(--hf-red)'
+    )
+    assert.match(
+        css,
+        /var\(--hf-yellow\)/,
+        'recorder.js must use var(--hf-yellow) for warning state'
+    )
+    assert.match(
+        css,
+        /var\(--hf-bg-surface\)/,
+        'recorder.js must use var(--hf-bg-surface)'
+    )
+    assert.match(
+        css,
+        /var\(--hf-text-bright\)/,
+        'recorder.js must use var(--hf-text-bright)'
+    )
+    assert.match(
+        css,
+        /var\(--hf-border-subtle\)/,
+        'recorder.js must use var(--hf-border-subtle)'
+    )
+})
+
+
