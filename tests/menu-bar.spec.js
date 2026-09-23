@@ -114,6 +114,29 @@ test('menu tree renders every baseline item exactly (labels, order, separators, 
     // 8 icon buttons in exact order
     const icons = await page.locator('#menu .hf-menubar-right .hf-menubar-btn .hf-icon').allTextContents()
     expect(icons).toEqual(['collections', 'tune', 'fiber_manual_record', 'speed', 'info', 'code', 'fullscreen', 'pause'])
+
+    // Tooltips on toolbar buttons reflect accelerators and clarified names
+    const inputsTitle = await page.locator('#inputs-toggle-btn').getAttribute('data-title')
+    expect(inputsTitle).toMatch(/live inputs \((⌘I|Ctrl\+I)\)/)
+    expect(await page.locator('#inputs-toggle-btn').getAttribute('aria-label')).toBe('Toggle live inputs')
+    const perfTitle = await page.locator('#perf-toggle-btn').getAttribute('data-title')
+    expect(perfTitle).toBe('performance overlay')
+    expect(await page.locator('#perf-toggle-btn').getAttribute('aria-label')).toBe('Toggle performance overlay')
+
+    // View menu items declare their keyboard accelerators
+    const shortcuts = await page.evaluate(() => {
+        const getSc = id => document.getElementById(id)?.querySelector('.hf-menu-shortcut')?.textContent?.trim() ?? null
+        return {
+            liveInputs: getSc('viewMenuItem-live-inputs'),
+            status: getSc('viewMenuItem-status'),
+            shortcuts: getSc('viewMenuItem-shortcuts'),
+            perfMode: getSc('viewMenuItem-performance-mode')
+        }
+    })
+    expect(shortcuts.liveInputs).toMatch(/^(⌘I|Ctrl\+I)$/)
+    expect(shortcuts.status).toMatch(/^(⌘;|Ctrl\+;)$/)
+    expect(shortcuts.shortcuts).toBe('?')
+    expect(shortcuts.perfMode).toMatch(/^(⇧⌘H|Ctrl\+Shift\+H)$/)
 })
 
 test('dialog and overlay items open their targets; downloads fire', async ({ page }) => {
@@ -342,6 +365,15 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     await expect(page.locator('#menu .hf-menubar')).toBeHidden()
     await page.keyboard.press('Escape')
     await expect(page.locator('#menu .hf-menubar')).toBeVisible()
+
+    // Mod+I toggles live inputs panel and updates toolbar active state
+    const modKey = process.platform === 'darwin' ? 'Meta' : 'Control'
+    await page.keyboard.press(`${modKey}+i`)
+    await expect(page.locator('.live-inputs-panel')).toHaveClass(/visible/)
+    await expect(page.locator('#inputs-toggle-btn')).toHaveClass(/active/)
+    await page.keyboard.press(`${modKey}+i`)
+    await expect(page.locator('.live-inputs-panel')).not.toHaveClass(/visible/)
+    await expect(page.locator('#inputs-toggle-btn')).not.toHaveClass(/active/)
 })
 
 test('theme switching preserves contrast across menu dropdowns and modals', async ({ page }) => {

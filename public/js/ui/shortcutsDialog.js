@@ -135,7 +135,7 @@ const SECTIONS = [
         title: 'Panels & dialogs',
         rows: [
             ['Command palette',             ['⌘/Ctrl', 'K']],
-            ['Live inputs panel',           ['click ⚙ button']],
+            ['Live inputs panel',           ['⌘/Ctrl', 'I']],
             ['Performance overlay',         ['click ⚡ button']],
             ['Inspiration gallery',         ['click ◫ button']],
             ['Toggle status row',           ['⌘/Ctrl', ';']],

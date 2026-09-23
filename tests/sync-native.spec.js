@@ -126,7 +126,8 @@ for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts ${back
     test.slow()
     await page.route('**/js/sync/bundle.js', route => route.fulfill({
         contentType: 'text/javascript',
-        body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.1.5/browser/index.js';
+        body: `export * from '/js/sync/sdk/0.3.3/browser/index.js';
+            import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
             window.nativeFrameChecksums = new Set();
             class ObservedSocket extends WebSocket {
                 send(data) {

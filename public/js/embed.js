@@ -7,7 +7,7 @@
 
 const APP_VERSION = '0.11'
 
-import { AboutDialog, dslTokenizer, initEscapeHandler } from 'handfish'
+import { AboutDialog, dslTokenizer, initEscapeHandler, formatShortcut } from 'handfish'
 
 // One global Escape handler for handfish components (menu bar, dialogs).
 // Required once per app by the handfish escape-stack contract.
@@ -190,6 +190,7 @@ if (menuBarEl) {
                           checked: () => isDocReaderVisible(),
                           onSelect: () => { toggleDocReader() } },
                         { type: 'checkbox', id: 'viewMenuItem-live-inputs', classes: 'view-item', label: 'live inputs',
+                          shortcut: formatShortcut('Mod+I'),
                           checked: () => liveInputsPanel.isOpen(),
                           onSelect: () => { liveInputsPanel.toggle() } },
                         { type: 'checkbox', id: 'viewMenuItem-surface-pips', classes: 'view-item', label: 'surface pips',
@@ -200,14 +201,18 @@ if (menuBarEl) {
                           checked: () => perfOverlay.isOpen(),
                           onSelect: () => { perfOverlay.toggle() } },
                         { type: 'checkbox', id: 'viewMenuItem-status', classes: 'view-item', label: 'status row',
+                          shortcut: formatShortcut('Mod+;'),
                           checked: () => statusRow.isOpen(),
                           onSelect: () => statusRow.toggle() },
                         { type: 'separator' },
                         { id: 'viewMenuItem-gallery', classes: 'view-item', label: 'gallery…',
                           onSelect: () => gallery.open().catch(err => console.error('[Gallery] open failed:', err)) },
-                        { id: 'viewMenuItem-shortcuts', classes: 'view-item', label: 'keyboard shortcuts…', onSelect: () => shortcutsDialog.open() },
+                        { id: 'viewMenuItem-shortcuts', classes: 'view-item', label: 'keyboard shortcuts…',
+                          shortcut: '?',
+                          onSelect: () => shortcutsDialog.open() },
                         { type: 'separator' },
                         { type: 'checkbox', id: 'viewMenuItem-performance-mode', classes: 'view-item', label: 'performance mode',
+                          shortcut: formatShortcut('Mod+Shift+H'),
                           checked: () => document.body.classList.contains('performance-mode'),
                           onSelect: () => togglePerformanceMode() },
                         { type: 'checkbox', id: 'viewMenuItem-fullscreen', classes: 'view-item', label: 'fullscreen',
@@ -297,13 +302,15 @@ if (menuBarEl) {
             right: [
                 { type: 'button', id: 'gallery-btn', icon: 'collections', tooltip: 'gallery', ariaLabel: 'Open inspiration gallery',
                   onSelect: () => gallery.open().catch(err => console.error('[Gallery] open failed:', err)) },
-                { type: 'button', id: 'inputs-toggle-btn', icon: 'tune', tooltip: 'live inputs', ariaLabel: 'Toggle live inputs',
+                { type: 'button', id: 'inputs-toggle-btn', icon: 'tune',
+                  tooltip: () => `live inputs (${formatShortcut('Mod+I')})`,
+                  ariaLabel: 'Toggle live inputs',
                   active: () => liveInputsPanel.isOpen(),
                   onSelect: () => liveInputsPanel.toggle() },
                 { type: 'button', id: 'record-toggle-btn', icon: 'fiber_manual_record', tooltip: () => recorder.isRecording() ? 'stop recording' : 'record', ariaLabel: 'Toggle recording',
                   active: () => recorder.isRecording(),
                   onSelect: () => { if (recorder.isRecording()) recorder.stop(); else recorder.start() } },
-                { type: 'button', id: 'perf-toggle-btn', icon: 'speed', tooltip: 'performance', ariaLabel: 'Toggle performance overlay',
+                { type: 'button', id: 'perf-toggle-btn', icon: 'speed', tooltip: 'performance overlay', ariaLabel: 'Toggle performance overlay',
                   active: () => perfOverlay.isOpen(),
                   onSelect: () => perfOverlay.toggle() },
                 { type: 'button', id: 'doc-toggle-btn', icon: 'info', tooltip: 'documentation', ariaLabel: 'Toggle documentation',
@@ -2315,15 +2322,25 @@ function setupMenuBar() {
                 return
             }
         }
+        // Cmd/Ctrl+I toggles the live inputs panel
+        if (mod && !e.shiftKey && !e.altKey && (e.key === 'i' || e.key === 'I')) {
+            e.preventDefault()
+            liveInputsPanel.toggle()
+            refreshMenuBar()
+            return
+        }
         // Cmd/Ctrl+; toggles the status row
         if (mod && !e.shiftKey && !e.altKey && e.key === ';') {
             e.preventDefault()
             statusRow.toggle()
+            refreshMenuBar()
+            return
         }
         // Cmd/Ctrl+Shift+H toggles performance mode (hide all UI)
         if (mod && e.shiftKey && !e.altKey && (e.key === 'h' || e.key === 'H')) {
             e.preventDefault()
             togglePerformanceMode()
+            return
         }
         // Cmd/Ctrl+Shift+F — format the DSL (only when editor is focused so we
         // don't steal Find from other contexts)
@@ -2356,6 +2373,8 @@ function setupMenuBar() {
                 if (dsl.trim()) {
                     scenes.save(slot, dsl)
                     showToast(`Saved scene ${slot}`, 'success')
+                } else {
+                    showToast(`Cannot save empty scene ${slot}`, 'warning')
                 }
                 e.preventDefault()
                 return
@@ -2375,6 +2394,8 @@ function setupMenuBar() {
                     publishLocalDsl('scene-load')
                     scheduleHotReload()
                     showToast(`Loaded scene ${slot}`, 'info')
+                } else if (!dsl) {
+                    showToast(`Scene ${slot} is empty`, 'info')
                 }
                 e.preventDefault()
             }
