@@ -24,6 +24,7 @@ import {
     loadNoisedeckExamples,
     fetchNoisedeckExampleSource,
 } from './noisedeckExamples.js'
+import { registerEscapeable, unregisterEscapeable } from 'handfish'
 
 const STYLES_ID = 'gallery-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -386,7 +387,6 @@ class Gallery {
         this._overlay = null
         this._open = false
         this._onLoad = () => {}
-        this._escHandler = null
         this._activeTab = 'curated'  // 'curated' | 'noisedeck-examples' | 'blaster'
         // Live preview bookkeeping. Cards get a LivePreview instance only
         // while the user hovers or long-presses; a one-shot warm-up render
@@ -414,14 +414,13 @@ class Gallery {
     close() {
         if (!this._open) return
         this._open = false
-        this._overlay?.classList.remove('visible')
+        if (this._overlay) {
+            unregisterEscapeable(this._overlay)
+            this._overlay.classList.remove('visible')
+        }
         const ov = this._overlay
         setTimeout(() => ov?.remove(), 200)
         this._overlay = null
-        if (this._escHandler) {
-            document.removeEventListener('keydown', this._escHandler)
-            this._escHandler = null
-        }
         // Tear down all live previews so we release WebGL contexts and rAF
         // loops. dispose() is async but we don't need to await it.
         this._teardownPreviews()
@@ -748,8 +747,7 @@ class Gallery {
         this._overlay.addEventListener('click', (e) => {
             if (e.target === this._overlay) this.close()
         })
-        this._escHandler = (e) => { if (e.key === 'Escape') this.close() }
-        document.addEventListener('keydown', this._escHandler)
+        registerEscapeable(this._overlay, () => this.close())
     }
 
     async _renderTab(tab) {

@@ -12,6 +12,14 @@
  */
 
 import { loadManifest, getEffects, fuzzySearch } from '../manifest.js'
+let registerEscapeable = (el, cb) => {}, unregisterEscapeable = (el) => {}
+try {
+    const hf = await import('handfish')
+    registerEscapeable = hf.registerEscapeable
+    unregisterEscapeable = hf.unregisterEscapeable
+} catch {
+    // In Node test runners without import maps, fall back cleanly
+}
 
 const STYLES_ID = 'command-palette-styles'
 if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
@@ -249,6 +257,7 @@ class CommandPalette {
 
         if (!this._overlay) this._build()
         this._overlay.classList.add('visible')
+        registerEscapeable(this._overlay, () => this.close())
         this._input?.setAttribute('aria-expanded', 'true')
         this._input.value = ''
         this._refresh()
@@ -261,7 +270,10 @@ class CommandPalette {
     close() {
         if (!this._open) return
         this._open = false
-        if (this._overlay) this._overlay.classList.remove('visible')
+        if (this._overlay) {
+            unregisterEscapeable(this._overlay)
+            this._overlay.classList.remove('visible')
+        }
         document.removeEventListener('keydown', this._boundKeydown, true)
         this._input?.setAttribute('aria-expanded', 'false')
         this._input?.removeAttribute('aria-activedescendant')
@@ -528,7 +540,8 @@ class CommandPalette {
             return
         }
         if (e.key === 'Escape') {
-            e.preventDefault()
+            e.preventDefault?.()
+            e.stopPropagation?.()
             this.close()
             return
         }

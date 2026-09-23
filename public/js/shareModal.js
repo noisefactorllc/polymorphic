@@ -2,6 +2,14 @@
 // Posts to sharing.noisedeck.app API
 
 import { getLoadedPortableEffects, portableDefinition } from './sharingLoader.js'
+let registerEscapeable = (el, cb) => {}, unregisterEscapeable = (el) => {}
+try {
+    const hf = await import('handfish')
+    registerEscapeable = hf.registerEscapeable
+    unregisterEscapeable = hf.unregisterEscapeable
+} catch {
+    // In Node test runners without import maps, fall back cleanly
+}
 
 /**
  * Build a portable effect ZIP as base64 from effect data
@@ -101,6 +109,9 @@ class ShareModal {
         // Set up event handlers
         this._setupEventHandlers();
 
+        // Register with Handfish escape stack
+        registerEscapeable(this.overlay, () => this.close());
+
         // Show modal
         this.overlay.style.display = 'flex';
     }
@@ -112,6 +123,7 @@ class ShareModal {
         this.isSharing = false;
 
         if (this.overlay) {
+            unregisterEscapeable(this.overlay);
             this.overlay.style.display = 'none';
         }
 
@@ -159,14 +171,6 @@ class ShareModal {
             }
         };
         this.overlay.addEventListener('click', this.overlayClickHandler);
-
-        // Close on Escape key
-        this.escapeHandler = (e) => {
-            if (e.key === 'Escape' && this.isOpen) {
-                this.close();
-            }
-        };
-        document.addEventListener('keydown', this.escapeHandler);
     }
 
     _cleanupEventHandlers() {
@@ -188,10 +192,6 @@ class ShareModal {
 
         if (this.overlay && this.overlayClickHandler) {
             this.overlay.removeEventListener('click', this.overlayClickHandler);
-        }
-
-        if (this.escapeHandler) {
-            document.removeEventListener('keydown', this.escapeHandler);
         }
 
         if (this.blasterBtn && this.blasterHandler) {

@@ -7,7 +7,7 @@
 
 const APP_VERSION = '0.11'
 
-import { AboutDialog, dslTokenizer, initEscapeHandler, formatShortcut } from 'handfish'
+import { AboutDialog, dslTokenizer, initEscapeHandler, formatShortcut, hasOpenEscapeables } from 'handfish'
 
 // One global Escape handler for handfish components (menu bar, dialogs).
 // Required once per app by the handfish escape-stack contract.
@@ -2352,8 +2352,11 @@ function setupMenuBar() {
                 dslEditor?.dispatchEvent(new CustomEvent('format', { bubbles: true, composed: true }))
             }
         }
-        // Esc exits performance mode
+        // Esc exits performance mode (only when no dialog, modal, menu, or escapeable was dismissed)
         if (e.key === 'Escape' && document.body.classList.contains('performance-mode')) {
+            if (e.defaultPrevented || hasOpenEscapeables() || document.querySelectorAll('dialog[open]').length > 0) {
+                return
+            }
             e.preventDefault()
             document.body.classList.remove('performance-mode')
             showToast('Performance mode off', 'info')

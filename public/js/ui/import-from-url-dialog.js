@@ -7,6 +7,7 @@
  */
 
 import { loadFromCode } from '../sharingLoader.js'
+import { registerEscapeable, unregisterEscapeable } from 'handfish'
 
 // Inject styles once
 const STYLES_ID = 'import-from-url-dialog-styles'
@@ -295,10 +296,7 @@ export class ImportFromUrlDialog {
         })
         
         // Close on escape
-        this._escHandler = (e) => {
-            if (e.key === 'Escape') this.close()
-        }
-        document.addEventListener('keydown', this._escHandler)
+        registerEscapeable(this._overlay, () => this.close())
         
         // Animate in
         requestAnimationFrame(() => {
@@ -375,17 +373,14 @@ export class ImportFromUrlDialog {
      * Close the dialog
      */
     close() {
-        if (this._escHandler) {
-            document.removeEventListener('keydown', this._escHandler)
-            this._escHandler = null
-        }
-        
         if (this._overlay) {
+            unregisterEscapeable(this._overlay)
             this._overlay.classList.remove('visible')
+            const ov = this._overlay
             setTimeout(() => {
-                this._overlay.remove()
-                this._overlay = null
+                ov?.remove()
             }, 150)
+            this._overlay = null
         }
     }
 }

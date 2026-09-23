@@ -322,6 +322,8 @@ export function attachScrubber(editor, options = {}) {
     function onKeyDown(e) {
         // ESC aborts, restoring the original value
         if (scrubbing && e.key === 'Escape') {
+            e.preventDefault?.()
+            e.stopPropagation?.()
             replaceRange(editor, range.start, range.end, originalRaw)
             range = null
             onPointerUp()

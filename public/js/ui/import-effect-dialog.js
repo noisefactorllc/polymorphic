@@ -7,6 +7,8 @@
  * @module ui/import-effect-dialog
  */
 
+import { registerEscapeable, unregisterEscapeable } from 'handfish'
+
 // Inject styles once
 const STYLES_ID = 'import-effect-dialog-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -236,6 +238,9 @@ export class ImportEffectDialog {
         this._createDialog()
         document.body.appendChild(this.overlay)
 
+        // Register with Handfish escape stack
+        registerEscapeable(this.overlay, () => this.close())
+
         // Animate in
         requestAnimationFrame(() => {
             this.overlay.classList.add('visible')
@@ -251,11 +256,15 @@ export class ImportEffectDialog {
     close() {
         if (!this.isOpen) return
 
-        this.overlay.classList.remove('visible')
-        setTimeout(() => {
-            this.overlay.remove()
+        if (this.overlay) {
+            unregisterEscapeable(this.overlay)
+            this.overlay.classList.remove('visible')
+            const ov = this.overlay
+            setTimeout(() => {
+                ov?.remove()
+            }, 150)
             this.overlay = null
-        }, 150)
+        }
 
         this.isOpen = false
         this.pendingZip = null
@@ -389,14 +398,6 @@ export class ImportEffectDialog {
             }
         })
 
-        // Close on Escape
-        const escHandler = (e) => {
-            if (e.key === 'Escape' && this.isOpen) {
-                this.close()
-                document.removeEventListener('keydown', escHandler)
-            }
-        }
-        document.addEventListener('keydown', escHandler)
 
         // Dropzone click
         this._dropzone.addEventListener('click', () => {

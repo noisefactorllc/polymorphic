@@ -8,6 +8,8 @@
  * elsewhere should match. If a binding changes there, change it here too.
  */
 
+import { registerEscapeable, unregisterEscapeable } from 'handfish'
+
 const STYLES_ID = 'shortcuts-dialog-styles'
 if (!document.getElementById(STYLES_ID)) {
     const style = document.createElement('style')
@@ -186,7 +188,6 @@ class ShortcutsDialog {
     constructor() {
         this._overlay = null
         this._open = false
-        this._escHandler = null
     }
 
     init() {
@@ -211,15 +212,13 @@ class ShortcutsDialog {
     close() {
         if (!this._open) return
         this._open = false
-        this._overlay?.classList.remove('visible')
+        if (this._overlay) {
+            unregisterEscapeable(this._overlay)
+            this._overlay.classList.remove('visible')
+        }
         const ov = this._overlay
         setTimeout(() => ov?.remove(), 200)
         this._overlay = null
-        // Drop the global Esc listener regardless of how the dialog was closed
-        if (this._escHandler) {
-            document.removeEventListener('keydown', this._escHandler)
-            this._escHandler = null
-        }
     }
 
     toggle() { this._open ? this.close() : this.open() }
@@ -253,10 +252,7 @@ class ShortcutsDialog {
         this._overlay.addEventListener('click', (e) => {
             if (e.target === this._overlay) this.close()
         })
-        this._escHandler = (e) => {
-            if (e.key === 'Escape') this.close()
-        }
-        document.addEventListener('keydown', this._escHandler)
+        registerEscapeable(this._overlay, () => this.close())
     }
 }
 
