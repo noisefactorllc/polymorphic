@@ -158,4 +158,61 @@ test.describe('Command Palette Keyboard Navigation', () => {
         await page.keyboard.press('Escape')
         await expect(overlay).not.toHaveClass(/visible/)
     })
+
+    test('Cmd+Shift+F and command palette format DSL while preserving comments and multi-line strings', async ({ page }) => {
+        await page.goto(PAGE_URL)
+        await waitForApp(page)
+
+        const formatShortcut = process.platform === 'darwin' ? 'Meta+Shift+f' : 'Control+Shift+f'
+        const cmdShortcut = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
+
+        // 1. Set unformatted code with comments
+        await page.evaluate(() => {
+            const ed = document.getElementById('dsl-editor')
+            ed.value = 'noise(scaleX:80) // base generator\n.palette(index:vaporwave)\n.write(o0)'
+            ed.getTextarea().focus()
+        })
+
+        // Press Cmd/Ctrl+Shift+F
+        await page.keyboard.press(formatShortcut)
+        await page.waitForTimeout(200)
+
+        const result1 = await page.evaluate(() => document.getElementById('dsl-editor').value)
+        expect(result1).toBe('noise(scaleX: 80) // base generator\n  .palette(index: vaporwave)\n  .write(o0)')
+
+        // 2. Multi-line triple quoted string preserved verbatim
+        await page.evaluate(() => {
+            const ed = document.getElementById('dsl-editor')
+            ed.value = 'solid(alpha:0)\n.text(text:"""multi\nline""",size:0.2)\n.write(o0)'
+            ed.getTextarea().focus()
+        })
+
+        await page.keyboard.press(formatShortcut)
+        await page.waitForTimeout(200)
+
+        const result2 = await page.evaluate(() => document.getElementById('dsl-editor').value)
+        expect(result2).toBe('solid(alpha: 0)\n  .text(text: """multi\nline""", size: 0.2)\n  .write(o0)')
+
+        // 3. Format via Command Palette
+        await page.evaluate(() => {
+            const ed = document.getElementById('dsl-editor')
+            ed.value = 'perlin(scale:50)\n.adjust(mode:hsv,hueRange:30)\n.write(o0)'
+        })
+
+        await page.keyboard.press(cmdShortcut)
+        const overlay = page.locator('.cmd-palette-overlay')
+        await expect(overlay).toHaveClass(/visible/)
+
+        await page.keyboard.type('Format DSL')
+        await page.waitForTimeout(200)
+
+        const items = page.locator('.cmd-palette-item')
+        await expect(items.first()).toContainText('Format DSL')
+        await page.keyboard.press('Enter')
+        await expect(overlay).not.toHaveClass(/visible/)
+
+        const result3 = await page.evaluate(() => document.getElementById('dsl-editor').value)
+        expect(result3).toBe('perlin(scale: 50)\n  .adjust(mode: hsv, hueRange: 30)\n  .write(o0)')
+    })
 })
+

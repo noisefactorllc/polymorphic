@@ -122,3 +122,96 @@ test('formatDsl handles an empty string literal', () => {
     const out = formatDsl('solid().text(text:"",size:0.1).out(o0)')
     assert.ok(out.includes('text: "", size: 0.1'), `empty literal + surrounding code, got: ${out}`)
 })
+
+// ---- comment preservation and multi-line triple quotes ----
+
+test('formatDsl preserves comments between chain steps without commenting out code', () => {
+    const input = 'noise(scaleX: 80)\n  // apply palette\n  .palette(index: vaporwave)\n  // send to buffer\n  .write(o0)'
+    const expected = 'noise(scaleX: 80)\n  // apply palette\n  .palette(index: vaporwave)\n  // send to buffer\n  .write(o0)'
+    const out = formatDsl(input)
+    assert.strictEqual(out, expected)
+    assert.strictEqual(formatDsl(out), out, 'idempotent across chain comments')
+})
+
+test('formatDsl preserves trailing comments with URLs and colons intact', () => {
+    const input = 'noise(scaleX: 80) // generator base\n  .palette(index: vaporwave) // color: https://example.com/item_(1)?a=1:2\n  .write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('// generator base'))
+    assert.ok(out.includes('// color: https://example.com/item_(1)?a=1:2'))
+    assert.ok(out.includes('  .write(o0)'))
+    assert.strictEqual(formatDsl(out), out, 'idempotent across trailing comments')
+})
+
+test('formatDsl does not collapse multi-line argument blocks containing comments', () => {
+    const input = 'noise(\n  // horizontal scale\n  scaleX: 80,\n  // vertical scale\n  scaleY: 40\n).write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('// horizontal scale'))
+    assert.ok(out.includes('scaleX: 80'))
+    assert.ok(out.includes('// vertical scale'))
+    assert.ok(out.includes('scaleY: 40'))
+    assert.ok(out.includes('.write(o0)'))
+    // Code lines must not be appended after comments on the same line
+    for (const line of out.split('\n')) {
+        const commentIdx = line.indexOf('//')
+        if (commentIdx !== -1) {
+            const comment = line.slice(commentIdx)
+            assert.ok(!comment.includes('scaleX: 80'))
+            assert.ok(!comment.includes('scaleY: 40'))
+            assert.ok(!comment.includes('.write'))
+        }
+    }
+})
+
+test('formatDsl preserves multi-line triple-quoted strings verbatim', () => {
+    const input = `solid(alpha: 0)\n  .text(\n    text: """genart\n.social""",\n    font: "Monaspace",\n    size: 0.33\n  )\n  .write(o0)`
+    const out = formatDsl(input)
+    assert.ok(out.includes('"""genart\n.social"""'), 'triple-quoted newline preserved')
+    assert.ok(out.includes('.write(o0)'), 'chain continuation preserved')
+    assert.strictEqual(formatDsl(out), out, 'idempotent with multi-line triple-quoted string')
+})
+
+test('formatDsl preserves single-quoted triple quotes with internal quotes and colons', () => {
+    const input = `solid().text(text: '''Line "1": start\nLine '2': end''').write(o0)`
+    const out = formatDsl(input)
+    assert.ok(out.includes(`'''Line "1": start\nLine '2': end'''`), 'single triple quotes preserved verbatim')
+    assert.ok(out.includes('.write(o0)'), 'chain split preserved')
+})
+
+test('formatDsl preserves subchain blocks with curly braces', () => {
+    const input = 'solid(alpha: 0)\n  .subchain(name: "grp", id: "abc") {\n    .text(text: "in sub :) ok", font: "Inter")\n  }\n  .write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('.subchain(name: "grp", id: "abc") {'))
+    assert.ok(out.includes('.text(text: "in sub :) ok", font: "Inter")'))
+    assert.ok(out.includes('  .write(o0)'))
+    assert.strictEqual(formatDsl(out), out, 'idempotent across subchains')
+})
+
+test('formatDsl preserves escaped quotes inside string literals', () => {
+    const input = 'solid().text(text: "Hello \\"World\\": 1, 2").write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('"Hello \\"World\\": 1, 2"'), `escaped quotes preserved, got: ${out}`)
+    assert.ok(out.includes('.write(o0)'), `chain split preserved, got: ${out}`)
+    assert.strictEqual(formatDsl(out), out, 'idempotent with escaped quotes')
+})
+
+test('formatDsl preserves dollar signs and replace tokens in multi-line strings', () => {
+    const input = 'solid().text(text: """Price: $$10\nItem: $& sale\nCode: $` and $\' and $1""").write(o0)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('Price: $$10\nItem: $& sale\nCode: $` and $\' and $1'), `replace tokens preserved, got: ${out}`)
+    assert.ok(out.includes('.write(o0)'), 'chain continuation preserved')
+    assert.strictEqual(formatDsl(out), out, 'idempotent across dollar tokens')
+})
+
+test('formatDsl preserves search line trailing comments with commas', () => {
+    const input = 'search synth, filter // tags: audio, sound, fx'
+    const out = formatDsl(input)
+    assert.strictEqual(out, 'search synth, filter // tags: audio, sound, fx')
+})
+
+test('formatDsl splits chains even when preceded by closing delimiter on same line', () => {
+    const input = ').write(o0).palette(index: 2)'
+    const out = formatDsl(input)
+    assert.ok(out.includes('.write(o0)\n  .palette(index: 2)'), `split after closing delimiter, got: ${out}`)
+})
+
+

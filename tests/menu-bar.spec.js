@@ -352,89 +352,66 @@ test('theme switching preserves contrast across menu dropdowns and modals', asyn
     const dropdownPanel = page.locator('#viewMenuTitle ~ .hf-menubar-panel')
     await expect(dropdownPanel).toBeVisible()
 
-    // Function to calculate relative luminance of an rgb(r, g, b) string
-    const getLuminance = (rgbStr) => {
-        const match = rgbStr.match(/\d+/g)
-        if (!match) return 0
-        const [r, g, b] = match.slice(0, 3).map(Number).map(v => {
-            const s = v / 255
-            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
-        })
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b
-    }
-
     const getContrastRatio = (lum1, lum2) => {
         const l1 = Math.max(lum1, lum2)
         const l2 = Math.min(lum1, lum2)
         return (l1 + 0.05) / (l2 + 0.05)
     }
 
+    const getLuminanceOf = async (locatorOrHandle, property) => {
+        return locatorOrHandle.evaluate((el, prop) => {
+            const canvas = document.createElement('canvas')
+            canvas.width = 1
+            canvas.height = 1
+            const ctx = canvas.getContext('2d', { willReadFrequently: true })
+            ctx.fillStyle = window.getComputedStyle(el)[prop]
+            ctx.fillRect(0, 0, 1, 1)
+            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+            const [rs, gs, bs] = [r, g, b].map(v => {
+                const s = v / 255
+                return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+            })
+            return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
+        }, property)
+    }
+
     // 1. Verify dark theme dropdown contrast
-    const darkDropdownStyles = await dropdownPanel.evaluate(el => {
-        const item = el.querySelector('.hf-menu-item')
-        return {
-            panelBg: window.getComputedStyle(el).backgroundColor,
-            itemColor: window.getComputedStyle(item).color,
-            shadow: window.getComputedStyle(el).boxShadow,
-        }
-    })
-    expect(darkDropdownStyles.shadow).not.toBe('none')
-    const darkRatio = getContrastRatio(
-        getLuminance(darkDropdownStyles.panelBg),
-        getLuminance(darkDropdownStyles.itemColor)
-    )
+    const darkPanelShadow = await dropdownPanel.evaluate(el => window.getComputedStyle(el).boxShadow)
+    expect(darkPanelShadow).not.toBe('none')
+    const darkBgLum = await getLuminanceOf(dropdownPanel, 'backgroundColor')
+    const darkItemLum = await getLuminanceOf(dropdownPanel.locator('.hf-menu-item').first(), 'color')
+    const darkRatio = getContrastRatio(darkBgLum, darkItemLum)
     expect(darkRatio).toBeGreaterThan(4.5)
 
     // 2. Switch to light theme
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light' })
+    await page.waitForTimeout(200)
 
-    const lightDropdownStyles = await dropdownPanel.evaluate(el => {
-        const item = el.querySelector('.hf-menu-item')
-        return {
-            panelBg: window.getComputedStyle(el).backgroundColor,
-            itemColor: window.getComputedStyle(item).color,
-        }
-    })
-    const lightRatio = getContrastRatio(
-        getLuminance(lightDropdownStyles.panelBg),
-        getLuminance(lightDropdownStyles.itemColor)
-    )
+    const lightBgLum = await getLuminanceOf(dropdownPanel, 'backgroundColor')
+    const lightItemLum = await getLuminanceOf(dropdownPanel.locator('.hf-menu-item').first(), 'color')
+    const lightRatio = getContrastRatio(lightBgLum, lightItemLum)
     expect(lightRatio).toBeGreaterThan(4.5)
+
+
 
     // 3. Open shortcuts dialog under light theme and verify contrast
     await page.evaluate(() => document.getElementById('viewMenuItem-shortcuts').click())
     const shortcutsModal = page.locator('.shortcuts-modal')
     await expect(shortcutsModal).toBeVisible()
 
-    const modalContrast = await shortcutsModal.evaluate(el => {
-        const title = el.querySelector('.shortcuts-title')
-        const desc = el.querySelector('.shortcut-desc')
-        const kbd = el.querySelector('kbd')
-        return {
-            modalBg: window.getComputedStyle(el).backgroundColor,
-            titleColor: window.getComputedStyle(title).color,
-            descColor: window.getComputedStyle(desc).color,
-            kbdBg: window.getComputedStyle(kbd).backgroundColor,
-            kbdColor: window.getComputedStyle(kbd).color,
-        }
-    })
+    const modalBgLum = await getLuminanceOf(shortcutsModal, 'backgroundColor')
+    const titleLum = await getLuminanceOf(shortcutsModal.locator('.shortcuts-title'), 'color')
+    const descLum = await getLuminanceOf(shortcutsModal.locator('.shortcut-desc').first(), 'color')
+    const kbdBgLum = await getLuminanceOf(shortcutsModal.locator('kbd').first(), 'backgroundColor')
+    const kbdColorLum = await getLuminanceOf(shortcutsModal.locator('kbd').first(), 'color')
 
-    const modalTitleRatio = getContrastRatio(
-        getLuminance(modalContrast.modalBg),
-        getLuminance(modalContrast.titleColor)
-    )
+    const modalTitleRatio = getContrastRatio(modalBgLum, titleLum)
     expect(modalTitleRatio).toBeGreaterThan(4.5)
 
-    const modalDescRatio = getContrastRatio(
-        getLuminance(modalContrast.modalBg),
-        getLuminance(modalContrast.descColor)
-    )
+    const modalDescRatio = getContrastRatio(modalBgLum, descLum)
     expect(modalDescRatio).toBeGreaterThan(4.5)
 
-    const kbdRatio = getContrastRatio(
-        getLuminance(modalContrast.kbdBg),
-        getLuminance(modalContrast.kbdColor)
-    )
+    const kbdRatio = getContrastRatio(kbdBgLum, kbdColorLum)
     expect(kbdRatio).toBeGreaterThan(4.5)
 
     // Close dialog

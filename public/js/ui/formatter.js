@@ -5,147 +5,300 @@
  *   - args: single space after ':', single space after ','
  *   - blank lines preserved as block separators
  *
- * String literals are never reformatted: characters inside "..." / '...'
- * (URLs like "https://x", text like "a, b") pass through verbatim so
+ * String literals are never reformatted: characters inside "..." / '...' / """...""" / '''...'''
+ * (URLs like "https://x", text like "a, b", multi-line text) pass through verbatim so
  * formatting can never corrupt a working sketch's media url or text content.
+ *
+ * Comments (// ...) are preserved intact, without breaking chain continuity,
+ * corrupting URLs or code, or collapsing arguments.
  */
 
 /**
- * Return a same-length copy of `text` with every character inside a string
- * literal (and the surrounding quotes) replaced by a space. Structural scans
- * (paren depth, splitting a chain on '.') run over the mask so a ':' '.' '('
- * ')' or ',' inside a quoted value is never mistaken for syntax, while the
- * original text is used for slicing so the literal survives intact. A literal
- * is paired on the SAME quote char, so `"O'Brien, hi"` stays one piece — this
- * is deliberately more robust than the engine's either-quote `[^"']` extraction
- * (which would split that literal at the apostrophe); do not "align" the two.
- * An unterminated quote masks to end-of-string. No escape handling.
+ * Scan `text` into non-overlapping tokens:
+ * - triple_string: """...""" or '''...'''
+ * - string: "..." or '...'
+ * - comment: //...
+ * - code: everything else
+ *
+ * Literals and comments are extracted safely so that quotes inside comments,
+ * URLs with slashes/colons, and parens inside strings are never misidentified.
+ *
  * @param {string} text
- * @returns {string}
+ * @returns {Array<{type: 'code'|'string'|'triple_string'|'comment', text: string}>}
  */
-function maskStrings(text) {
-    let out = ''
+function scanTokens(text) {
+    const tokens = []
     let i = 0
+    let codeStart = 0
+
+    function flushCode(end) {
+        if (end > codeStart) {
+            tokens.push({ type: 'code', text: text.slice(codeStart, end) })
+        }
+    }
+
     while (i < text.length) {
-        const c = text[i]
-        if (c === '"' || c === "'") {
-            out += ' '            // opening quote
-            i++
-            while (i < text.length && text[i] !== c) { out += ' '; i++ }
-            if (i < text.length) { out += ' '; i++ }   // closing quote
+        if (text.startsWith('"""', i)) {
+            flushCode(i)
+            let j = i + 3
+            while (j < text.length && !text.startsWith('"""', j)) {
+                if (text[j] === '\\' && j + 1 < text.length) {
+                    j += 2
+                    continue
+                }
+                j++
+            }
+            if (j < text.length) j += 3
+            tokens.push({ type: 'triple_string', text: text.slice(i, j) })
+            i = j
+            codeStart = i
+        } else if (text.startsWith("'''", i)) {
+            flushCode(i)
+            let j = i + 3
+            while (j < text.length && !text.startsWith("'''", j)) {
+                if (text[j] === '\\' && j + 1 < text.length) {
+                    j += 2
+                    continue
+                }
+                j++
+            }
+            if (j < text.length) j += 3
+            tokens.push({ type: 'triple_string', text: text.slice(i, j) })
+            i = j
+            codeStart = i
+        } else if (text[i] === '"' || text[i] === "'") {
+            flushCode(i)
+            const quote = text[i]
+            let j = i + 1
+            while (j < text.length && text[j] !== '\n') {
+                if (text[j] === '\\' && j + 1 < text.length) {
+                    j += 2
+                    continue
+                }
+                if (text[j] === quote) {
+                    j++
+                    break
+                }
+                j++
+            }
+            tokens.push({ type: 'string', text: text.slice(i, j) })
+            i = j
+            codeStart = i
+        } else if (text.startsWith('//', i)) {
+            flushCode(i)
+            let j = i + 2
+            while (j < text.length && text[j] !== '\n') j++
+            tokens.push({ type: 'comment', text: text.slice(i, j) })
+            i = j
+            codeStart = i
         } else {
-            out += c
             i++
         }
     }
-    return out
+    flushCode(text.length)
+    return tokens
+}
+
+/**
+ * Return a same-length copy of `text` where every non-code character (strings,
+ * comments) is replaced by a space (preserving newlines in multi-line strings).
+ * Structural scans (paren depth, splitting a chain on '.') run over the mask
+ * so syntax characters inside literals or comments are never mistaken for code.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function maskCode(text) {
+    const tokens = scanTokens(text)
+    return tokens.map(t => {
+        if (t.type === 'code') return t.text
+        return t.text.replace(/[^\n]/g, ' ')
+    }).join('')
+}
+
+/**
+ * Normalise whitespace around ':' ',' '(' ')', but only in the code spans
+ * between string literals and comments — literals and comments pass through untouched.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function formatArgs(text) {
+    const tokens = scanTokens(text)
+    return tokens.map(t => {
+        if (t.type === 'code') {
+            return t.text
+                .replace(/\s*:\s*/g, ': ')
+                .replace(/\s*,\s*/g, ', ')
+                .replace(/\(\s+/g, '(')
+                .replace(/\s+\)/g, ')')
+        }
+        return t.text
+    }).join('')
+}
+
+/**
+ * Check whether a string contains any comment token.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+function hasLineComment(text) {
+    const tokens = scanTokens(text)
+    return tokens.some(t => t.type === 'comment')
+}
+
+/**
+ * Format a chained statement, splitting method steps onto separate lines indented by 2 spaces.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function formatChain(text) {
+    const mask = maskCode(text)
+    const parts = []
+    let depth = 0, start = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = mask[i]
+        if (c === '(' || c === '{') depth++
+        else if (c === ')' || c === '}') depth = Math.max(0, depth - 1)
+        else if (c === '.' && depth === 0 && i > 0) {
+            parts.push(text.slice(start, i))
+            start = i
+        }
+    }
+    parts.push(text.slice(start))
+    return parts.map((p, i) => {
+        const trimmed = p.trim()
+        if (!trimmed) return ''
+        const formatted = formatArgs(trimmed)
+        return i === 0 ? formatted : '  ' + formatted
+    }).filter(Boolean).join('\n')
 }
 
 export function formatDsl(input) {
     if (!input || typeof input !== 'string') return input || ''
 
-    const formatChain = (text) => {
-        const mask = maskStrings(text)
-        const parts = []
-        let depth = 0, start = 0
-        for (let i = 0; i < text.length; i++) {
-            const c = mask[i]
-            if (c === '(') depth++
-            else if (c === ')') depth--
-            else if (c === '.' && depth === 0 && i > 0) {
-                parts.push(text.slice(start, i))
-                start = i
-            }
+    // Step 0: Protect multi-line triple-quoted strings with placeholder tokens
+    // so their internal newlines and indentation survive Pass 1 intact.
+    const tripleStrings = []
+    const tokens = scanTokens(input)
+    let preprocessed = ''
+    for (const token of tokens) {
+        if (token.type === 'triple_string' && token.text.includes('\n')) {
+            const key = `__POLY_TRIPLE_${tripleStrings.length}__`
+            tripleStrings.push(token.text)
+            preprocessed += key
+        } else {
+            preprocessed += token.text
         }
-        parts.push(text.slice(start))
-        return parts.map((p, i) => i === 0
-            ? formatArgs(p.trim())
-            : '  ' + formatArgs(p.trim())).join('\n')
-    }
-
-    // Normalise whitespace around ':' ',' '(' ')', but only in the code spans
-    // between string literals — literals are copied through untouched.
-    const formatArgs = (text) => {
-        let out = ''
-        let i = 0
-        while (i < text.length) {
-            const c = text[i]
-            if (c === '"' || c === "'") {
-                let j = i + 1
-                while (j < text.length && text[j] !== c) j++
-                if (j < text.length) j++   // include closing quote
-                out += text.slice(i, j)
-                i = j
-            } else {
-                let j = i
-                while (j < text.length && text[j] !== '"' && text[j] !== "'") j++
-                out += text.slice(i, j)
-                    .replace(/\s*:\s*/g, ': ')
-                    .replace(/\s*,\s*/g, ', ')
-                    .replace(/\(\s+/g, '(')
-                    .replace(/\s+\)/g, ')')
-                i = j
-            }
-        }
-        return out
     }
 
     // Pass 1: collapse multi-line statements (unbalanced parens) into logical lines.
-    // Also fold chain-continuation lines (starting with '.') onto the previous statement.
-    // Blank physical lines become real blank logical lines (block separators).
-    const physical = input.split('\n')
+    // Also fold chain-continuation lines (starting with '.') onto the previous statement,
+    // provided the previous statement does not contain a comment.
+    // Multi-line blocks containing comments are kept on separate lines to avoid commenting out code.
+    const physical = preprocessed.split('\n')
     const logical = []
-    let buf = ''
+    let bufLines = []
     let depth = 0
+
     for (const raw of physical) {
         const trimmed = raw.trim()
-        // Fold chain-continuation onto previous logical line when not in an open block.
-        // Detection happens BEFORE depth update so this line's own '(' doesn't disqualify it.
-        const isChainCont = depth === 0 && !buf && trimmed.startsWith('.')
-            && logical.length && logical[logical.length - 1] !== ''
-        for (const c of maskStrings(raw)) {
-            if (c === '(') depth++
-            else if (c === ')') depth = Math.max(0, depth - 1)
+        const mask = maskCode(raw)
+        let lineDepthDelta = 0
+        for (const c of mask) {
+            if (c === '(' || c === '{') lineDepthDelta++
+            else if (c === ')' || c === '}') lineDepthDelta--
         }
+
+        const prevLogical = logical.length ? logical[logical.length - 1] : ''
+        const prevHasComment = hasLineComment(prevLogical)
+        const isChainCont = depth === 0 && bufLines.length === 0 && trimmed.startsWith('.')
+            && logical.length && prevLogical !== '' && !prevHasComment
+
+        depth = Math.max(0, depth + lineDepthDelta)
+
         if (isChainCont) {
             logical[logical.length - 1] += ' ' + trimmed
             if (depth !== 0) {
-                // Continuation opened an unbalanced block; pull it back into buf so the
-                // following physical lines collect into the same logical statement.
-                buf = logical.pop()
+                bufLines = [logical.pop()]
             }
             continue
         }
-        if (buf) {
-            buf += ' ' + trimmed
+
+        if (depth > 0 || bufLines.length > 0) {
+            bufLines.push(trimmed)
+            if (depth === 0) {
+                const anyComment = bufLines.some(hasLineComment)
+                if (anyComment) {
+                    logical.push(...bufLines)
+                } else {
+                    logical.push(bufLines.join(' '))
+                }
+                bufLines = []
+            }
         } else {
-            buf = trimmed
-        }
-        if (depth === 0) {
-            logical.push(buf)
-            buf = ''
+            logical.push(trimmed)
         }
     }
-    if (buf) logical.push(buf)
+    if (bufLines.length > 0) {
+        logical.push(...bufLines)
+    }
 
-    // Pass 2: per-logical-line formatting (existing semantics)
+    // Pass 2: per-logical-line formatting
     const out = []
     let pendingBlank = false
+    let inChain = false
+
     for (const raw of logical) {
         const line = raw.trim()
         if (!line) {
             if (out.length && !pendingBlank) pendingBlank = true
+            inChain = false
             continue
         }
         if (pendingBlank) { out.push(''); pendingBlank = false }
-        if (line.startsWith('search')) {
-            const items = line.slice(6).split(',').map(s => s.trim()).filter(Boolean)
-            out.push('search ' + items.join(', '))
-        } else if (line.startsWith('render(') || line.startsWith('let ') || line.startsWith('//')) {
+
+        if (line.startsWith('//')) {
+            out.push(inChain ? '  ' + line : line)
+        } else if (line.startsWith('search')) {
+            inChain = false
+            const tokens = scanTokens(line)
+            let searchBody = ''
+            let commentPart = ''
+            for (const t of tokens) {
+                if (t.type === 'comment') {
+                    commentPart = ' ' + t.text
+                    break
+                }
+                searchBody += t.text
+            }
+            const items = searchBody.slice(6).split(',').map(s => s.trim()).filter(Boolean)
+            out.push('search ' + items.join(', ') + commentPart)
+        } else if (line.startsWith('render(') || line.startsWith('let ')) {
+            inChain = false
             out.push(formatArgs(line))
         } else {
-            out.push(...formatChain(line).split('\n'))
+            const formatted = formatChain(line)
+            const lines = formatted.split('\n')
+            for (let i = 0; i < lines.length; i++) {
+                const l = lines[i]
+                if (line.startsWith('.') && i === 0 && !l.startsWith('  ')) {
+                    out.push('  ' + l)
+                } else {
+                    out.push(l)
+                }
+            }
+            inChain = true
         }
     }
-    return out.join('\n')
+
+    let result = out.join('\n')
+    // Restore triple-quoted multi-line strings verbatim, using function replacer to prevent
+    // special replacement patterns ($$, $&, $`, $') in strings from corrupting output.
+    for (let i = 0; i < tripleStrings.length; i++) {
+        result = result.replace(`__POLY_TRIPLE_${i}__`, () => tripleStrings[i])
+    }
+    return result
 }
