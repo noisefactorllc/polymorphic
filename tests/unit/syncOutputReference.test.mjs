@@ -2251,6 +2251,49 @@ describe('SyncOutputController bounded recovery', () => {
         }
     })
 
+    test('dispose during start retry cancels the retry timer and rejects with SYNC_LIFECYCLE', async () => {
+        const original = {
+            encoder: globalThis.VideoEncoder,
+            frame: globalThis.VideoFrame,
+            stream: globalThis.WebSocketStream,
+            create: SyncH264CanvasSender.create
+        }
+        let attempts = 0
+        try {
+            globalThis.VideoEncoder = class VideoEncoder {}
+            globalThis.VideoFrame = class VideoFrame {}
+            globalThis.WebSocketStream = class WebSocketStream {}
+            SyncH264CanvasSender.create = async () => {
+                attempts++
+                const timeout = new Error('H.264 hardware encoder warmup timed out')
+                timeout.code = 'SYNC_ENCODING_FAILED'
+                timeout.transient = true
+                throw timeout
+            }
+            const fixture = await connectedFixture({
+                welcomeVersion: '0.2.87',
+                renderer: { addSink: () => () => {} }
+            })
+            const starting = fixture.controller.start('WarmupDispose')
+            await flushMicrotasks(12)
+
+            assert.equal(attempts, 1)
+            assert.equal(fixture.timers.timeouts.size, 1)
+
+            fixture.controller.dispose()
+            assert.equal(fixture.timers.timeouts.size, 0)
+            await assert.rejects(starting, {
+                code: 'SYNC_LIFECYCLE'
+            })
+            assert.equal(fixture.controller.state.status, 'idle')
+        } finally {
+            globalThis.VideoEncoder = original.encoder
+            globalThis.VideoFrame = original.frame
+            globalThis.WebSocketStream = original.stream
+            SyncH264CanvasSender.create = original.create
+        }
+    })
+
     test('an encoding failure that is not a timeout still ends the output', async () => {
         const initial = senderFixture()
         const fixture = await connectedFixture({
