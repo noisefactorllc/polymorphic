@@ -26,3 +26,34 @@ test('Scenes restore from raw stored data round-trips', () => {
     const s2 = new Scenes(store)
     assert.strictEqual(s2.load(3), 'foo')
 })
+
+test('Scenes save rolls back and reports failure when store write fails', () => {
+    const store = {
+        data: { 1: 'original' },
+        get() { return this.data },
+        set() { return { success: false, quotaExceeded: true, error: new Error('Quota') } }
+    }
+    const s = new Scenes(store)
+    const res = s.save(1, 'updated')
+    assert.strictEqual(res.success, false)
+    assert.strictEqual(res.quotaExceeded, true)
+    // Slot 1 must remain rolled back to original
+    assert.strictEqual(s.load(1), 'original')
+
+    // Saving a new slot that fails must delete it from in-memory cache
+    const res2 = s.save(2, 'new')
+    assert.strictEqual(res2.success, false)
+    assert.strictEqual(s.load(2), null)
+})
+
+test('Scenes clear rolls back when store write fails', () => {
+    const store = {
+        data: { 1: 'keep' },
+        get() { return this.data },
+        set() { return { success: false } }
+    }
+    const s = new Scenes(store)
+    const ok = s.clear(1)
+    assert.strictEqual(ok, false)
+    assert.strictEqual(s.load(1), 'keep')
+})

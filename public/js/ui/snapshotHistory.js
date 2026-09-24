@@ -10,11 +10,14 @@
  * meant for "I made a bunch of changes that all compiled — let me jump back".
  */
 
+import { isQuotaExceededError, registerTransientPruner, getLocalStorage } from '../storageGuard.js'
+
 const STORAGE_KEY = 'polymorphic-snapshot-history'
 const MAX_ENTRIES = 50
 
-class SnapshotHistory {
-    constructor() {
+export class SnapshotHistory {
+    constructor(storage) {
+        this._storage = storage !== undefined ? storage : getLocalStorage()
         this._entries = []
         this._cursor = -1     // index of current entry, -1 if none
         this._lastSaved = null // dedupe consecutive identical pushes
@@ -92,8 +95,9 @@ class SnapshotHistory {
     }
 
     _load() {
+        if (!this._storage) return
         try {
-            const raw = localStorage.getItem(STORAGE_KEY)
+            const raw = this._storage.getItem(STORAGE_KEY)
             if (raw) {
                 const data = JSON.parse(raw)
                 this._entries = Array.isArray(data.entries) ? data.entries.slice(-MAX_ENTRIES) : []
@@ -109,10 +113,88 @@ class SnapshotHistory {
     }
 
     _save() {
+        if (!this._storage) return
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ entries: this._entries, cursor: this._cursor }))
-        } catch { /* quota or disabled — silent */ }
+            this._storage.setItem(STORAGE_KEY, JSON.stringify({ entries: this._entries, cursor: this._cursor }))
+        } catch (err) {
+            if (isQuotaExceededError(err)) {
+                // Quota exceeded: trim older entries and retry
+                if (this.prune(Math.max(1, Math.floor(this._entries.length / 2)))) {
+                    return
+                }
+                // If halving didn't succeed, trim to only the active cursor entry
+                if (this._entries.length > 1 && this._cursor >= 0) {
+                    const prevEntries = this._entries
+                    const prevCursor = this._cursor
+                    this._entries = [this._entries[this._cursor]]
+                    this._cursor = 0
+                    try {
+                        this._storage.setItem(STORAGE_KEY, JSON.stringify({ entries: this._entries, cursor: this._cursor }))
+                        this._notify()
+                    } catch {
+                        this._entries = prevEntries
+                        this._cursor = prevCursor
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Prunes old history entries to free up storage space.
+     * Keeps up to targetCount entries, preserving the current cursor item.
+     * @param {number} [targetCount=10]
+     * @returns {boolean} True if entries were evicted.
+     */
+    prune(targetCount = 10) {
+        if (this._entries.length <= targetCount) return false
+        const prevEntries = this._entries
+        const prevCursor = this._cursor
+        const currentItem = this._cursor >= 0 ? this._entries[this._cursor] : null
+
+        let newEntries
+        if (this._cursor >= 0) {
+            // Retain a window that guarantees currentItem is preserved
+            const start = Math.max(0, Math.min(this._cursor - Math.floor(targetCount / 2), this._entries.length - targetCount))
+            newEntries = this._entries.slice(start, start + targetCount)
+        } else {
+            newEntries = this._entries.slice(-targetCount)
+        }
+
+        this._entries = newEntries
+        if (currentItem) {
+            const idx = this._entries.indexOf(currentItem)
+            this._cursor = idx >= 0 ? idx : this._entries.length - 1
+        } else {
+            this._cursor = Math.min(prevCursor, this._entries.length - 1)
+        }
+
+        if (this._storage) {
+            try {
+                this._storage.setItem(STORAGE_KEY, JSON.stringify({ entries: this._entries, cursor: this._cursor }))
+                this._notify()
+                return true
+            } catch {
+                // Roll back in memory if write failed
+                this._entries = prevEntries
+                this._cursor = prevCursor
+                return false
+            }
+        }
+        this._notify()
+        return true
     }
 }
 
 export const snapshotHistory = new SnapshotHistory()
+
+registerTransientPruner(() => {
+    if (snapshotHistory._entries.length > 5) {
+        return snapshotHistory.prune(5)
+    }
+    if (snapshotHistory._entries.length > 1) {
+        return snapshotHistory.prune(1)
+    }
+    return false
+})
+

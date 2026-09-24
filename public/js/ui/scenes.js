@@ -10,20 +10,24 @@
  *   • `Cmd/Ctrl+Shift+1..9`  — save current DSL to slot
  */
 
+import { safeSetItem, safeGetItem, getLocalStorage } from '../storageGuard.js'
+
 const KEY = 'polymorphic-scenes'
 
 const localStorageStore = {
     get() {
+        const storage = getLocalStorage()
+        if (!storage) return null
+        const raw = safeGetItem(storage, KEY)
+        if (!raw) return null
         try {
-            if (typeof localStorage === 'undefined') return null
-            return JSON.parse(localStorage.getItem(KEY) || 'null')
+            return JSON.parse(raw)
         } catch { return null }
     },
     set(v) {
-        try {
-            if (typeof localStorage === 'undefined') return
-            localStorage.setItem(KEY, JSON.stringify(v))
-        } catch {}
+        const storage = getLocalStorage()
+        if (!storage) return { success: false, reason: 'unsupported' }
+        return safeSetItem(storage, KEY, JSON.stringify(v))
     }
 }
 
@@ -36,8 +40,15 @@ export class Scenes {
         if (!Number.isInteger(slot) || slot < 1 || slot > 9) {
             throw new Error('Scene slot must be 1..9')
         }
+        const previous = this._slots[slot]
         this._slots[slot] = dsl
-        this._store.set(this._slots)
+        const res = this._store.set(this._slots)
+        if (res && res.success === false) {
+            if (previous !== undefined) this._slots[slot] = previous
+            else delete this._slots[slot]
+            return res
+        }
+        return { success: true }
     }
     load(slot) {
         return this._slots[slot] || null
@@ -46,8 +57,14 @@ export class Scenes {
         return Object.keys(this._slots).map(k => ({ slot: Number(k), dsl: this._slots[k] }))
     }
     clear(slot) {
+        const previous = this._slots[slot]
         delete this._slots[slot]
-        this._store.set(this._slots)
+        const res = this._store.set(this._slots)
+        if (res && res.success === false) {
+            if (previous !== undefined) this._slots[slot] = previous
+            return false
+        }
+        return true
     }
 }
 

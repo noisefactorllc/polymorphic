@@ -2368,8 +2368,16 @@ function setupMenuBar() {
                 // since live coders save mid-edit.
                 const dsl = dslEditor?.value || ''
                 if (dsl.trim()) {
-                    scenes.save(slot, dsl)
-                    showToast(`Saved scene ${slot}`, 'success')
+                    const res = scenes.save(slot, dsl)
+                    if (res && res.success === false) {
+                        if (res.quotaExceeded) {
+                            showToast(`Could not save scene ${slot}: storage quota exceeded`, 'error')
+                        } else {
+                            showToast(`Could not save scene ${slot}: storage error`, 'error')
+                        }
+                    } else {
+                        showToast(`Saved scene ${slot}`, 'success')
+                    }
                 } else {
                     showToast(`Cannot save empty scene ${slot}`, 'warning')
                 }
@@ -2452,7 +2460,8 @@ function init() {
                 updateResetButtonVisibility()
                 scheduleHotReload()
             }
-        }
+        },
+        showToast
     })
     
     // Set up menu bar

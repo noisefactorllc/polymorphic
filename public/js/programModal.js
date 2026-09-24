@@ -37,6 +37,7 @@ let programDeleteBtn = null
 // Callbacks
 let getDsl = null
 let setDsl = null
+let showToast = null
 
 /**
  * Show a specific view in the program modal
@@ -183,6 +184,7 @@ export function closeProgramModal() {
 export function initProgramModal(options) {
     getDsl = options.getDsl
     setDsl = options.setDsl
+    showToast = options.showToast || (typeof window !== 'undefined' ? window.showToast : null)
 
     // Cache DOM elements
     programModal = document.getElementById('programModal')
@@ -252,8 +254,17 @@ function setupEventHandlers() {
         if (!name || !getDsl) return
 
         const dsl = getDsl()
-        programs.saveProgram(name, dsl)
+        const res = programs.saveProgram(name, dsl)
+        if (res && res.success === false) {
+            if (res.quotaExceeded) {
+                showToast?.('Could not save program: storage quota exceeded. Free up space by deleting unused programs.', 'error')
+            } else {
+                showToast?.('Could not save program: storage error', 'error')
+            }
+            return
+        }
         programModal?.close()
+        showToast?.(`Saved program "${name}"`, 'success')
     })
 
     // Delete checkbox enables button
@@ -268,7 +279,12 @@ function setupEventHandlers() {
         const name = programDeleteSelect?.value
         if (!name) return
 
-        programs.deleteProgram(name)
+        const ok = programs.deleteProgram(name)
+        if (!ok) {
+            showToast?.(`Could not delete program "${name}"`, 'error')
+            return
+        }
         programModal?.close()
+        showToast?.(`Deleted program "${name}"`, 'info')
     })
 }

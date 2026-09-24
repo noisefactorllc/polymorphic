@@ -4,13 +4,16 @@
  * @module programs
  */
 
+import { safeSetItem, safeGetItem, getLocalStorage } from './storageGuard.js'
+
 const STORAGE_KEY = 'polymorphic-programs'
 
 /**
  * Programs manager class for saving, loading, and deleting user DSL programs
  */
-class Programs {
-    constructor() {
+export class Programs {
+    constructor(storage) {
+        this._storage = storage !== undefined ? storage : getLocalStorage()
         this.programs = {}
         this.load()
     }
@@ -27,21 +30,27 @@ class Programs {
      * Loads programs from localStorage
      */
     load() {
-        if (Object.prototype.hasOwnProperty.call(localStorage, STORAGE_KEY)) {
-            try {
-                this.programs = JSON.parse(localStorage.getItem(STORAGE_KEY))
-            } catch (err) {
-                console.error('Error loading programs:', err)
-                this.programs = {}
+        if (!this._storage) return
+        try {
+            const raw = safeGetItem(this._storage, STORAGE_KEY)
+            if (raw) {
+                this.programs = JSON.parse(raw) || {}
             }
+        } catch (err) {
+            console.error('Error loading programs:', err)
+            this.programs = {}
         }
     }
 
     /**
      * Saves programs to localStorage
+     * @returns {{ success: boolean, quotaExceeded?: boolean, error?: unknown, reason?: string, recovered?: boolean }}
      */
     save() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.programs))
+        if (!this._storage) {
+            return { success: false, reason: 'unsupported' }
+        }
+        return safeSetItem(this._storage, STORAGE_KEY, JSON.stringify(this.programs))
     }
 
     /**
@@ -76,25 +85,41 @@ class Programs {
      * Saves a program
      * @param {string} name - Program name
      * @param {string} dsl - DSL source code
+     * @returns {{ success: boolean, quotaExceeded?: boolean, error?: unknown, recovered?: boolean }}
      */
     saveProgram(name, dsl) {
+        const previous = this.programs[name]
         this.programs[name] = {
             name,
             dsl,
             savedAt: Date.now()
         }
-        this.save()
+        const res = this.save()
+        if (res && res.success === false) {
+            if (previous !== undefined) {
+                this.programs[name] = previous
+            } else {
+                delete this.programs[name]
+            }
+            return res
+        }
+        return res || { success: true }
     }
 
     /**
      * Deletes a program
      * @param {string} name - Program name
-     * @returns {boolean} - True if deleted, false if not found
+     * @returns {boolean} - True if deleted, false if not found or save failed
      */
     deleteProgram(name) {
         if (this.has(name)) {
+            const previous = this.programs[name]
             delete this.programs[name]
-            this.save()
+            const res = this.save()
+            if (res && res.success === false) {
+                this.programs[name] = previous
+                return false
+            }
             return true
         }
         return false
