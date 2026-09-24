@@ -2545,6 +2545,16 @@ function init() {
         attachScrubber(dslEditor, {
             onScrubStart: () => { scrubbing = true },
             onScrubEnd: () => { scrubbing = false },
+            getParamBounds: (funcName, paramName) => {
+                if (!funcName || !paramName) return null
+                const def = lookupEffectDef({ name: funcName, fullName: funcName })
+                if (!def) return null
+                const spec = def.globals?.[paramName] || (Array.isArray(def.params) ? def.params.find(p => p.name === paramName) : null)
+                if (spec && (spec.min != null || spec.max != null)) {
+                    return { min: spec.min, max: spec.max, isInt: spec.type === 'int' }
+                }
+                return null
+            },
             recompile: async () => {
                 // While scrubbing we want immediate compile; debounce is too slow
                 if (hotReloadTimeout) {

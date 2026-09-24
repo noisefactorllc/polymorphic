@@ -4,7 +4,9 @@
  * Alt+drag any numeric literal in the editor to scrub its value live.
  *  - Horizontal drag changes the value.
  *  - Step size adapts to the literal's precision (integer → 1 per px, 0.1 → 0.01 per px, etc).
- *  - Shift slows it down 10×, Cmd/Ctrl speeds it up 10×.
+ *  - Shift fine scrubs 0.1×, Shift+Cmd/Ctrl ultra-fine scrubs 0.01×, Cmd/Ctrl coarse scrubs 10×.
+ *  - Smooth delta drag dynamics prevent jumping when modifiers change mid-drag.
+ *  - Boundary clamping preserves valid shader parameter ranges with zero turnaround lag.
  *  - On release, the editor's normal hot reload kicks in.
  *
  * The scrubber works on top of any editor whose `getTextarea()` returns a
@@ -51,6 +53,11 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             box-shadow: var(--hf-shadow-lg, 0 4px 16px rgba(0,0,0,0.4));
             transition: opacity 0.1s;
         }
+        .scrubber-tooltip-value {
+            font-weight: 600;
+            color: var(--hf-text-bright, #fff);
+            letter-spacing: -0.01em;
+        }
         .scrubber-tooltip-hint {
             font-size: var(--hf-size-xs, 0.625rem);
             color: var(--hf-text-dim, #aaa);
@@ -59,6 +66,169 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     `
     document.head.appendChild(style)
 }
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')
+const MOD_LABEL = isMac ? '⌘' : 'Ctrl'
+
+export const KNOWN_BOUNDS = {
+    'perlin.octaves': { min: 1, max: 8, isInt: true },
+    'noise.octaves': { min: 1, max: 8, isInt: true },
+    'curl.octaves': { min: 1, max: 8, isInt: true },
+    'adjust.rotation': { min: -180, max: 180, isInt: false },
+    'adjust.hueRange': { min: 0, max: 200, isInt: false },
+    'adjust.saturation': { min: 0, max: 4, isInt: false },
+    'adjust.brightness': { min: 0, max: 10, isInt: false },
+    'adjust.contrast': { min: 0, max: 1, isInt: false },
+    'bloom.radius': { min: 1, max: 128, isInt: false },
+    'bloom.taps': { min: 8, max: 64, isInt: true },
+    'bloom.threshold': { min: 0, max: 2, isInt: false },
+    'bloom.softKnee': { min: 0, max: 0.5, isInt: false },
+    'bloom.intensity': { min: 0, max: 3, isInt: false },
+    'posterize.levels': { min: 1, max: 256, isInt: true },
+    'blur.radiusX': { min: 0, max: 50, isInt: false },
+    'blur.radiusY': { min: 0, max: 50, isInt: false },
+    'bulge.rotation': { min: -180, max: 180, isInt: false },
+    'bulge.strength': { min: 0, max: 100, isInt: false },
+    'celShading.mix': { min: 0, max: 1, isInt: false },
+}
+
+export const GENERIC_PARAM_BOUNDS = {
+    octaves: { min: 1, max: 8, isInt: true },
+    levels: { min: 1, max: 256, isInt: true },
+    taps: { min: 2, max: 128, isInt: true },
+    steps: { min: 1, max: 1024, isInt: true },
+    iterations: { min: 1, max: 100, isInt: true },
+    passes: { min: 1, max: 32, isInt: true },
+    opacity: { min: 0, max: 1, isInt: false },
+    alpha: { min: 0, max: 1, isInt: false },
+    roughness: { min: 0, max: 1, isInt: false },
+    metallic: { min: 0, max: 1, isInt: false },
+    probability: { min: 0, max: 1, isInt: false },
+    contrast: { min: 0, max: 1, isInt: false },
+    saturation: { min: 0, max: 10, isInt: false },
+    brightness: { min: 0, max: 10, isInt: false },
+    seed: { min: 0, max: null, isInt: true },
+    radius: { min: 0, max: 500, isInt: false },
+    radiusX: { min: 0, max: 500, isInt: false },
+    radiusY: { min: 0, max: 500, isInt: false },
+}
+
+/**
+ * Infer base scrub step from a numeric literal's text representation.
+ * @param {string} raw
+ * @returns {number}
+ */
+export function inferStep(raw) {
+    if (!raw) return 1
+    const dot = raw.indexOf('.')
+    if (dot < 0) return 1
+    const decimals = raw.length - dot - 1
+    if (decimals === 0) return 1
+    return Math.pow(10, -decimals)
+}
+
+/**
+ * Resolve acceleration multiplier based on active modifier keys.
+ * @param {object} [e]
+ * @returns {number}
+ */
+export function resolveScrubAccel(e = {}) {
+    const isShift = Boolean(e?.shiftKey)
+    const isMod = Boolean(e?.metaKey || e?.ctrlKey)
+    if (isShift && isMod) return 0.01 // Ultra-fine (100x slower)
+    if (isShift) return 0.1           // Fine (10x slower)
+    if (isMod) return 10              // Coarse (10x faster)
+    return 1                          // Normal
+}
+
+/**
+ * Format a scrubbed numeric value, expanding decimal precision for fine scrub
+ * and preserving integer formatting for integer literals.
+ * @param {number} v
+ * @param {string} raw
+ * @param {number} [accel=1]
+ * @returns {string}
+ */
+export function formatScrubValue(v, raw, accel = 1) {
+    if (!Number.isFinite(v)) return raw
+    const dot = raw.indexOf('.')
+    const rawDecimals = dot < 0 ? 0 : raw.length - dot - 1
+    const hasTrailingDot = dot >= 0 && rawDecimals === 0
+
+    if (rawDecimals === 0 && !hasTrailingDot) {
+        return Math.round(v).toString()
+    }
+
+    let targetDecimals = rawDecimals
+    if (accel <= 0.01) {
+        targetDecimals = Math.max(rawDecimals, rawDecimals + 2)
+    } else if (accel <= 0.1) {
+        targetDecimals = Math.max(rawDecimals, rawDecimals + 1)
+    }
+
+    if (hasTrailingDot && targetDecimals === 0) {
+        return Math.round(v).toString() + '.'
+    }
+
+    return v.toFixed(targetDecimals)
+}
+
+/**
+ * Find enclosing function name and parameter name at cursor position in DSL text.
+ * @param {string} text
+ * @param {number} pos
+ * @returns {{ func: string | null, param: string | null }}
+ */
+export function findParamContext(text, pos) {
+    if (!text || pos == null || pos < 0 || pos > text.length) {
+        return { func: null, param: null }
+    }
+    const before = text.slice(0, pos)
+    const paramMatch = before.match(/([a-zA-Z0-9_]+)\s*:\s*$/)
+    const param = paramMatch ? paramMatch[1] : null
+
+    let depth = 0
+    let func = null
+    for (let i = before.length - 1; i >= 0; i--) {
+        const ch = before[i]
+        if (ch === ')') {
+            depth++
+        } else if (ch === '(') {
+            if (depth > 0) {
+                depth--
+            } else {
+                const preCall = before.slice(0, i)
+                const funcMatch = preCall.match(/([a-zA-Z0-9_]+)\s*$/)
+                if (funcMatch) func = funcMatch[1]
+                break
+            }
+        }
+    }
+    return { func, param }
+}
+
+/**
+ * Resolve parameter boundaries for a given effect function and parameter name.
+ * @param {string} func
+ * @param {string} param
+ * @param {(func: string, param: string) => { min?: number, max?: number, isInt?: boolean } | null} [customProvider]
+ * @returns {{ min?: number, max?: number, isInt?: boolean } | null}
+ */
+export function resolveParamBounds(func, param, customProvider) {
+    if (typeof customProvider === 'function') {
+        const custom = customProvider(func, param)
+        if (custom) return custom
+    }
+    if (func && param) {
+        const exact = KNOWN_BOUNDS[`${func}.${param}`]
+        if (exact) return exact
+    }
+    if (param && GENERIC_PARAM_BOUNDS[param]) {
+        return GENERIC_PARAM_BOUNDS[param]
+    }
+    return null
+}
+
 
 /**
  * Attach the scrubber to a code-editor element.
@@ -75,6 +245,7 @@ export function attachScrubber(editor, options = {}) {
     const onScrubStart = options.onScrubStart || (() => {})
     const onScrubEnd = options.onScrubEnd || (() => {})
     const recompile = options.recompile || (() => {})
+    const getParamBounds = options.getParamBounds
 
     const TOUCH_LONG_PRESS_MS = 300
     const TOUCH_DRAG_THRESHOLD_PX = 10
@@ -83,9 +254,11 @@ export function attachScrubber(editor, options = {}) {
     let scrubbing = false
     let startX = 0
     let startValue = 0
+    let currentVal = 0
     let originalRaw = ''
     let range = null
     let stepSize = 1
+    let activeBounds = null
     let tooltip = null
     let throttleId = null
     let lastChangeTime = 0
@@ -155,22 +328,6 @@ export function attachScrubber(editor, options = {}) {
         return numberLiteralAt(ta.value, pos)
     }
 
-    function inferStep(raw) {
-        // Decimal precision determines base step. e.g. "1.234" → 0.001
-        const dot = raw.indexOf('.')
-        if (dot < 0) return 1
-        const decimals = raw.length - dot - 1
-        return Math.pow(10, -decimals)
-    }
-
-    function formatValue(v, raw) {
-        const dot = raw.indexOf('.')
-        const decimals = dot < 0 ? 0 : raw.length - dot - 1
-        // Integer-flavored originals scrub as integers; decimals keep their precision.
-        if (decimals === 0) return Math.round(v).toString()
-        return v.toFixed(decimals)
-    }
-
     function updateHover(clientX, clientY, altPressed) {
         if (clientX == null || clientY == null) return
         const lit = findLiteralAtPointer(clientX, clientY)
@@ -181,10 +338,66 @@ export function attachScrubber(editor, options = {}) {
         }
     }
 
-    function onPointerMove(e) {
+    function getDisplayValue(accel) {
+        let boundIndicator = ''
+        if (activeBounds) {
+            if (activeBounds.min != null && currentVal <= activeBounds.min) boundIndicator = ' (min)'
+            else if (activeBounds.max != null && currentVal >= activeBounds.max) boundIndicator = ' (max)'
+        }
+        return formatScrubValue(currentVal, originalRaw, accel) + boundIndicator
+    }
+
+    function updateTooltip(x, y, value, accel = 1) {
+        if (!tooltip) {
+            tooltip = document.createElement('div')
+            tooltip.className = 'scrubber-tooltip'
+            tooltip.innerHTML = `<div class="scrubber-tooltip-value"></div><div class="scrubber-tooltip-hint"></div>`
+            document.body.appendChild(tooltip)
+        }
+        const valEl = tooltip.querySelector('.scrubber-tooltip-value')
+        if (valEl) valEl.textContent = value
+
+        const hintEl = tooltip.querySelector('.scrubber-tooltip-hint')
+        if (hintEl) {
+            if (accel === 0.01) {
+                hintEl.textContent = `⇧${MOD_LABEL} ultra-fine (0.01×)`
+            } else if (accel === 0.1) {
+                hintEl.textContent = '⇧ fine (0.1×)'
+            } else if (accel === 10) {
+                hintEl.textContent = `${MOD_LABEL} coarse (10×)`
+            } else {
+                hintEl.textContent = `shift = fine · ${MOD_LABEL} = coarse · shift+${MOD_LABEL} = ultra-fine`
+            }
+        }
+        tooltip.style.left = (x + 12) + 'px'
+        tooltip.style.top = (y - 36) + 'px'
+    }
+
+    function engageScrub(e, lit) {
+        // Capture pointer
+        e.preventDefault()
+        e.stopPropagation()
+        scrubbing = true
+        startX = e.clientX
         lastPointerX = e.clientX
         lastPointerY = e.clientY
+        startValue = lit.value
+        currentVal = lit.value
+        originalRaw = lit.raw
+        range = { start: lit.start, end: lit.end }
+        stepSize = inferStep(lit.raw)
 
+        const ctx = findParamContext(ta.value, lit.start)
+        activeBounds = resolveParamBounds(ctx.func, ctx.param, getParamBounds)
+
+        applyUserSelectGuard()
+        const accel = resolveScrubAccel(e)
+        updateTooltip(e.clientX, e.clientY, getDisplayValue(accel), accel)
+        onScrubStart()
+        try { ta.setPointerCapture?.(e.pointerId) } catch { /* ignore */ }
+    }
+
+    function onPointerMove(e) {
         // Touch/pen pending: promote to engaged once drag exceeds threshold.
         if (pendingTouch && e.pointerId === pendingTouch.id) {
             const dx = e.clientX - pendingTouch.x
@@ -198,15 +411,28 @@ export function attachScrubber(editor, options = {}) {
             return
         }
         if (scrubbing) {
-            // Active scrub
-            const dx = e.clientX - startX
-            const accel = e.shiftKey ? 0.1 : (e.metaKey || e.ctrlKey ? 10 : 1)
-            const newValue = startValue + dx * stepSize * accel
-            const newRaw = formatValue(newValue, originalRaw)
-            applyValue(newRaw)
-            updateTooltip(e.clientX, e.clientY, newRaw)
+            const dx = (lastPointerX != null) ? (e.clientX - lastPointerX) : 0
+            lastPointerX = e.clientX
+            lastPointerY = e.clientY
+            const accel = resolveScrubAccel(e)
+
+            if (dx !== 0) {
+                currentVal += dx * stepSize * accel
+                if (activeBounds) {
+                    if (activeBounds.min != null && currentVal < activeBounds.min) currentVal = activeBounds.min
+                    if (activeBounds.max != null && currentVal > activeBounds.max) currentVal = activeBounds.max
+                }
+                if (!Number.isFinite(currentVal)) {
+                    currentVal = startValue
+                }
+                const newRaw = formatScrubValue(currentVal, originalRaw, accel)
+                applyValue(newRaw)
+            }
+            updateTooltip(e.clientX, e.clientY, getDisplayValue(accel), accel)
             return
         }
+        lastPointerX = e.clientX
+        lastPointerY = e.clientY
         // Idle hover detection — show pointer change
         updateHover(e.clientX, e.clientY, e.altKey)
     }
@@ -235,34 +461,6 @@ export function attachScrubber(editor, options = {}) {
                 try { Promise.resolve(recompile()).catch(() => {}) } catch { /* ignore */ }
             }, 25)
         }
-    }
-
-    function updateTooltip(x, y, value) {
-        if (!tooltip) {
-            tooltip = document.createElement('div')
-            tooltip.className = 'scrubber-tooltip'
-            tooltip.innerHTML = `<div class="scrubber-tooltip-value"></div><div class="scrubber-tooltip-hint">shift = fine · ⌘ = coarse</div>`
-            document.body.appendChild(tooltip)
-        }
-        tooltip.querySelector('.scrubber-tooltip-value').textContent = value
-        tooltip.style.left = (x + 12) + 'px'
-        tooltip.style.top = (y - 36) + 'px'
-    }
-
-    function engageScrub(e, lit) {
-        // Capture pointer
-        e.preventDefault()
-        e.stopPropagation()
-        scrubbing = true
-        startX = e.clientX
-        startValue = lit.value
-        originalRaw = lit.raw
-        range = { start: lit.start, end: lit.end }
-        stepSize = inferStep(lit.raw)
-        applyUserSelectGuard()
-        updateTooltip(e.clientX, e.clientY, lit.raw)
-        onScrubStart()
-        try { ta.setPointerCapture?.(e.pointerId) } catch { /* ignore */ }
     }
 
     function onPointerDown(e) {
@@ -303,6 +501,7 @@ export function attachScrubber(editor, options = {}) {
         }
         if (!scrubbing) return
         scrubbing = false
+        activeBounds = null
         removeUserSelectGuard()
         if (tooltip) {
             tooltip.remove()
@@ -330,12 +529,26 @@ export function attachScrubber(editor, options = {}) {
             try { Promise.resolve(recompile()).catch(() => {}) } catch { /* ignore */ }
             return
         }
+        if (scrubbing && (e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'Control')) {
+            if (lastPointerX != null && lastPointerY != null) {
+                const accel = resolveScrubAccel(e)
+                updateTooltip(lastPointerX, lastPointerY, getDisplayValue(accel), accel)
+            }
+            return
+        }
         if (e.key === 'Alt' && !scrubbing && lastPointerX != null) {
             updateHover(lastPointerX, lastPointerY, true)
         }
     }
 
     function onKeyUp(e) {
+        if (scrubbing && (e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'Control')) {
+            if (lastPointerX != null && lastPointerY != null) {
+                const accel = resolveScrubAccel(e)
+                updateTooltip(lastPointerX, lastPointerY, getDisplayValue(accel), accel)
+            }
+            return
+        }
         if (e.key === 'Alt' && !scrubbing && lastPointerX != null) {
             updateHover(lastPointerX, lastPointerY, false)
         }
