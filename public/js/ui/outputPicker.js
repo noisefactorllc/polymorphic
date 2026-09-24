@@ -14,6 +14,65 @@ export function currentRenderTarget(dsl) {
     return parseInt(matches[matches.length - 1][1], 10)
 }
 
+/**
+ * Determine the effective render target surface index (0-7).
+ * Reads the explicit target from render(oN) if specified.
+ * If absent, falls back to surface 0 if written in the DSL, or the first written surface.
+ * Returns null if no surfaces are written and no render call exists.
+ *
+ * @param {string} dsl - Source DSL
+ * @returns {number|null} Surface index (0-7) or null
+ */
+export function effectiveRenderTarget(dsl) {
+    const explicit = currentRenderTarget(dsl)
+    if (explicit !== null) return explicit
+    const written = surfacesWrittenInDsl(dsl)
+    if (written.length === 0) return null
+    return written.includes(0) ? 0 : written[0]
+}
+
+/**
+ * Switch the active render output surface in a DSL program to target index `idx` (0-7).
+ * If the DSL contains render(oN) or render(...), replaces it.
+ * If the DSL has no render() directive, cleanly appends render(oN).
+ * Preserves the rest of the DSL, comments, and structure.
+ * Returns original dsl unchanged if idx is invalid (<0, >7, non-integer).
+ *
+ * @param {string} dsl - Source DSL
+ * @param {number} idx - Surface index (0-7)
+ * @returns {string} Updated DSL
+ */
+export function switchOutputSurface(dsl, idx) {
+    if (typeof idx !== 'number' || idx < 0 || idx > 7 || !Number.isInteger(idx)) {
+        return dsl || ''
+    }
+    if (!dsl || !dsl.trim()) {
+        return `render(o${idx})\n`
+    }
+
+    // Check if there is an existing render(o[0-7]) directive
+    const renderTargetPattern = /(?:^|\n)([ \t]*)render\s*\(\s*o[0-7]\s*\)/
+    if (renderTargetPattern.test(dsl)) {
+        return dsl.replace(/(?:^|\n)([ \t]*)render\s*\(\s*o[0-7]\s*\)/g, (match, indent) => {
+            const prefix = match.startsWith('\n') ? '\n' : ''
+            return `${prefix}${indent}render(o${idx})`
+        })
+    }
+
+    // Check for general render(...) directive (supports nested parens like render(read(o0)))
+    const generalRenderPattern = /(?:^|\n)([ \t]*)render\s*\((?:[^()]+|\([^()]*\))*\)/
+    if (generalRenderPattern.test(dsl)) {
+        return dsl.replace(/(?:^|\n)([ \t]*)render\s*\((?:[^()]+|\([^()]*\))*\)/g, (match, indent) => {
+            const prefix = match.startsWith('\n') ? '\n' : ''
+            return `${prefix}${indent}render(o${idx})`
+        })
+    }
+
+    // No render() directive present - append cleanly to end
+    const trimmed = dsl.trimEnd()
+    return `${trimmed}\n\nrender(o${idx})\n`
+}
+
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
 const SHADER_BUNDLE_PATH = `${SHADER_BASE_PATH}/effects`
 
@@ -30,36 +89,54 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     s.textContent = `
         .output-picker {
             position: fixed;
-            top: 1rem;
-            right: 1rem;
+            top: var(--hf-spacing-md, 1rem);
+            right: var(--hf-spacing-md, 1rem);
             display: none;
             flex-direction: column;
-            gap: 0.4rem;
-            z-index: 210;
+            gap: var(--hf-spacing-xs, 0.4rem);
+            z-index: var(--hf-z-panel, 210);
         }
         .output-picker.visible { display: flex; }
-        body.live-inputs-open .output-picker { right: calc(280px + 2rem); }
+        body.live-inputs-open .output-picker { right: calc(280px + var(--hf-spacing-xl, 2rem)); }
         .output-pip {
             position: relative;
             width: 96px;
             height: 54px;
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 6px;
+            border: 1px solid var(--hf-border-subtle);
+            border-radius: var(--hf-radius-md, 6px);
             overflow: hidden;
             cursor: pointer;
-            background: #000;
-            transition: border-color 0.15s, transform 0.15s;
+            background: var(--hf-bg-surface);
+            transition: border-color var(--hf-transition-fast, 0.15s ease), transform var(--hf-transition-fast, 0.15s ease), box-shadow var(--hf-transition-fast, 0.15s ease);
+            user-select: none;
         }
-        .output-pip:hover { border-color: rgba(165,184,255,0.5); transform: translateY(-1px); }
-        .output-pip.active { border-color: #a5b8ff; box-shadow: 0 0 0 1px rgba(165,184,255,0.6); }
+        .output-pip:hover {
+            border-color: var(--hf-accent-3);
+            transform: translateY(-1px);
+        }
+        .output-pip:focus-visible {
+            outline: none;
+            border-color: var(--hf-accent-3);
+            box-shadow: 0 0 0 2px var(--hf-accent-3);
+        }
+        .output-pip.active {
+            border-color: var(--hf-accent-3);
+            box-shadow: 0 0 0 1px var(--hf-accent-3);
+        }
         .output-pip canvas, .output-pip img {
             width: 100%; height: 100%; display: block; object-fit: cover;
         }
         .output-pip-label {
             position: absolute; left: 4px; bottom: 2px;
-            font: 600 0.625rem/1 'Noto Sans Mono', monospace;
-            color: #fff; background: rgba(0,0,0,0.55);
-            padding: 0.05rem 0.3rem; border-radius: 3px;
+            font-family: var(--hf-font-mono, 'Noto Sans Mono', monospace);
+            font-size: var(--hf-font-size-xs, 0.625rem);
+            font-weight: 600;
+            line-height: 1;
+            color: var(--hf-text-bright);
+            background: color-mix(in srgb, var(--hf-bg-surface) 75%, transparent);
+            padding: 0.05rem 0.3rem;
+            border-radius: var(--hf-radius-sm, 3px);
+            pointer-events: none;
         }
     `
     document.head.appendChild(s)
@@ -83,6 +160,7 @@ class OutputPicker {
 
     init(opts) {
         this._onSwitch = opts.onSwitch || (() => {})
+        if (typeof document === 'undefined') return
         if (this._el) return
         this._el = document.createElement('div')
         this._el.className = 'output-picker'
@@ -126,7 +204,7 @@ class OutputPicker {
     async _setDslImpl(dsl) {
         this._dsl = dsl
         const surfaces = surfacesWrittenInDsl(dsl)
-        this._activeSurface = currentRenderTarget(dsl)
+        this._activeSurface = effectiveRenderTarget(dsl)
         // Drop pips for surfaces no longer in use
         for (const idx of [...this._previews.keys()]) {
             if (!surfaces.includes(idx)) {
@@ -149,7 +227,9 @@ class OutputPicker {
         }
         // Mark the active pip
         for (const [idx, entry] of this._previews) {
-            entry.pip.classList.toggle('active', idx === this._activeSurface)
+            const isActive = idx === this._activeSurface
+            entry.pip.classList.toggle('active', isActive)
+            entry.pip.setAttribute('aria-label', `Surface o${idx}` + (isActive ? ' (active)' : ''))
         }
         // Hidden by default; user toggles via View menu (persisted in localStorage)
         this._el.classList.toggle('visible', this._userEnabled && surfaces.length > 0)
@@ -160,6 +240,10 @@ class OutputPicker {
         const pip = document.createElement('div')
         pip.className = 'output-pip'
         pip.dataset.surface = String(idx)
+        pip.setAttribute('role', 'button')
+        pip.tabIndex = 0
+        pip.title = `Switch to o${idx} (Shift+click to reset feedback)`
+        pip.setAttribute('aria-label', `Surface o${idx}` + (idx === this._activeSurface ? ' (active)' : ''))
         const canvas = document.createElement('canvas')
         canvas.width = 192
         canvas.height = 108
@@ -168,10 +252,22 @@ class OutputPicker {
         label.className = 'output-pip-label'
         label.textContent = `o${idx}`
         pip.appendChild(label)
-        pip.addEventListener('click', () => this._onSwitch(idx))
+
+        const triggerSwitch = (e) => {
+            const resetFeedback = Boolean(e?.shiftKey || e?.altKey)
+            this._onSwitch(idx, { resetFeedback })
+        }
+
+        pip.addEventListener('click', (e) => triggerSwitch(e))
+        pip.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                triggerSwitch(e)
+            }
+        })
         // Render the surface in isolation: rewrite the DSL so render() points at this
         // surface, and strip media() urls the engine rejects (matches the main renderer).
-        const surfaceDsl = stripMediaUrlArg(this._dsl.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`))
+        const surfaceDsl = stripMediaUrlArg(switchOutputSurface(this._dsl, idx))
         let renderer = null
         try {
             renderer = new CanvasRenderer({
@@ -198,6 +294,15 @@ class OutputPicker {
             renderer = null
         }
         return { pip, canvas, renderer }
+    }
+
+    /**
+     * Programmatically switch the active render output surface.
+     * @param {number} idx - Surface index (0-7)
+     * @param {object} [options={}] - Options (e.g. { resetFeedback: boolean })
+     */
+    switchSurface(idx, options = {}) {
+        this._onSwitch(idx, options)
     }
 
     async dispose() {

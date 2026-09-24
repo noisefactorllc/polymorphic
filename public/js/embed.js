@@ -36,7 +36,7 @@ import { snapshotHistory } from './ui/snapshotHistory.js'
 import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
-import { outputPicker } from './ui/outputPicker.js'
+import { outputPicker, switchOutputSurface, surfacesWrittenInDsl, effectiveRenderTarget } from './ui/outputPicker.js'
 import { SyncOutputController } from './syncOutput.js'
 import { createSyncOutputDialog } from './ui/syncOutputDialog.js'
 import { resolveBackendPreference, isWebGPUFallback, WEBGPU_FALLBACK_MESSAGE } from './backendFallback.js'
@@ -2139,13 +2139,7 @@ async function startShader() {
         })
 
         outputPicker.init({
-            onSwitch: (idx) => {
-                if (!dslEditor) return
-                const next = dslEditor.value.replace(/render\s*\(\s*o[0-7]\s*\)/g, `render(o${idx})`)
-                dslEditor.value = next
-                publishLocalDsl('output-picker')
-                scheduleHotReload()
-            }
+            onSwitch: (idx, opts) => switchOutput(idx, opts)
         })
 
         attachTouchControls({
@@ -2578,6 +2572,10 @@ function init() {
             gallery,
             snapshotHistory,
             shortcutsDialog,
+            outputPicker,
+            switchOutput,
+            cycleOutputSurface,
+            hushSurfaces,
             get onlineAdapter() { return onlineAdapter },
             get renderer() { return renderer },
             get backend() { return renderer?.backend },
@@ -2696,6 +2694,8 @@ function setupCommandPalette() {
         showShortcuts: () => shortcutsDialog.open(),
         togglePerformanceMode: () => togglePerformanceMode(),
         switchBackend: (target) => switchBackend(target),
+        switchOutputSurface: (idx, opts) => switchOutput(idx, opts),
+        cycleOutputSurface: (delta, opts) => cycleOutputSurface(delta, opts),
         hushSurfaces: () => hushSurfaces()
     })
     for (const a of actions) commandPalette.registerAction(a)
@@ -2709,22 +2709,74 @@ function switchBackend(target) {
 }
 
 /**
+ * Switch active render output to surface index `idx` (0-7).
+ * Updates DSL editor content, publishes local DSL, and recompiles immediately.
+ * If options.resetFeedback is true, cleanly clears previous surface feedback buffers via hushSurfaces.
+ *
+ * @param {number} idx - Surface index (0-7)
+ * @param {object} [options={}] - { resetFeedback?: boolean, clearFeedback?: boolean }
+ */
+async function switchOutput(idx, options = {}) {
+    if (!dslEditor) return
+    const resetFeedback = Boolean(options.resetFeedback || options.clearFeedback)
+    const current = dslEditor.value
+    const next = switchOutputSurface(current, idx)
+    if (next === current && !resetFeedback) return
+
+    dslEditor.value = next
+    publishLocalDsl('output-picker')
+    if (hotReloadTimeout) {
+        clearTimeout(hotReloadTimeout)
+        hotReloadTimeout = null
+    }
+
+    const result = resetFeedback ? await hushSurfaces() : await recompileShader()
+    if (result?.success) {
+        snapshotHistory.push(next)
+        stampUrl(next)
+        outputPicker.setDsl(next).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+    }
+}
+
+/**
+ * Cycle active render output among surfaces written in the DSL.
+ * @param {number} [delta=1] - Direction (+1 next, -1 previous)
+ * @param {object} [options={}] - { resetFeedback?: boolean }
+ */
+function cycleOutputSurface(delta = 1, options = {}) {
+    if (!dslEditor) return
+    const dsl = dslEditor.value
+    const surfaces = surfacesWrittenInDsl(dsl)
+    if (surfaces.length === 0) return
+    const current = effectiveRenderTarget(dsl)
+    const currentIndex = current !== null ? surfaces.indexOf(current) : -1
+    const nextIndex = currentIndex >= 0
+        ? (currentIndex + delta + surfaces.length) % surfaces.length
+        : (delta >= 0 ? 0 : surfaces.length - 1)
+    const targetSurface = surfaces[nextIndex]
+    switchOutput(targetSurface, options)
+}
+
+/**
  * Reset surfaces o0..o7 by recompiling. The pipeline reallocates surface
  * textures on each compile, which clears any feedback state. We also briefly
  * suspend the renderer to avoid showing a partial frame.
  */
 async function hushSurfaces() {
-    if (!renderer || !dslEditor) return
+    if (!renderer || !dslEditor) return { success: false }
     const dsl = dslEditor.value
-    if (!dsl?.trim()) return
+    if (!dsl?.trim()) return { success: false }
+    const wasPlaying = isPlaying
     renderer.stop()
-    const r = await recompileShader()
-    if (r.superseded) return
-    if (r.success) {
-        renderer.start()
-        showToast('Surfaces cleared', 'success')
-    } else {
-        renderer.start()
+    try {
+        const r = await recompileShader()
+        if (r.superseded) return r
+        if (r.success) {
+            showToast('Surfaces cleared', 'success')
+        }
+        return r
+    } finally {
+        if (wasPlaying) renderer.start()
     }
 }
 

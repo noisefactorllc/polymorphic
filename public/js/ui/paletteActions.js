@@ -44,6 +44,8 @@
  * @property {() => void}   togglePerformanceMode
  * @property {(target: 'webgpu'|'webgl2') => void} switchBackend
  * @property {() => void}   hushSurfaces
+ * @property {(idx: number, opts?: { resetFeedback?: boolean }) => void} [switchOutputSurface]
+ * @property {(delta?: number, opts?: { resetFeedback?: boolean }) => void} [cycleOutputSurface]
  *
  * @param {PaletteActionDeps} deps
  * @returns {Array<Object>} Action descriptors in the same order they were
@@ -323,6 +325,38 @@ export function buildPaletteActions(deps) {
             icon: 'clear_all',
             keywords: ['stop', 'clear', 'reset', 'hush', 'feedback'],
             run: () => deps.hushSurfaces()
-        }
+        },
+        {
+            id: 'cycle-output-surface',
+            title: 'Cycle output surface (next)',
+            subtitle: 'Switch active render target to the next written surface',
+            icon: 'output',
+            keywords: ['surface', 'render', 'output', 'cycle', 'next', 'pip'],
+            run: () => deps.cycleOutputSurface?.(1)
+        },
+        {
+            id: 'cycle-output-surface-reset',
+            title: 'Cycle output surface & reset feedback',
+            subtitle: 'Switch active render target and reset feedback surfaces',
+            icon: 'restart_alt',
+            keywords: ['surface', 'render', 'output', 'cycle', 'next', 'reset', 'feedback', 'hush'],
+            run: () => deps.cycleOutputSurface?.(1, { resetFeedback: true })
+        },
+        ...Array.from({ length: 8 }, (_, i) => ({
+            id: `switch-output-o${i}`,
+            title: `Switch render output to o${i}`,
+            subtitle: `Route active render output to surface o${i}`,
+            icon: 'output',
+            keywords: ['surface', 'render', 'output', `o${i}`, 'target'],
+            run: () => deps.switchOutputSurface?.(i)
+        })),
+        ...Array.from({ length: 8 }, (_, i) => ({
+            id: `switch-output-o${i}-reset`,
+            title: `Switch render output to o${i} & reset feedback`,
+            subtitle: `Route render output to o${i} and clear feedback state`,
+            icon: 'restart_alt',
+            keywords: ['surface', 'render', 'output', `o${i}`, 'target', 'reset', 'feedback', 'hush'],
+            run: () => deps.switchOutputSurface?.(i, { resetFeedback: true })
+        }))
     ]
 }
