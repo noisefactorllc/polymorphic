@@ -124,11 +124,11 @@
 
 /* was #menuRight */
 #menu .hf-menubar-right {
-    padding-right: 1em;
-    padding-inline-end: 1em;
+    padding-right: var(--hf-space-2, 0.5rem);
+    padding-inline-end: var(--hf-space-2, 0.5rem);
     display: flex;
     justify-content: flex-end;
-    gap: 1em;
+    gap: var(--hf-space-1, 0.25rem);
     color: var(--menu-text);
     align-items: center;
     height: 100%;
@@ -193,6 +193,11 @@
 
 #menu .hf-menubar-trigger:hover {
     color: var(--menu-accent-hover);
+}
+
+#menu .hf-menubar-trigger:focus-visible {
+    outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--menu-accent));
+    outline-offset: var(--hf-focus-ring-offset, 2px);
 }
 
 /* was .menu-items */
@@ -272,23 +277,23 @@
     opacity: 0.6;
 }
 
-/* Menu icon button style (was .menu-icon-btn; note the original
-   `#menu button { padding: 0 }` rule out-specified the class's padding,
-   so the buttons effectively rendered with none) */
+/* Menu icon button style - standardized to Handfish component guidelines */
 #menu .hf-menubar-btn {
     background: none;
     border: none;
     color: var(--menu-text);
     cursor: pointer;
-    padding: 0;
+    box-sizing: border-box;
+    padding: var(--hf-space-1, 4px);
     margin: 0;
     line-height: 1;
-    height: auto;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
-    transition: color 0.15s ease, background 0.15s ease;
+    border-radius: var(--hf-radius-md, 6px);
+    transition: color var(--hf-transition, 0.15s ease), background var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
     font-size: 1.25em;
     opacity: 1;
 }
@@ -300,7 +305,7 @@
 
 #menu .hf-menubar-btn:hover {
     color: var(--menu-text-hover);
-    background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 6%, transparent);
+    background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent);
     opacity: 1;
 }
 
@@ -308,18 +313,59 @@
     color: inherit;
 }
 
-/* Note: the original's .menu-icon-btn.active indigo styling was dead code —
-   its own `#menu button` id-rule out-specified it, so active buttons always
-   rendered plain. Matching that computed reality (and overriding handfish's
-   own active styling). */
+#menu .hf-menubar-btn:active {
+    transform: scale(0.94);
+    background: color-mix(in srgb, var(--menu-accent, var(--hf-accent)) 22%, transparent);
+}
+
 #menu .hf-menubar-btn.active {
-    color: var(--menu-text);
-    background: none;
+    color: var(--menu-accent-hover);
+    background: color-mix(in srgb, var(--menu-accent, var(--hf-accent)) 16%, transparent);
     opacity: 1;
 }
 
 #menu .hf-menubar-btn.active .hf-icon {
     color: inherit;
+}
+
+#menu .hf-menubar-btn.active:hover {
+    color: var(--menu-accent-hover);
+    background: color-mix(in srgb, var(--menu-accent, var(--hf-accent)) 24%, transparent);
+}
+
+#menu .hf-menubar-btn.active:active {
+    transform: scale(0.94);
+    background: color-mix(in srgb, var(--menu-accent, var(--hf-accent)) 30%, transparent);
+}
+
+#menu .hf-menubar-btn:focus-visible {
+    outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--menu-accent));
+    outline-offset: var(--hf-focus-ring-offset, 2px);
+}
+
+#menu .hf-menubar-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Recording active state uses warning/recording red */
+#menu #record-toggle-btn.active,
+#menu #record-toggle-btn.recording {
+    color: var(--hf-red);
+    background: color-mix(in srgb, var(--hf-red) 16%, transparent);
+}
+
+#menu #record-toggle-btn.active:hover,
+#menu #record-toggle-btn.recording:hover {
+    color: var(--hf-red);
+    background: color-mix(in srgb, var(--hf-red) 24%, transparent);
+}
+
+#menu #record-toggle-btn.active:active,
+#menu #record-toggle-btn.recording:active {
+    transform: scale(0.94);
+    background: color-mix(in srgb, var(--hf-red) 30%, transparent);
 }
 
 /* Material symbols font for icons */

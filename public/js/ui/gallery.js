@@ -80,7 +80,7 @@ if (!document.getElementById(STYLES_ID)) {
         .gallery-btn {
             background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
             border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 35%, transparent);
-            color: var(--hf-text-bright, var(--color7));
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: inherit;
             font-size: 0.75rem;
             padding: 0.35rem 0.7rem;
@@ -89,16 +89,34 @@ if (!document.getElementById(STYLES_ID)) {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            transition: all 0.15s;
+            transition: all var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
         }
         .gallery-btn:hover { background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 32%, transparent); }
+        .gallery-btn:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .gallery-btn:active { transform: scale(0.97); }
         .gallery-btn .icon-material { font-size: 16px; }
         .gallery-close {
             background: transparent; border: none; color: var(--hf-text-dim, var(--hf-color-5)); cursor: pointer;
             padding: 0.2em 0.5em; font-size: 1.2rem;
-            transition: color 0.15s;
+            min-width: 24px; min-height: 24px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: var(--hf-radius-sm, 4px);
+            transition: color var(--hf-transition, 0.15s ease), background var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
         }
-        .gallery-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
+        .gallery-close:hover {
+            color: var(--hf-text-bright, var(--hf-color-7));
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent);
+        }
+        .gallery-close:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .gallery-close:active {
+            transform: scale(0.95);
+        }
 
         /* Tab strip */
         .gallery-tabs {

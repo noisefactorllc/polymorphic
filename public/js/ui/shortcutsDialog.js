@@ -61,9 +61,22 @@ if (!document.getElementById(STYLES_ID)) {
         .shortcuts-close {
             background: transparent; border: none; color: var(--hf-text-dim, var(--hf-color-5)); cursor: pointer;
             padding: 0.2em 0.5em; font-size: 1.1rem;
-            transition: color 0.15s;
+            min-width: 24px; min-height: 24px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: var(--hf-radius-sm, 4px);
+            transition: color var(--hf-transition, 0.15s ease), background var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
         }
-        .shortcuts-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
+        .shortcuts-close:hover {
+            color: var(--hf-text-bright, var(--hf-color-7));
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent);
+        }
+        .shortcuts-close:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .shortcuts-close:active {
+            transform: scale(0.95);
+        }
         .shortcuts-body {
             padding: 1rem 1.1rem 1.1rem;
             overflow-y: auto;

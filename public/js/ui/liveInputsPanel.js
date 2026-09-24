@@ -117,13 +117,29 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         .live-inputs-close {
             background: transparent;
             border: none;
+            border-radius: var(--hf-radius-sm, 4px);
             color: var(--hf-text-dim, var(--hf-color-5));
             cursor: pointer;
             padding: 0.15em 0.4em;
             font-size: 1rem;
-            transition: color 0.15s;
+            min-width: 24px;
+            min-height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: color var(--hf-transition, 0.15s ease), background var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
         }
-        .live-inputs-close:hover { color: var(--hf-text-bright, var(--hf-color-7)); }
+        .live-inputs-close:hover {
+            color: var(--hf-text-bright, var(--hf-color-7));
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent);
+        }
+        .live-inputs-close:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .live-inputs-close:active {
+            transform: scale(0.95);
+        }
         .live-inputs-body {
             padding: 0.5rem 0.85rem 0.75rem;
             overflow-y: auto;
@@ -161,7 +177,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         .live-input-toggle {
             background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
             border: 1px solid color-mix(in srgb, var(--hf-accent, var(--accent3)) 35%, transparent);
-            color: var(--hf-text-bright, var(--color7));
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: inherit;
             font-size: 0.6875rem;
             font-weight: 500;
@@ -171,6 +187,11 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             transition: all 0.15s;
         }
         .live-input-toggle:hover { background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 32%, transparent); }
+        .live-input-toggle:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .live-input-toggle:active { transform: scale(0.96); }
         .live-input-toggle.active {
             background: color-mix(in srgb, var(--hf-green) 22%, transparent);
             border-color: color-mix(in srgb, var(--hf-green) 50%, transparent);
@@ -305,13 +326,18 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             font-family: inherit;
             font-size: 0.6875rem;
             cursor: pointer;
-            transition: background 0.12s, border-color 0.12s;
+            transition: background var(--hf-transition, 0.15s ease), border-color var(--hf-transition, 0.15s ease), transform var(--hf-transition-fast, 0.1s ease);
         }
         .source-btn .icon-material { font-size: 14px; }
         .source-btn:hover {
             background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 18%, transparent);
             border-color: var(--hf-accent, var(--accent3));
         }
+        .source-btn:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .source-btn:active { transform: scale(0.97); }
         .source-btn.active {
             background: color-mix(in srgb, var(--hf-green) 20%, transparent);
             border-color: color-mix(in srgb, var(--hf-green) 50%, transparent);

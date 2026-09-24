@@ -272,4 +272,62 @@ test('public/js/ui/recorder.js uses Handfish semantic tokens and contains zero r
     )
 })
 
+test('public/css/menu.css toolbar buttons follow Handfish component guidelines (padding, focus-visible, active states)', () => {
+    const css = readCss('menu.css')
+    // Button padding uses Handfish spacing token
+    assert.match(
+        css,
+        /#menu \.hf-menubar-btn\s*\{[^}]*?padding:\s*var\(--hf-space-1/,
+        '#menu .hf-menubar-btn must have Handfish token padding'
+    )
+    // Focus visible styling
+    assert.match(
+        css,
+        /#menu \.hf-menubar-btn:focus-visible\s*\{[^}]*?outline:\s*var\(--hf-focus-ring-width/,
+        '#menu .hf-menubar-btn:focus-visible must use --hf-focus-ring-width'
+    )
+    // Active pressed state has visible accent background (not background: none)
+    assert.match(
+        css,
+        /#menu \.hf-menubar-btn\.active\s*\{[^}]*?color:\s*var\(--menu-accent-hover\)/,
+        '#menu .hf-menubar-btn.active must use --menu-accent-hover'
+    )
+    assert.match(
+        css,
+        /#menu \.hf-menubar-btn\.active\s*\{[^}]*?background:\s*color-mix\(/,
+        '#menu .hf-menubar-btn.active must provide a color-mix background'
+    )
+    assert.doesNotMatch(
+        css,
+        /#menu \.hf-menubar-btn\.active\s*\{[^}]*?background:\s*none;/,
+        '#menu .hf-menubar-btn.active must not silence active state with background: none'
+    )
+    // Recording button active state
+    assert.match(
+        css,
+        /#menu #record-toggle-btn\.active[^}]*?var\(--hf-red\)/,
+        '#record-toggle-btn active state must use --hf-red'
+    )
+})
+
+test('dialog action and close buttons declare focus-visible and active scale', () => {
+    const indexHtml = fs.readFileSync(path.resolve(cssDir, '../index.html'), 'utf8')
+    assert.match(
+        indexHtml,
+        /\.doc-reader-close:focus-visible\s*\{[^}]*?var\(--hf-focus-ring-width/,
+        '.doc-reader-close must define :focus-visible'
+    )
+    assert.match(
+        indexHtml,
+        /\.share-btn-primary:active:not\(:disabled\)\s*\{[^}]*?transform:\s*scale\(/,
+        '.share-btn-primary must define active scale'
+    )
+    assert.match(
+        indexHtml,
+        /\.program-modal-close:focus-visible\s*\{[^}]*?var\(--hf-focus-ring-width/,
+        '.program-modal-close must define :focus-visible'
+    )
+})
+
+
 

@@ -65,18 +65,29 @@ if (!document.getElementById(STYLES_ID)) {
         .import-url-close {
             background: transparent;
             border: none;
+            border-radius: var(--hf-radius-sm, 4px);
             color: var(--hf-text-dim, var(--hf-color-5));
             cursor: pointer;
             font-size: 1rem;
             padding: 0.25em 0.5em;
             line-height: 1;
             opacity: 0.7;
-            transition: opacity 0.15s ease, color 0.15s ease;
+            transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease, transform var(--hf-transition-fast, 0.1s ease);
         }
         
         .import-url-close:hover {
             opacity: 1;
             color: var(--hf-text-bright, var(--hf-color-7));
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 10%, transparent);
+        }
+
+        .import-url-close:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+
+        .import-url-close:active {
+            transform: scale(0.95);
         }
         
         .import-url-content {
@@ -168,6 +179,15 @@ if (!document.getElementById(STYLES_ID)) {
             border-radius: var(--hf-radius-sm, 4px);
             cursor: pointer;
             transition: all 0.15s ease;
+        }
+
+        .import-url-btn:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+
+        .import-url-btn:active:not(:disabled) {
+            transform: scale(0.97);
         }
         
         .import-url-btn-primary {

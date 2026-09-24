@@ -333,11 +333,32 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     await page.evaluate(() => document.getElementById('viewMenuItem-editor').click())
     await expect(page.locator('#dsl-overlay')).toBeVisible()
 
-    // perf overlay button active pull
+    // perf overlay button active pull and visual styling (Handfish toolbar button guidelines)
     await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
     await expect(page.locator('#perf-toggle-btn')).toHaveClass(/active/)
+    const activeBtnStyle = await page.locator('#perf-toggle-btn').evaluate(el => {
+        const cs = window.getComputedStyle(el)
+        return {
+            paddingTop: cs.paddingTop,
+            paddingRight: cs.paddingRight,
+            borderRadius: cs.borderRadius,
+            backgroundColor: cs.backgroundColor,
+            width: cs.width,
+            height: cs.height,
+        }
+    })
+    expect(activeBtnStyle.paddingTop).toBe('4px')
+    expect(activeBtnStyle.paddingRight).toBe('4px')
+    expect(activeBtnStyle.borderRadius).toBe('6px')
+    expect(activeBtnStyle.width).toBe('28px')
+    expect(activeBtnStyle.height).toBe('28px')
+    expect(activeBtnStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
+    expect(activeBtnStyle.backgroundColor).not.toBe('transparent')
+
     await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
-    await expect(page.locator('#perf-toggle-btn')).not.toHaveClass(/active/)
+    await expect.poll(async () => {
+        return page.locator('#perf-toggle-btn').evaluate(el => window.getComputedStyle(el).backgroundColor)
+    }).toBe('rgba(0, 0, 0, 0)')
 
     // record button flips recorder state (canvas captureStream)
     await page.evaluate(() => document.getElementById('record-toggle-btn').click())
@@ -352,7 +373,8 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     // command palette drives the same items via programmatic .click() delegation
     const dl = page.waitForEvent('download', { timeout: 10000 })
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k')
-    await page.waitForTimeout(300)
+    await expect(page.locator('.cmd-palette-overlay')).toHaveClass(/visible/)
+    await expect(page.locator('.cmd-palette-input')).toBeFocused()
     await page.keyboard.type('save as png')
     await page.waitForTimeout(300)
     await page.keyboard.press('Enter')
