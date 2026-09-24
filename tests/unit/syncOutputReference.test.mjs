@@ -885,6 +885,27 @@ describe('SyncOutputController sender start', () => {
         assert.equal(fixture.controller.state.senderName, 'One')
     })
 
+    test('passes the sender backlog signal through the renderer sink', async () => {
+        const sender = senderFixture()
+        let backlog = false
+        sender.sender.deferRender = () => backlog
+        let sink = null
+        const renderer = {
+            createFrameExportQueue: () => ({ close() {} }),
+            addSink: (added) => { sink = added; return () => {} }
+        }
+        const fixture = await connectedFixture({ renderer, sender: sender.sender })
+
+        await fixture.controller.start('Polymorphic')
+
+        assert.equal(sink.deferRender(), false)
+        backlog = true
+        assert.equal(sink.deferRender(), true)
+        delete sender.sender.deferRender
+        assert.equal(sink.deferRender(), false)
+        await fixture.controller.stop()
+    })
+
     test('rolls back queue and client exactly once when sender acquisition fails', async () => {
         const calls = []
         const queue = { close: () => calls.push('queue close') }
