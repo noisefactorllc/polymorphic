@@ -2129,6 +2129,147 @@ describe('SyncOutputController bounded recovery', () => {
             ['createClient', { token: freshToken }]
         ])
     })
+
+    test('an encoder timeout under load recovers instead of ending the output', async () => {
+        const initial = senderFixture()
+        const fixture = await connectedFixture({
+            renderer: {
+                pipeline: {},
+                createFrameExportQueue: () => ({ close() {} }),
+                addSink: (sink) => () => sink.close()
+            },
+            sender: initial.sender,
+            recoveryClients: [recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' })]
+        })
+        await fixture.controller.start('Loaded')
+        const timeout = new Error('H.264 frame encoding timed out')
+        timeout.code = 'SYNC_ENCODING_FAILED'
+        timeout.transient = true
+        initial.completion.reject(timeout)
+        await flushMicrotasks()
+
+        assert.equal(fixture.controller.state.status, 'recovering')
+        assert.equal(fixture.controller.state.error, null)
+        assert.equal(fixture.controller._lastRecoveryCause.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(fixture.timers.timeouts.size, 1, 'the first recovery attempt is scheduled')
+    })
+
+    test('a transient encoder warmup timeout during start retries and succeeds', async () => {
+        const original = {
+            encoder: globalThis.VideoEncoder,
+            frame: globalThis.VideoFrame,
+            stream: globalThis.WebSocketStream,
+            create: SyncH264CanvasSender.create
+        }
+        const sender = senderFixture()
+        let attempts = 0
+        try {
+            globalThis.VideoEncoder = class VideoEncoder {}
+            globalThis.VideoFrame = class VideoFrame {}
+            globalThis.WebSocketStream = class WebSocketStream {}
+            SyncH264CanvasSender.create = async () => {
+                attempts++
+                if (attempts === 1) {
+                    const timeout = new Error('H.264 hardware encoder warmup timed out')
+                    timeout.code = 'SYNC_ENCODING_FAILED'
+                    timeout.transient = true
+                    throw timeout
+                }
+                return sender.sender
+            }
+            const fixture = await connectedFixture({
+                welcomeVersion: '0.2.87',
+                renderer: { addSink: () => () => sender.sender.close() }
+            })
+            const starting = fixture.controller.start('WarmupRetry')
+            await flushMicrotasks(12)
+
+            assert.equal(attempts, 1)
+            assert.equal(fixture.controller.state.status, 'starting')
+            assert.equal(fixture.timers.timeouts.size, 1, 'retry timeout scheduled')
+
+            fixture.timers.fireTimeout(250)
+            await starting
+            assert.equal(attempts, 2)
+            assert.equal(fixture.controller.state.status, 'sending')
+            assert.equal(fixture.timers.timeouts.size, 0)
+        } finally {
+            globalThis.VideoEncoder = original.encoder
+            globalThis.VideoFrame = original.frame
+            globalThis.WebSocketStream = original.stream
+            SyncH264CanvasSender.create = original.create
+        }
+    })
+
+    test('a persistent encoder warmup timeout during start fails after exhausting retries', async () => {
+        const original = {
+            encoder: globalThis.VideoEncoder,
+            frame: globalThis.VideoFrame,
+            stream: globalThis.WebSocketStream,
+            create: SyncH264CanvasSender.create
+        }
+        let attempts = 0
+        try {
+            globalThis.VideoEncoder = class VideoEncoder {}
+            globalThis.VideoFrame = class VideoFrame {}
+            globalThis.WebSocketStream = class WebSocketStream {}
+            SyncH264CanvasSender.create = async () => {
+                attempts++
+                const timeout = new Error('H.264 hardware encoder warmup timed out')
+                timeout.code = 'SYNC_ENCODING_FAILED'
+                timeout.transient = true
+                throw timeout
+            }
+            const fixture = await connectedFixture({
+                welcomeVersion: '0.2.87',
+                renderer: { addSink: () => () => {} }
+            })
+            const starting = fixture.controller.start('WarmupPersistent')
+            await flushMicrotasks(12)
+
+            assert.equal(attempts, 1)
+            assert.equal(fixture.timers.timeouts.size, 1)
+            fixture.timers.fireTimeout(250)
+            await flushMicrotasks(12)
+
+            assert.equal(attempts, 2)
+            assert.equal(fixture.timers.timeouts.size, 1)
+            fixture.timers.fireTimeout(1000)
+            await flushMicrotasks(12)
+
+            assert.equal(attempts, 3)
+            await assert.rejects(starting, {
+                code: 'SYNC_ENCODING_FAILED'
+            })
+            assert.equal(fixture.controller.state.status, 'error')
+            assert.equal(fixture.timers.timeouts.size, 0)
+        } finally {
+            globalThis.VideoEncoder = original.encoder
+            globalThis.VideoFrame = original.frame
+            globalThis.WebSocketStream = original.stream
+            SyncH264CanvasSender.create = original.create
+        }
+    })
+
+    test('an encoding failure that is not a timeout still ends the output', async () => {
+        const initial = senderFixture()
+        const fixture = await connectedFixture({
+            renderer: {
+                pipeline: {},
+                createFrameExportQueue: () => ({ close() {} }),
+                addSink: (sink) => () => sink.close()
+            },
+            sender: initial.sender
+        })
+        await fixture.controller.start('Broken')
+        const failure = new Error('H.264 encoder returned an invalid frame')
+        failure.code = 'SYNC_ENCODING_FAILED'
+        initial.completion.reject(failure)
+        await flushMicrotasks()
+
+        assert.equal(fixture.controller.state.status, 'error')
+        assert.equal(fixture.timers.timeouts.size, 0, 'no retry may be scheduled')
+    })
 })
 
 describe('SyncOutputController app attachment', () => {
