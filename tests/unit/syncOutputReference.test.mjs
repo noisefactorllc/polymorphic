@@ -2120,3 +2120,23 @@ describe('SyncOutputController app attachment', () => {
         assert.deepEqual(states, ['idle', 'checking', 'ready'])
     })
 })
+
+test('SyncOutputController accepts and retains injected logger', () => {
+    const customLogger = { warn() {}, error() {}, info() {} }
+    const defaultController = new SyncOutputController({
+        renderer: {},
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) }
+    })
+    assert.equal(defaultController._logger, globalThis.console)
+
+    const customController = new SyncOutputController({
+        renderer: {},
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) },
+        logger: customLogger
+    })
+    assert.equal(customController._logger, customLogger)
+})
+
+

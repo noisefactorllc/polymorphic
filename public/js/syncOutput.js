@@ -247,6 +247,7 @@ export class SyncOutputController {
         clearInterval: clearIntervalImplementation = globalThis.clearInterval,
         setTimeout: setTimeoutImplementation = globalThis.setTimeout,
         clearTimeout: clearTimeoutImplementation = globalThis.clearTimeout,
+        logger = globalThis.console,
         onStateChange = () => {}
     } = {}) {
         if (!connectionProvider || typeof connectionProvider.createClient !== 'function') {
@@ -265,6 +266,7 @@ export class SyncOutputController {
         this._getDescriptor = getDescriptor
         this._connectionProvider = connectionProvider
         this._clock = clock
+        this._logger = logger
         this._setInterval = (...args) => Reflect.apply(setIntervalImplementation, globalThis, args)
         this._clearInterval = (...args) => Reflect.apply(clearIntervalImplementation, globalThis, args)
         this._setTimeout = (...args) => Reflect.apply(setTimeoutImplementation, globalThis, args)
@@ -698,7 +700,8 @@ export class SyncOutputController {
             const rendererIdentity = this._captureRendererIdentity(liveCanvas, descriptor)
             if (compressed) {
                 resources.sender = await SyncH264CanvasSender.create({
-                    client: this._client, name, canvas: liveCanvas, descriptor, clock: this._clock
+                    client: this._client, name, canvas: liveCanvas, descriptor, clock: this._clock,
+                    logger: this._logger
                 })
             } else {
                 resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
@@ -1055,7 +1058,8 @@ export class SyncOutputController {
             if (supportsH264CanvasOutput(welcome)) {
                 resources.sender = await SyncH264CanvasSender.create({
                     client: resources.client, name: context.senderName,
-                    canvas: context.canvas, descriptor: context.descriptor, clock: this._clock
+                    canvas: context.canvas, descriptor: context.descriptor, clock: this._clock,
+                    logger: this._logger
                 })
             } else {
                 resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
