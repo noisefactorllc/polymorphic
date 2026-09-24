@@ -5,6 +5,7 @@ import {
     createDefaultSyncConnectionProvider,
     SyncOutputController
 } from '../../public/js/syncOutput.js'
+import { SyncH264CanvasSender } from '../../public/js/syncH264CanvasSender.js'
 import { SyncBridgeClient } from '../../public/js/sync/bundle.js'
 
 function deferred() {
@@ -133,10 +134,12 @@ async function connectedFixture({
     sender = senderFixture().sender,
     createSender,
     providerIds = ['syphon'],
+    welcomeVersion = '0.1.0',
     onStateChange,
     recoveryClients = [],
     timers = manualTimers(),
-    clock = { timeOrigin: 1_700_000_000_000 }
+    clock = { timeOrigin: 1_700_000_000_000 },
+    logger
 } = {}) {
     const defaultCanvas = { width: 1280, height: 720 }
     const canvasProvider = getCanvas || (() => defaultCanvas)
@@ -153,7 +156,7 @@ async function connectedFixture({
     const client = {
         connect: async () => {
             events.push('connect')
-            return readyWelcome(providerIds)
+            return { ...readyWelcome(providerIds), version: welcomeVersion }
         },
         createSender: createSender || (async (...args) => {
             events.push(['createSender', ...args])
@@ -175,6 +178,7 @@ async function connectedFixture({
         clearInterval: timers.clearInterval,
         setTimeout: timers.setTimeout,
         clearTimeout: timers.clearTimeout,
+        logger,
         onStateChange
     })
     await controller.connect()
@@ -2138,5 +2142,43 @@ test('SyncOutputController accepts and retains injected logger', () => {
     })
     assert.equal(customController._logger, customLogger)
 })
+
+test('SyncOutputController forwards injected logger to SyncH264CanvasSender.create', async () => {
+    const original = {
+        encoder: globalThis.VideoEncoder,
+        frame: globalThis.VideoFrame,
+        stream: globalThis.WebSocketStream,
+        create: SyncH264CanvasSender.create
+    }
+    const canvas = { width: 1920, height: 1080 }
+    const sender = senderFixture()
+    let capturedOptions
+    const customLogger = { warn() {}, error() {}, info() {} }
+    try {
+        globalThis.VideoEncoder = class VideoEncoder {}
+        globalThis.VideoFrame = class VideoFrame {}
+        globalThis.WebSocketStream = class WebSocketStream {}
+        SyncH264CanvasSender.create = async (options) => {
+            capturedOptions = options
+            return sender.sender
+        }
+        const fixture = await connectedFixture({
+            welcomeVersion: '0.2.87',
+            getCanvas: () => canvas,
+            renderer: { addSink: () => () => sender.sender.close() },
+            logger: customLogger
+        })
+
+        await fixture.controller.start('Logger forwarding test')
+        assert.equal(capturedOptions?.logger, customLogger)
+        await fixture.controller.stop()
+    } finally {
+        globalThis.VideoEncoder = original.encoder
+        globalThis.VideoFrame = original.frame
+        globalThis.WebSocketStream = original.stream
+        SyncH264CanvasSender.create = original.create
+    }
+})
+
 
 
