@@ -892,7 +892,7 @@ describe('SyncOutputController sender start', () => {
         let sink = null
         const renderer = {
             createFrameExportQueue: () => ({ close() {} }),
-            addSink: (added) => { sink = added; return () => {} }
+            addSink: (added) => { sink = added; return () => sender.sender.close() }
         }
         const fixture = await connectedFixture({ renderer, sender: sender.sender })
 
