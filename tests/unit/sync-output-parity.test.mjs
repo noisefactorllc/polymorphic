@@ -521,6 +521,9 @@ test('dispose tears down a live sender once and is idempotent', async () => {
     assert.equal(fixture.events.filter((event) => event === 'client close').length, 1)
     assert.equal(controller.state.connected, false)
     assert.equal(controller.state.senderName, null)
+    await assert.rejects(controller.checkAvailability(), { code: 'SYNC_LIFECYCLE' })
+    await assert.rejects(controller.connect(), { code: 'SYNC_LIFECYCLE' })
+    await assert.rejects(controller.start('Late'), { code: 'SYNC_LIFECYCLE' })
 })
 
 test('recovery continues after the fast ramp and reconnects without pairing again', async () => {

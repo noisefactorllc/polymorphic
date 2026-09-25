@@ -3,7 +3,9 @@ import { describe, test } from 'node:test'
 
 import {
     createDefaultSyncConnectionProvider,
-    SyncOutputController
+    SyncOutputController,
+    initializeSyncOutputController,
+    getSyncOutputController
 } from '../../public/js/syncOutput.js'
 import { SyncH264CanvasSender } from '../../public/js/syncH264CanvasSender.js'
 import { SyncBridgeClient } from '../../public/js/sync/bundle.js'
@@ -1577,6 +1579,177 @@ describe('SyncOutputController live lifecycle', () => {
         assert.equal(fixture.timers.intervals.size, 0)
         assert.equal(fixture.timers.timeouts.size, 0)
     })
+
+    test('dispose closes an in-flight pairing client and prevents a late token from connecting', async () => {
+        const pendingPair = deferred()
+        let pairingCloses = 0
+        let authenticatedCreations = 0
+        const controller = new SyncOutputController({
+            connectionProvider: {
+                createClient(options) {
+                    if (Object.hasOwn(options, 'token')) {
+                        authenticatedCreations++
+                        throw new Error('late pairing must not create an authenticated client')
+                    }
+                    return {
+                        pair: () => pendingPair.promise,
+                        close() { pairingCloses++ }
+                    }
+                }
+            }
+        })
+
+        const connecting = controller.connect()
+        await flushMicrotasks()
+        controller.dispose()
+        controller.dispose()
+
+        assert.equal(pairingCloses, 1)
+        pendingPair.resolve({ protocolVersion: 1, token: 'd'.repeat(64) })
+        await assert.rejects(connecting, { code: 'SYNC_LIFECYCLE' })
+        assert.equal(authenticatedCreations, 0)
+        assert.equal(controller.state.connected, false)
+    })
+
+    test('immediate dispose closes synchronously tracked client without yielding microtasks', async () => {
+        const pendingPair = deferred()
+        let pairingCloses = 0
+        const controller = new SyncOutputController({
+            connectionProvider: {
+                createClient() {
+                    return {
+                        pair: () => pendingPair.promise,
+                        close() { pairingCloses++ }
+                    }
+                }
+            }
+        })
+
+        const connecting = controller.connect()
+        controller.dispose()
+
+        assert.equal(pairingCloses, 1)
+        pendingPair.resolve({ protocolVersion: 1, token: 'a'.repeat(64) })
+        await assert.rejects(connecting, { code: 'SYNC_LIFECYCLE' })
+    })
+
+    test('dispose closes an in-flight authenticated client and ignores its late welcome', async () => {
+        const pendingWelcome = deferred()
+        let authenticatedCloses = 0
+        const clients = [
+            {
+                async pair() { return { protocolVersion: 1, token: 'e'.repeat(64) } },
+                close() {}
+            },
+            {
+                connect: () => pendingWelcome.promise,
+                close() { authenticatedCloses++ }
+            }
+        ]
+        const controller = new SyncOutputController({
+            connectionProvider: { createClient: () => clients.shift() }
+        })
+
+        const connecting = controller.connect()
+        await flushMicrotasks(8)
+        controller.dispose()
+
+        assert.equal(authenticatedCloses, 1)
+        pendingWelcome.resolve(readyWelcome())
+        await assert.rejects(connecting, { code: 'SYNC_LIFECYCLE' })
+        assert.equal(controller.state.connected, false)
+    })
+
+    test('dispose releases a pending start queue and closes the late sender exactly once', async () => {
+        const pendingSender = deferred()
+        const senderClosed = deferred()
+        const canvas = { width: 1280, height: 720 }
+        let queueCloses = 0
+        let senderCloses = 0
+        let clientCloses = 0
+        let sinkAttachments = 0
+        const sender = {
+            closed: senderClosed.promise,
+            stats: { accepted: 0, droppedBusy: 0, droppedBackpressure: 0, sent: 0, failed: 0 },
+            configure() {},
+            submit() { return true },
+            close() {
+                senderCloses++
+                senderClosed.resolve()
+            }
+        }
+        const clients = [
+            {
+                async pair() { return { protocolVersion: 1, token: 'f'.repeat(64) } },
+                close() {}
+            },
+            {
+                async connect() { return readyWelcome() },
+                createSender: () => pendingSender.promise,
+                close() { clientCloses++ }
+            }
+        ]
+        const controller = new SyncOutputController({
+            renderer: {
+                pipeline: {},
+                createFrameExportQueue: () => ({ close() { queueCloses++ } }),
+                addSink() {
+                    sinkAttachments++
+                    return () => {}
+                }
+            },
+            getCanvas: () => canvas,
+            connectionProvider: { createClient: () => clients.shift() }
+        })
+        await controller.connect()
+
+        const starting = controller.start('Pending sender')
+        await flushMicrotasks()
+        controller.dispose()
+
+        assert.equal(queueCloses, 1)
+        assert.equal(clientCloses, 1)
+        pendingSender.resolve(sender)
+        await assert.rejects(starting, { code: 'SYNC_LIFECYCLE' })
+        assert.equal(senderCloses, 1)
+        assert.equal(sinkAttachments, 0)
+        assert.notEqual(controller.state.status, 'sending')
+    })
+
+    test('dispose tears down a live sender once and is idempotent', async () => {
+        const events = []
+        const sender = senderFixture()
+        const fixture = await connectedFixture({
+            renderer: {
+                pipeline: {},
+                createFrameExportQueue: () => ({ close() { events.push('queue close') } }),
+                addSink: (sink) => () => {
+                    events.push('sink removed')
+                    sink.close()
+                }
+            },
+            sender: {
+                ...sender.sender,
+                close() {
+                    events.push('sender close')
+                    sender.sender.close()
+                }
+            }
+        })
+        await fixture.controller.start('Live sender')
+
+        fixture.controller.dispose()
+        fixture.controller.dispose()
+
+        assert.equal(events.filter((event) => event === 'sink removed').length, 1)
+        assert.equal(events.filter((event) => event === 'sender close').length, 1)
+        assert.equal(fixture.events.filter((event) => event === 'client close').length, 1)
+        assert.equal(fixture.controller.state.connected, false)
+        assert.equal(fixture.controller.state.senderName, null)
+        await assert.rejects(fixture.controller.checkAvailability(), { code: 'SYNC_LIFECYCLE' })
+        await assert.rejects(fixture.controller.connect(), { code: 'SYNC_LIFECYCLE' })
+        await assert.rejects(fixture.controller.start('Late'), { code: 'SYNC_LIFECYCLE' })
+    })
 })
 
 function senderLoss(closeCode, closeReason = '') {
@@ -2327,6 +2500,59 @@ describe('SyncOutputController app attachment', () => {
         await controller.checkAvailability()
 
         assert.deepEqual(states, ['idle', 'checking', 'ready'])
+    })
+
+    test('initializes one passive app singleton without probing, pairing, connecting, or UI', () => {
+        const calls = []
+        const connectionProvider = {
+            createClient() {
+                calls.push('createClient')
+                throw new Error('singleton initialization must stay passive')
+            }
+        }
+        const renderer = {
+            createFrameExportQueue() {},
+            addSink() {}
+        }
+        const canvas = { width: 1024, height: 1024 }
+
+        const first = initializeSyncOutputController({
+            renderer,
+            getCanvas: () => canvas,
+            connectionProvider
+        })
+        const second = initializeSyncOutputController({
+            renderer: null,
+            getCanvas: () => null,
+            connectionProvider
+        })
+
+        assert.equal(first, second)
+        assert.equal(getSyncOutputController(), first)
+        assert.equal(first.state.status, 'idle')
+        assert.deepEqual(calls, [])
+        assert.equal('document' in first, false)
+        assert.equal(globalThis.syncOutputController, undefined)
+        assert.equal(globalThis._testExports?.syncOutputController, undefined)
+    })
+
+    test('initializes a fresh singleton when the previous instance has been disposed', () => {
+        const first = initializeSyncOutputController({
+            renderer: { pipeline: {} },
+            getCanvas: () => ({}),
+            connectionProvider: { createClient: () => ({}) }
+        })
+        first.dispose()
+
+        const second = initializeSyncOutputController({
+            renderer: { pipeline: {} },
+            getCanvas: () => ({}),
+            connectionProvider: { createClient: () => ({}) }
+        })
+
+        assert.notEqual(first, second)
+        assert.equal(getSyncOutputController(), second)
+        assert.equal(second.state.status, 'idle')
     })
 })
 
