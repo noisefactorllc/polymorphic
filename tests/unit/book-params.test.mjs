@@ -13,7 +13,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildIndex, checkParagraph, checkProgram } from '../../scripts/check-book-params.mjs'
+import { buildIndex, checkParagraph, checkProgram, extractCalls, parseNamedArgs } from '../../scripts/check-book-params.mjs'
 
 /** A miniature engine, shaped like book/data/effects.json. */
 const data = {
@@ -141,4 +141,32 @@ test('a demonstration program with dynamic expressions or buffer arguments resol
     assert.deepEqual(checkProg('cell(shape: read3d(o1)).write(o0)\nrender(o0)'), [])
     assert.deepEqual(checkProg('cell(shape: palette.warm).write(o0)\nrender(o0)'), [])
 })
+
+test('parseNamedArgs preserves strings with commas and colons without misinterpreting parameters', () => {
+    const args = parseNamedArgs('text: "Hello, note: world", size: 24, font: \'sans, serif\'')
+    assert.deepEqual(args, [
+        { name: 'text', value: '"Hello, note: world"' },
+        { name: 'size', value: '24' },
+        { name: 'font', value: "'sans, serif'" },
+    ])
+})
+
+test('extractCalls handles strings with parens and line comments without cutting off arguments', () => {
+    const dsl = `
+        // noise(ignored: true)
+        noise(scale: 50)
+          .text(text: "smile :) (really)", font: "mono")
+          .write(o0)
+        render(o0)
+    `
+    const calls = extractCalls(dsl)
+    assert.equal(calls.length, 4)
+    assert.equal(calls[0].name, 'noise')
+    assert.equal(calls[1].name, 'text')
+    assert.equal(calls[1].argsStr.includes('smile :) (really)'), true)
+    assert.equal(calls[1].argsStr.includes('font: "mono"'), true)
+    assert.equal(calls[2].name, 'write')
+    assert.equal(calls[3].name, 'render')
+})
+
 

@@ -132,28 +132,114 @@ export function buildIndex(data) {
  * of the language runtime rather than library effects.
  */
 export const PROGRAM_BUILTINS = new Set([
-    'render', 'write', 'write3d', 'read', 'read3d', 'search',
-    'loopBegin', 'loopEnd', 'subchain', 'palette',
+    'render', 'write', 'write3d', 'read', 'read3d', 'search', 'subchain',
 ])
+
+/** Strip line comments while preserving quoted strings. */
+export function stripComments(code) {
+    let out = ''
+    let inQuote = null
+    let isTriple = false
+    for (let i = 0; i < code.length; i++) {
+        const ch = code[i]
+        if (!inQuote && ch === '/' && code[i + 1] === '/') {
+            const next = code.indexOf('\n', i)
+            if (next === -1) break
+            i = next - 1
+            continue
+        }
+        if (!inQuote && (ch === '"' || ch === "'")) {
+            if (code.slice(i, i + 3) === ch.repeat(3)) {
+                inQuote = ch
+                isTriple = true
+                out += code.slice(i, i + 3)
+                i += 2
+                continue
+            } else {
+                inQuote = ch
+                isTriple = false
+                out += ch
+                continue
+            }
+        } else if (inQuote) {
+            out += ch
+            if (ch === '\\' && i + 1 < code.length) {
+                out += code[++i]
+                continue
+            }
+            if (isTriple) {
+                if (ch === inQuote && code.slice(i, i + 3) === inQuote.repeat(3)) {
+                    out += inQuote.repeat(2)
+                    i += 2
+                    inQuote = null
+                    isTriple = false
+                }
+            } else if (ch === inQuote) {
+                inQuote = null
+            }
+            continue
+        }
+        out += ch
+    }
+    return out
+}
 
 /** Extract function calls with balanced paren scanning to handle nested expressions. */
 export function extractCalls(dsl) {
     const calls = []
     if (!dsl || typeof dsl !== 'string') return calls
+    const cleaned = stripComments(dsl)
     const regex = /(?:^|[\s.])([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
     let match
-    while ((match = regex.exec(dsl)) !== null) {
+    while ((match = regex.exec(cleaned)) !== null) {
         const name = match[1]
         const openParenIndex = match.index + match[0].length - 1
         let depth = 1
         let i = openParenIndex + 1
-        while (i < dsl.length && depth > 0) {
-            const ch = dsl[i]
+        let inQuote = null
+        let isTriple = false
+
+        while (i < cleaned.length && depth > 0) {
+            const ch = cleaned[i]
+
+            if (!inQuote && (ch === '"' || ch === "'")) {
+                if (cleaned.slice(i, i + 3) === ch.repeat(3)) {
+                    inQuote = ch
+                    isTriple = true
+                    i += 3
+                    continue
+                } else {
+                    inQuote = ch
+                    isTriple = false
+                    i++
+                    continue
+                }
+            } else if (inQuote) {
+                if (ch === '\\' && i + 1 < cleaned.length) {
+                    i += 2
+                    continue
+                }
+                if (isTriple) {
+                    if (ch === inQuote && cleaned.slice(i, i + 3) === inQuote.repeat(3)) {
+                        inQuote = null
+                        isTriple = false
+                        i += 3
+                        continue
+                    }
+                } else if (ch === inQuote) {
+                    inQuote = null
+                    i++
+                    continue
+                }
+                i++
+                continue
+            }
+
             if (ch === '(') depth++
             else if (ch === ')') depth--
             i++
         }
-        const argsStr = dsl.slice(openParenIndex + 1, i - 1)
+        const argsStr = cleaned.slice(openParenIndex + 1, i - 1)
         calls.push({ name, argsStr })
         regex.lastIndex = i
     }
@@ -165,10 +251,47 @@ export function parseNamedArgs(argsStr) {
     const args = []
     let depth = 0
     let current = ''
+    let inQuote = null
+    let isTriple = false
+
     for (let i = 0; i < argsStr.length; i++) {
         const ch = argsStr[i]
+
+        if (!inQuote && (ch === '"' || ch === "'")) {
+            if (argsStr.slice(i, i + 3) === ch.repeat(3)) {
+                inQuote = ch
+                isTriple = true
+                current += argsStr.slice(i, i + 3)
+                i += 2
+                continue
+            } else {
+                inQuote = ch
+                isTriple = false
+                current += ch
+                continue
+            }
+        } else if (inQuote) {
+            current += ch
+            if (ch === '\\' && i + 1 < argsStr.length) {
+                current += argsStr[++i]
+                continue
+            }
+            if (isTriple) {
+                if (ch === inQuote && argsStr.slice(i, i + 3) === inQuote.repeat(3)) {
+                    current += inQuote.repeat(2)
+                    i += 2
+                    inQuote = null
+                    isTriple = false
+                }
+            } else if (ch === inQuote) {
+                inQuote = null
+            }
+            continue
+        }
+
         if (ch === '(' || ch === '[' || ch === '{') depth++
         else if (ch === ')' || ch === ']' || ch === '}') depth--
+
         if (ch === ',' && depth === 0) {
             if (current.trim()) args.push(current.trim())
             current = ''
@@ -180,13 +303,9 @@ export function parseNamedArgs(argsStr) {
 
     const named = []
     for (const arg of args) {
-        const colonIdx = arg.indexOf(':')
-        if (colonIdx !== -1) {
-            const pName = arg.slice(0, colonIdx).trim()
-            const pVal = arg.slice(colonIdx + 1).trim()
-            if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(pName)) {
-                named.push({ name: pName, value: pVal })
-            }
+        const m = arg.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([\s\S]*)$/)
+        if (m) {
+            named.push({ name: m[1], value: m[2].trim() })
         }
     }
     return named
