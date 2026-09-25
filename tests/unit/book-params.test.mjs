@@ -13,7 +13,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildIndex, checkParagraph } from '../../scripts/check-book-params.mjs'
+import { buildIndex, checkParagraph, checkProgram } from '../../scripts/check-book-params.mjs'
 
 /** A miniature engine, shaped like book/data/effects.json. */
 const data = {
@@ -98,3 +98,47 @@ test('DSL vocabulary and literals resolve', () => {
 test('prose with no code spans is always fine', () => {
     assert.deepEqual(check('A field of cells, like foam or cracked mud.'), [])
 })
+
+const checkProg = (program, effect = cell) => checkProgram(program, effect, index)
+
+test('a demonstration program with valid parameters and choices resolves', () => {
+    assert.deepEqual(checkProg('cell(shape: hexagon, speed: 0.5).write(o0)\nrender(o0)'), [])
+    assert.deepEqual(checkProg('cell().pointsRender(viewMode: ortho).write(o0)\nrender(o0)'), [])
+})
+
+test('a demonstration program calling an unknown effect fails', () => {
+    const fails = checkProg('unknownEffect().write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].call, 'unknownEffect')
+    assert.match(fails[0].why, /unknown effect/)
+})
+
+test('a demonstration program with an invalid parameter name fails', () => {
+    const fails = checkProg('cell(metric: hexagon).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'metric')
+    assert.match(fails[0].why, /not a parameter of cell\(\)/)
+})
+
+test('a demonstration program with an invalid enum choice fails', () => {
+    const fails = checkProg('pointsRender(viewMode: invalidChoice).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'viewMode')
+    assert.equal(fails[0].value, 'invalidChoice')
+    assert.match(fails[0].why, /not a valid choice/)
+})
+
+test('a demonstration program passing a numeric literal to an enum parameter fails', () => {
+    const fails = checkProg('pointsRender(viewMode: 1).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'viewMode')
+    assert.equal(fails[0].value, '1')
+    assert.match(fails[0].why, /not a valid choice/)
+})
+
+test('a demonstration program with dynamic expressions or buffer arguments resolves', () => {
+    assert.deepEqual(checkProg('cell(speed: read(o1)).write(o0)\nrender(o0)'), [])
+    assert.deepEqual(checkProg('cell(shape: read3d(o1)).write(o0)\nrender(o0)'), [])
+    assert.deepEqual(checkProg('cell(shape: palette.warm).write(o0)\nrender(o0)'), [])
+})
+

@@ -19,6 +19,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { splitProseFile } from '../../scripts/build-book.mjs'
+import { buildIndex, checkProgram } from '../../scripts/check-book-params.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DATA = join(REPO, 'book', 'data', 'effects.json')
@@ -86,6 +87,18 @@ test('every page has a program that renders and calls its own effect', () => {
         )
         assert.ok(!program.includes('undefined'), `${effect.id}: program contains "undefined"`)
     }
+})
+
+test('every page has a demonstration program with valid parameters and enum choices', () => {
+    const index = buildIndex(book)
+    const failures = []
+    for (const effect of book.effects) {
+        const fails = checkProgram(effect.program, effect, index)
+        for (const f of fails) {
+            failures.push(`${effect.id}: ${f.why}`)
+        }
+    }
+    assert.deepEqual(failures, [], `found parameter/enum mismatches:\n${failures.join('\n')}`)
 })
 
 test('every page has a title and a one-line description', () => {

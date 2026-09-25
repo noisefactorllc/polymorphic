@@ -9956,9 +9956,9 @@
       ],
       "starter": false,
       "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .attractor()\n  .pointsRender(viewMode: 1)\n  .write(o0)\n\nrender(o0)",
+      "curated": true,
+      "curatedWhy": "pointsRender viewMode was emitted as raw integer 1 instead of the enum choice ortho matching the prose",
+      "program": "search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .attractor()\n  .pointsRender(viewMode: ortho)\n  .write(o0)\n\nrender(o0)",
       "params": [
         {
           "name": "stateSize",
@@ -10023,9 +10023,9 @@
       ],
       "starter": false,
       "explicit": true,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: 512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)",
+      "curated": true,
+      "curatedWhy": "upstream defaultProgram passed numeric 512 instead of enum choice x512 to pointsEmit",
+      "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: x512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)",
       "params": [
         {
           "name": "stateSize",

@@ -93,10 +93,16 @@ export function buildIndex(data) {
     const funcs = new Set()
     // func name -> the vocabulary that effect legitimately brings with it
     const vocabulary = new Map()
+    // func name -> list of effect definitions (to resolve parameters and choices)
+    const effectsByFunc = new Map()
 
     for (const effect of data.effects) {
         byId.set(effect.id, effect)
         funcs.add(effect.func)
+        const list = effectsByFunc.get(effect.func) || []
+        list.push(effect)
+        effectsByFunc.set(effect.func, list)
+
         const words = new Set()
         for (const param of effect.params || []) {
             words.add(param.name)
@@ -118,7 +124,137 @@ export function buildIndex(data) {
         const prior = vocabulary.get(effect.func)
         vocabulary.set(effect.func, prior ? new Set([...prior, ...words]) : words)
     }
-    return { byId, funcs, vocabulary }
+    return { byId, funcs, vocabulary, effectsByFunc }
+}
+
+/**
+ * DSL operations, surfaces, search keywords, and pipeline stages that are part
+ * of the language runtime rather than library effects.
+ */
+export const PROGRAM_BUILTINS = new Set([
+    'render', 'write', 'write3d', 'read', 'read3d', 'search',
+    'loopBegin', 'loopEnd', 'subchain', 'palette',
+])
+
+/** Extract function calls with balanced paren scanning to handle nested expressions. */
+export function extractCalls(dsl) {
+    const calls = []
+    if (!dsl || typeof dsl !== 'string') return calls
+    const regex = /(?:^|[\s.])([A-Za-z_][A-Za-z0-9_]*)\s*\(/g
+    let match
+    while ((match = regex.exec(dsl)) !== null) {
+        const name = match[1]
+        const openParenIndex = match.index + match[0].length - 1
+        let depth = 1
+        let i = openParenIndex + 1
+        while (i < dsl.length && depth > 0) {
+            const ch = dsl[i]
+            if (ch === '(') depth++
+            else if (ch === ')') depth--
+            i++
+        }
+        const argsStr = dsl.slice(openParenIndex + 1, i - 1)
+        calls.push({ name, argsStr })
+        regex.lastIndex = i
+    }
+    return calls
+}
+
+/** Split argument string on top-level commas, extracting named arguments. */
+export function parseNamedArgs(argsStr) {
+    const args = []
+    let depth = 0
+    let current = ''
+    for (let i = 0; i < argsStr.length; i++) {
+        const ch = argsStr[i]
+        if (ch === '(' || ch === '[' || ch === '{') depth++
+        else if (ch === ')' || ch === ']' || ch === '}') depth--
+        if (ch === ',' && depth === 0) {
+            if (current.trim()) args.push(current.trim())
+            current = ''
+        } else {
+            current += ch
+        }
+    }
+    if (current.trim()) args.push(current.trim())
+
+    const named = []
+    for (const arg of args) {
+        const colonIdx = arg.indexOf(':')
+        if (colonIdx !== -1) {
+            const pName = arg.slice(0, colonIdx).trim()
+            const pVal = arg.slice(colonIdx + 1).trim()
+            if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(pName)) {
+                named.push({ name: pName, value: pVal })
+            }
+        }
+    }
+    return named
+}
+
+/**
+ * Validate a demonstration program's calls and argument precision.
+ * Returns an array of failure objects if invalid.
+ */
+export function checkProgram(program, effect, index) {
+    const failures = []
+    if (!program || typeof program !== 'string') return failures
+
+    const { funcs, effectsByFunc } = index
+    const calls = extractCalls(program)
+
+    for (const call of calls) {
+        if (PROGRAM_BUILTINS.has(call.name)) continue
+
+        if (!funcs.has(call.name)) {
+            failures.push({
+                call: call.name,
+                param: null,
+                value: null,
+                why: `unknown effect "${call.name}()" called in program`
+            })
+            continue
+        }
+
+        const effectDefs = effectsByFunc?.get(call.name) || []
+        const paramDefs = new Map()
+        for (const def of effectDefs) {
+            for (const p of def.params || []) {
+                paramDefs.set(p.name, p)
+            }
+        }
+
+        const namedArgs = parseNamedArgs(call.argsStr)
+        for (const arg of namedArgs) {
+            if (!paramDefs.has(arg.name)) {
+                failures.push({
+                    call: call.name,
+                    param: arg.name,
+                    value: arg.value,
+                    why: `"${arg.name}" is not a parameter of ${call.name}()`
+                })
+                continue
+            }
+
+            const pDef = paramDefs.get(arg.name)
+            if (pDef.choices && pDef.choices.length > 0) {
+                const isDynamic = arg.value.startsWith('read(') ||
+                    arg.value.startsWith('read3d(') ||
+                    arg.value.startsWith('palette.') ||
+                    /^o\d+$/.test(arg.value)
+                if (!isDynamic && !pDef.choices.includes(arg.value)) {
+                    failures.push({
+                        call: call.name,
+                        param: arg.name,
+                        value: arg.value,
+                        why: `"${arg.value}" is not a valid choice for ${call.name}(${arg.name}: ...); choices: [${pDef.choices.join(', ')}]`
+                    })
+                }
+            }
+        }
+    }
+
+    return failures
 }
 
 /**
@@ -165,6 +301,7 @@ async function main() {
     const failures = []
     let pages = 0
     let resolved = 0
+    let programsChecked = 0
 
     for (const chapter of (await readdir(CONTENT, { withFileTypes: true }))
         .filter(d => d.isDirectory()).map(d => d.name).sort()) {
@@ -195,20 +332,31 @@ async function main() {
                 }
                 resolved += codeSpans(paragraph).length
             }
+
+            if (effect.program) {
+                programsChecked++
+                for (const err of checkProgram(effect.program, effect, index)) {
+                    failures.push({
+                        id,
+                        token: err.param ? `${err.param}: ${err.value}` : `${err.call}()`,
+                        why: err.why,
+                    })
+                }
+            }
         }
     }
 
     if (VERBOSE) {
-        console.log(`checked ${resolved} code spans across ${pages} pages`)
+        console.log(`checked ${resolved} code spans across ${pages} pages and ${programsChecked} demonstration programs`)
     }
 
     if (failures.length) {
-        console.error(`\nbook: ${failures.length} identifier(s) in the prose do not resolve\n`)
+        console.error(`\nbook: ${failures.length} identifier(s) in the book do not resolve\n`)
         for (const f of failures) {
             console.error(`  ${f.id}`)
             console.error(`      \`${f.token}\` — ${f.why}\n`)
         }
-        console.error('The prose has drifted from the engine, or the name is a typo.')
+        console.error('The prose or demonstration programs have drifted from the engine.')
         console.error('book/data/effects.json is the authority; regenerate it with')
         console.error('scripts/extract-book-data.mjs if the engine itself has changed.\n')
         process.exit(1)

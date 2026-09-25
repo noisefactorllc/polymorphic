@@ -237,8 +237,10 @@ render(o1)`)
         if (effect.namespace === 'points') {
             const kwargs = bkw(effect.instance.globals)
             const effectCall = fmtCall(funcName, kwargs)
-            const viewModeDefault = effect.instance.globals?.viewMode?.default
-            const pointsRenderArgs = viewModeDefault ? `viewMode: ${viewModeDefault}` : ''
+            const viewModeDef = effect.instance.globals?.viewMode
+            const viewModeChoice = viewModeDef?.choices?.[viewModeDef.default] ??
+                (viewModeDef?.default === 1 ? 'ortho' : viewModeDef?.default)
+            const pointsRenderArgs = viewModeChoice ? `viewMode: ${viewModeChoice}` : ''
             const pointsRenderCall = pointsRenderArgs ? `pointsRender(${pointsRenderArgs})` : 'pointsRender()'
             return ensureRenderDirective(`search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .${effectCall}\n  .${pointsRenderCall}\n  .write(o0)\n\nrender(o0)`)
         }

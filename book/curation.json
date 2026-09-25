@@ -71,6 +71,14 @@
     "filter/texture": {
       "why": "a surface texture reads as a surface only when there is a picture printed on it, not a flat fill",
       "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .texture(mode: canvas, alpha: 0.9, scale: 1.6, intensity: 70)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "points/attractor": {
+      "why": "pointsRender viewMode was emitted as raw integer 1 instead of the enum choice ortho matching the prose",
+      "program": "search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .attractor()\n  .pointsRender(viewMode: ortho)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "points/buddhabrot": {
+      "why": "upstream defaultProgram passed numeric 512 instead of enum choice x512 to pointsEmit",
+      "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: x512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)\n"
     }
   }
 }
