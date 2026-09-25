@@ -6,6 +6,7 @@ import {
     createSyncOutputConnectionProvider,
     SyncOutputController,
     initializeSyncOutputController,
+    applyBackoffJitter,
     getSyncOutputController
 } from '../../public/js/syncOutput.js'
 import { SyncH264CanvasSender } from '../../public/js/syncH264CanvasSender.js'
@@ -142,7 +143,8 @@ async function connectedFixture({
     recoveryClients = [],
     timers = manualTimers(),
     clock = { timeOrigin: 1_700_000_000_000 },
-    logger
+    logger,
+    random = () => 0
 } = {}) {
     const defaultCanvas = { width: 1280, height: 720 }
     const canvasProvider = getCanvas || (() => defaultCanvas)
@@ -182,6 +184,7 @@ async function connectedFixture({
         setTimeout: timers.setTimeout,
         clearTimeout: timers.clearTimeout,
         logger,
+        random,
         onStateChange
     })
     await controller.connect()
@@ -2643,5 +2646,82 @@ test('SyncOutputController forwards injected logger to SyncH264CanvasSender.crea
     }
 })
 
+test('applyBackoffJitter keeps the exact base delay with a zero random source', () => {
+    for (const base of [250, 1000, 4000, 10_000]) {
+        assert.equal(applyBackoffJitter(base, () => 0), base)
+    }
+})
 
+test('applyBackoffJitter stays within +25% of the base delay', () => {
+    for (const base of [250, 1000, 4000, 10_000]) {
+        for (const sample of [0, 0.5, 0.999]) {
+            const delay = applyBackoffJitter(base, () => sample)
+            const spread = Math.round(base * 0.25)
+            assert.ok(delay >= base && delay <= base + spread,
+                `${delay} expected within [${base}, ${base + spread}]`)
+        }
+    }
+})
 
+test('applyBackoffJitter never shortens the base delay across a random sweep', () => {
+    let previous = 0
+    let sawVariation = false
+    for (let index = 0; index <= 10; index++) {
+        const delay = applyBackoffJitter(1000, () => index / 10)
+        assert.ok(delay >= 1000 && delay <= 1250)
+        if (previous && delay !== previous) sawVariation = true
+        previous = delay
+    }
+    assert.equal(sawVariation, true)
+})
+
+test('applyBackoffJitter guards against invalid delays and random sources', () => {
+    assert.equal(applyBackoffJitter(0, () => 0.9), 0)
+    assert.equal(applyBackoffJitter(-5, () => 0.9), 0)
+    assert.equal(applyBackoffJitter(Number.NaN, () => 0.9), 0)
+    // A non-function random source falls back to zero jitter.
+    assert.equal(applyBackoffJitter(1000, null), 1000)
+    assert.equal(applyBackoffJitter(1000, () => Number.NaN), 1000)
+})
+
+test('recovery backoff timers carry jitter while remaining within the ramp bounds', async () => {
+    const initial = senderFixture()
+    const replacement = senderFixture()
+    const timers = manualTimers()
+    const canvas = { width: 1920, height: 1080 }
+    const renderer = {
+        pipeline: { id: 'test' },
+        createFrameExportQueue: () => ({ close() {} }),
+        addSink: (sink) => () => sink.close()
+    }
+    const fixture = await connectedFixture({
+        renderer,
+        getCanvas: () => canvas,
+        sender: initial.sender,
+        random: () => 1,
+        timers,
+        recoveryClients: [
+            recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' }),
+            recoveryConnection({ sender: replacement.sender })
+        ]
+    })
+    await fixture.controller.start('Jittered recovery')
+
+    initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    const scheduled = [...timers.timeouts.values()].map((timer) => timer.delay)
+    assert.equal(scheduled.length, 1)
+    const spread = Math.round(250 * 0.25)
+    assert.ok(scheduled[0] > 250 && scheduled[0] <= 250 + spread,
+        `jittered delay ${scheduled[0]} expected in (250, ${250 + spread}]`)
+    // The probe fails, so the next recovery attempt schedules again with the
+    // same deterministic random source above the base 1000ms ramp delay.
+    timers.fireTimeout(scheduled[0])
+    await flushMicrotasks(12)
+    assert.equal(fixture.controller.state.status, 'recovering')
+    const next = [...timers.timeouts.values()].map((timer) => timer.delay)
+    assert.equal(next.length, 1)
+    assert.ok(next[0] > 1000 && next[0] <= 1250,
+        `jittered delay ${next[0]} expected in (1000, 1250]`)
+    await fixture.controller.stop()
+})

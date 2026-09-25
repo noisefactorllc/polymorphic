@@ -137,7 +137,8 @@ async function connectedRecoveryFixture({
     initial = senderFixture(),
     providerIds = ['syphon'],
     recoveryClients = [],
-    timers = manualTimers()
+    timers = manualTimers(),
+    random = () => 0
 } = {}) {
     const stableRenderer = renderer || {
         pipeline: {},
@@ -172,7 +173,8 @@ async function connectedRecoveryFixture({
         setInterval: timers.setInterval,
         clearInterval: timers.clearInterval,
         setTimeout: timers.setTimeout,
-        clearTimeout: timers.clearTimeout
+        clearTimeout: timers.clearTimeout,
+        random
     })
     await controller.connect()
     await controller.start('Recovery source')
