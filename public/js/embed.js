@@ -37,7 +37,7 @@ import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
 import { outputPicker, switchOutputSurface, surfacesWrittenInDsl, effectiveRenderTarget } from './ui/outputPicker.js'
-import { SyncOutputController } from './syncOutput.js'
+import { initializeSyncOutputController, createSyncOutputConnectionProvider } from './syncOutput.js'
 import { createSyncOutputDialog } from './ui/syncOutputDialog.js'
 import { resolveBackendPreference, isWebGPUFallback, WEBGPU_FALLBACK_MESSAGE } from './backendFallback.js'
 import { configureViewportWindow, openViewportWindow } from './ui/viewportWindow.js'
@@ -2135,9 +2135,12 @@ async function startShader() {
         }
     })
     syncOutputController?.dispose()
-    syncOutputController = new SyncOutputController({
+    syncOutputController = initializeSyncOutputController({
         renderer: renderer.inner,
-        getCanvas: () => canvas
+        getCanvas: () => canvas,
+        connectionProvider: createSyncOutputConnectionProvider({
+            transport: typeof window !== 'undefined' ? window.__POLYMORPHIC_SYNC_TRANSPORT__ : undefined
+        })
     })
     syncOutputDialog?.destroy()
     syncOutputDialog = createSyncOutputDialog({ controller: syncOutputController })
