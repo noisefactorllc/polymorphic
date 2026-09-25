@@ -3,6 +3,7 @@ import { describe, test } from 'node:test'
 
 import {
     createDefaultSyncConnectionProvider,
+    createSyncOutputConnectionProvider,
     SyncOutputController,
     initializeSyncOutputController,
     getSyncOutputController
@@ -551,6 +552,37 @@ describe('SyncOutputController explicit connection', () => {
 
         assert.equal(client instanceof SyncBridgeClient, true)
         client.close()
+    })
+
+    test('default connection provider injects only external transport beneath each real client', () => {
+        const constructions = []
+        class RecordingClient {
+            constructor(options) { constructions.push(options) }
+        }
+        const transport = {
+            fetch: async () => {},
+            WebSocket: class {},
+            permissions: null
+        }
+        const provider = createDefaultSyncConnectionProvider({
+            Client: RecordingClient,
+            transport
+        })
+        const token = '7'.repeat(64)
+
+        provider.createClient({ token })
+
+        assert.deepEqual(constructions, [{ ...transport, token }])
+    })
+
+    test('createSyncOutputConnectionProvider returns provided provider or creates default with transport', () => {
+        const existing = { createClient: () => ({}) }
+        assert.equal(createSyncOutputConnectionProvider({ connectionProvider: existing }), existing)
+
+        const created = createSyncOutputConnectionProvider({
+            transport: { fetch: async () => {} }
+        })
+        assert.equal(typeof created.createClient, 'function')
     })
 
     test('closes a denied pairing client without creating an authenticated client or retrying', async () => {
