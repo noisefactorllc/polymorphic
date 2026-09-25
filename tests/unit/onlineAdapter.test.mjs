@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    DEFAULT_RECONNECT_BASE_MS,
+    DEFAULT_RECONNECT_JITTER,
+    DEFAULT_RECONNECT_MAX_MS,
     DEFAULT_SEANCE_SDK_URL,
     DEFAULT_SEANCE_URL,
     MAX_REMOTE_DSL_LENGTH,
@@ -216,6 +219,10 @@ function fakeLayer(overrides = {}) {
             else next.searchParams.delete('seance')
             return next.toString()
         },
+        updateLocalText(docId, text, meta) {
+            this.calls.push({ type: 'updateLocalText', docId, text, meta })
+            return null
+        },
         ...overrides,
     }
 }
@@ -223,16 +230,32 @@ function fakeLayer(overrides = {}) {
 function harness(layer, options = {}) {
     const toasts = []
     const urls = []
-    const dialog = { state: 'offline', sessionId: '', sessionUrl: '', addEventListener() {} }
+    const dialogAttrs = new Map()
+    const dialog = {
+        state: 'offline',
+        sessionId: '',
+        sessionUrl: '',
+        setAttribute(k, v) { dialogAttrs.set(k, String(v)) },
+        removeAttribute(k) { dialogAttrs.delete(k) },
+        getAttribute(k) { return dialogAttrs.has(k) ? dialogAttrs.get(k) : null },
+        addEventListener() {},
+    }
     const adapter = createPolymorphicOnlineAdapter({
         editor: { value: 'search synth\n\nnoise().write(o0)' },
-        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        importSdk: async () => ({
+            createOnlineDslLayer: (opts) => {
+                if (typeof layer === 'function') return layer(opts)
+                layer.options = opts
+                return layer
+            },
+        }),
         location: new URL(options.href || 'https://poly.test/?seance=OLD123'),
         history: { replaceState(_state, _title, url) { urls.push(url) } },
         dialog,
         showToast: (message, type) => toasts.push({ message, type }),
+        ...options.adapterOptions,
     })
-    return { adapter, toasts, urls, dialog }
+    return { adapter, toasts, urls, dialog, dialogAttrs }
 }
 
 test('a failed SDK import can be retried without reloading the page', async () => {
@@ -417,4 +440,268 @@ test('a read-only write attempt tells the user why nothing happened', async () =
         message: 'You are read-only in this session',
         type: 'warning',
     })
+})
+
+// --- reconnection backoff & status -----------------------------------------
+
+test('online adapter forwards exponential backoff parameters to Seance SDK layer', async () => {
+    const layer = fakeLayer()
+    const { adapter } = harness(layer, {
+        adapterOptions: {
+            reconnectBaseMs: 250,
+            reconnectMaxMs: 4000,
+            reconnectJitter: 0.1,
+            maxReconnectAttempts: 5,
+        },
+    })
+
+    assert.deepEqual(adapter.reconnectConfig, {
+        baseMs: 250,
+        maxMs: 4000,
+        jitter: 0.1,
+        maxAttempts: 5,
+    })
+
+    await adapter.ensureOnline()
+    assert.equal(layer.options.reconnectBaseMs, 250)
+    assert.equal(layer.options.reconnectMaxMs, 4000)
+    assert.equal(layer.options.reconnectJitter, 0.1)
+    adapter.dispose()
+})
+
+test('online adapter applies standard defaults for exponential backoff parameters', async () => {
+    const layer = fakeLayer()
+    const { adapter } = harness(layer)
+
+    assert.deepEqual(adapter.reconnectConfig, {
+        baseMs: DEFAULT_RECONNECT_BASE_MS,
+        maxMs: DEFAULT_RECONNECT_MAX_MS,
+        jitter: DEFAULT_RECONNECT_JITTER,
+        maxAttempts: 0,
+    })
+
+    await adapter.ensureOnline()
+    assert.equal(layer.options.reconnectBaseMs, 500)
+    assert.equal(layer.options.reconnectMaxMs, 8000)
+    assert.equal(layer.options.reconnectJitter, 0.25)
+    adapter.dispose()
+})
+
+test('a recoverable WebSocket disconnect initiates reconnecting status and warns user once', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts, dialog, dialogAttrs } = harness(layer)
+
+    await adapter.takeOnline()
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(adapter.getReconnectAttempt(), 0)
+
+    // Layer drops socket and initiates reconnect attempt 0
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0, code: 1006 })
+
+    assert.equal(adapter.isReconnecting(), true)
+    assert.equal(adapter.getReconnectAttempt(), 1)
+    assert.equal(dialog.state, 'connecting')
+    assert.equal(dialog.sessionId, 'S1')
+    assert.equal(dialogAttrs.get('connecting-label'), 'Reconnecting…')
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Connection lost. Reconnecting...',
+        type: 'warning',
+    })
+
+    adapter.dispose()
+})
+
+test('repeated backoff errors during reconnection are suppressed from toast spam', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts } = harness(layer)
+
+    await adapter.takeOnline()
+    const baselineToastCount = toasts.length // 1 ('Session is online')
+
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(toasts.length, baselineToastCount + 1)
+    assert.equal(toasts.at(-1)?.message, 'Connection lost. Reconnecting...')
+
+    // Retry 1 fails: socket error fires, followed by next disconnect attempt
+    layer.handlers['error']?.(new Error('WebSocket connection failed'))
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 1 })
+
+    // Toast count should NOT increase; repeated reconnect errors are suppressed
+    assert.equal(toasts.length, baselineToastCount + 1)
+    assert.equal(adapter.getReconnectAttempt(), 2)
+
+    // Retry 2 fails
+    layer.handlers['error']?.(new Error('WebSocket connection failed'))
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 2 })
+    assert.equal(toasts.length, baselineToastCount + 1)
+    assert.equal(adapter.getReconnectAttempt(), 3)
+
+    adapter.dispose()
+})
+
+test('reconnection recovery clears reconnecting state, updates dialog, and notifies user', async () => {
+    const layer = fakeLayer()
+    let reconnectedFired = false
+    const { adapter, toasts, dialog, dialogAttrs } = harness(layer, {
+        adapterOptions: {
+            onReconnected: () => { reconnectedFired = true },
+        },
+    })
+
+    await adapter.takeOnline()
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(adapter.isReconnecting(), true)
+
+    // Connection restored; layer status flips to online
+    layer.status = 'online'
+    layer.handlers['status']?.('online')
+
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(adapter.getReconnectAttempt(), 0)
+    assert.equal(reconnectedFired, true)
+    assert.equal(dialogAttrs.has('connecting-label'), false)
+    assert.equal(dialog.state, 'online')
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Reconnected to session',
+        type: 'success',
+    })
+
+    // Local edits are re-synchronized
+    const syncCalls = layer.calls.filter((c) => typeof c === 'object' && c.type === 'updateLocalText')
+    assert.ok(syncCalls.length > 0)
+    assert.equal(syncCalls.at(-1)?.meta?.source, 'reconnect')
+
+    adapter.dispose()
+})
+
+test('a terminal server close during reconnection ends the session and cleans up URL', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts, urls, dialog } = harness(layer)
+
+    await adapter.joinSession('TERM99')
+    assert.equal(adapter.getSessionId(), 'TERM99')
+
+    // Disconnect with real Seance SDK terminal disconnect payload (numeric code, hyphenated kind, no error property)
+    layer.handlers['disconnect']?.({
+        willReconnect: false,
+        code: 4404,
+        reason: '',
+        kind: 'unknown-session',
+        attempt: 0,
+    })
+
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(adapter.getStatus(), 'offline')
+    assert.equal(dialog.state, 'offline')
+    assert.equal(urls.at(-1), 'https://poly.test/')
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Disconnected: That session has ended or never existed',
+        type: 'error',
+    })
+
+    adapter.dispose()
+})
+
+test('reconnecting into a read-only state does not trigger local text resync', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts, dialog } = harness(layer)
+
+    await adapter.takeOnline()
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(adapter.isReconnecting(), true)
+
+    // Clear prior calls
+    layer.calls.length = 0
+
+    // Reconnected, but now as readonly (e.g. host moderated user during drop)
+    layer.status = 'readonly'
+    layer.handlers['status']?.('readonly')
+
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(dialog.state, 'readonly')
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Reconnected to session',
+        type: 'success',
+    })
+
+    // Local edit resync must NOT be attempted when readonly
+    const syncCalls = layer.calls.filter((c) => typeof c === 'object' && c.type === 'updateLocalText')
+    assert.equal(syncCalls.length, 0)
+
+    adapter.dispose()
+})
+
+test('dispose clears reconnecting state and resets dialog to offline', async () => {
+    const layer = fakeLayer()
+    const { adapter, dialog, dialogAttrs } = harness(layer)
+
+    await adapter.takeOnline()
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(adapter.isReconnecting(), true)
+    assert.equal(dialogAttrs.get('connecting-label'), 'Reconnecting…')
+
+    adapter.dispose()
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(dialog.state, 'offline')
+    assert.equal(dialogAttrs.has('connecting-label'), false)
+})
+
+test('maxReconnectAttempts bounds the retry loop and goes offline if exceeded', async () => {
+    const layer = fakeLayer()
+    let disconnectedInfo = null
+    const { adapter, toasts, urls, dialog } = harness(layer, {
+        adapterOptions: {
+            maxReconnectAttempts: 2,
+            onDisconnect: (info) => { disconnectedInfo = info },
+        },
+    })
+
+    await adapter.takeOnline()
+
+    // 1st attempt: within bounds
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(adapter.isReconnecting(), true)
+    assert.equal(adapter.getReconnectAttempt(), 1)
+
+    // 2nd attempt: within bounds
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 1 })
+    assert.equal(adapter.isReconnecting(), true)
+    assert.equal(adapter.getReconnectAttempt(), 2)
+
+    // 3rd attempt: exceeds maxReconnectAttempts = 2
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 2 })
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(adapter.getReconnectAttempt(), 0)
+    assert.equal(adapter.getStatus(), 'offline')
+    assert.equal(dialog.state, 'offline')
+    assert.equal(urls.at(-1), 'https://poly.test/')
+    assert.equal(disconnectedInfo?.maxAttemptsExceeded, true)
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Could not reconnect to session: connection timed out',
+        type: 'error',
+    })
+
+    adapter.dispose()
+})
+
+test('user going offline manually cancels active reconnection', async () => {
+    const layer = fakeLayer()
+    const { adapter, toasts, dialog, dialogAttrs } = harness(layer)
+
+    await adapter.takeOnline()
+    layer.handlers['disconnect']?.({ willReconnect: true, attempt: 0 })
+    assert.equal(adapter.isReconnecting(), true)
+
+    adapter.goOffline()
+    assert.equal(adapter.isReconnecting(), false)
+    assert.equal(adapter.getReconnectAttempt(), 0)
+    assert.equal(adapter.getStatus(), 'offline')
+    assert.equal(dialog.state, 'offline')
+    assert.equal(dialogAttrs.has('connecting-label'), false)
+    assert.deepEqual(toasts.at(-1), {
+        message: 'Offline',
+        type: 'info',
+    })
+
+    adapter.dispose()
 })

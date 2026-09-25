@@ -2,6 +2,10 @@ export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
 // Bypass browsers that cached the older alias without Cache-Control.
 export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2'
 
+export const DEFAULT_RECONNECT_BASE_MS = 500
+export const DEFAULT_RECONNECT_MAX_MS = 8000
+export const DEFAULT_RECONNECT_JITTER = 0.25
+
 const DEFAULT_DOC_ID = 'main'
 
 // A remote document larger than this is not something anyone typed. Compiling
@@ -33,8 +37,21 @@ const ERROR_COPY = {
     readonly: 'You have been set to read-only in this session',
 }
 
+const CLOSE_CODE_MAP = {
+    4400: 'protocol',
+    4401: 'unauthorized',
+    4403: 'forbidden',
+    4404: 'unknown_session',
+    4409: 'dialect_mismatch',
+    4423: 'rate_limited',
+    4429: 'rate_limited',
+}
+
 export function seanceErrorCode(error) {
-    return error?.code || error?.frame?.code || null
+    const raw = error?.code ?? error?.kind ?? error?.frame?.code ?? null
+    if (typeof raw === 'number' && CLOSE_CODE_MAP[raw]) return CLOSE_CODE_MAP[raw]
+    if (typeof raw === 'string') return raw.replace(/-/g, '_')
+    return raw
 }
 
 export function describeSeanceError(error) {
@@ -153,12 +170,20 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     const config = resolveOnlineConfig({ location, globals: deps.globals })
     const publicAppUrl = shareBaseUrl(location)
 
+    const reconnectBaseMs = deps.reconnectBaseMs ?? DEFAULT_RECONNECT_BASE_MS
+    const reconnectMaxMs = deps.reconnectMaxMs ?? DEFAULT_RECONNECT_MAX_MS
+    const reconnectJitter = deps.reconnectJitter ?? DEFAULT_RECONNECT_JITTER
+    const maxReconnectAttempts = deps.maxReconnectAttempts ?? 0
+
     let online = null
     let sdkPromise = null
     let bindCleanup = null
     let statusUnsub = null
+    let disconnectUnsub = null
     let errorUnsub = null
     let extraUnsubs = []
+    let isReconnecting = false
+    let reconnectAttempt = 0
     // One session action at a time. takeOnline() awaits an SDK import and a
     // POST before the SDK reports "connecting", and the dialog only disables
     // its buttons on that status, so a double click used to create two
@@ -176,6 +201,10 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             seanceUrl: config.seanceUrl,
             publicAppUrl,
             location,
+            reconnectBaseMs,
+            reconnectMaxMs,
+            reconnectJitter,
+            ...deps.layerOptions,
         })
         bindCleanup = online.bindEditor({
             editor,
@@ -188,12 +217,80 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             },
         })
         statusUnsub = online.on('status', (status) => {
+            const wasReconnecting = isReconnecting
+            if (status === 'online' || status === 'readonly') {
+                if (wasReconnecting) {
+                    isReconnecting = false
+                    reconnectAttempt = 0
+                    showToast('Reconnected to session', 'success')
+                    deps.onReconnected?.()
+                    if (status === 'online') {
+                        updateLocalText('reconnect')
+                    }
+                }
+            } else if (status === 'offline') {
+                isReconnecting = false
+                reconnectAttempt = 0
+            }
             refreshStatus(status)
             deps.onStatus?.(status)
+        })
+        disconnectUnsub = online.on?.('disconnect', (info) => {
+            console.debug('[Polymorphic] Seance disconnect:', info)
+            const willReconnect = Boolean(info?.willReconnect)
+            if (willReconnect) {
+                const isFirstAttempt = !isReconnecting
+                isReconnecting = true
+                reconnectAttempt = (info?.attempt ?? 0) + 1
+                if (maxReconnectAttempts > 0 && reconnectAttempt > maxReconnectAttempts) {
+                    console.warn('[Polymorphic] Max reconnect attempts exceeded (%d); aborting retry loop', maxReconnectAttempts)
+                    isReconnecting = false
+                    reconnectAttempt = 0
+                    closeActiveSession()
+                    writeSessionToBrowserUrl(null)
+                    refreshStatus('offline')
+                    showToast('Could not reconnect to session: connection timed out', 'error')
+                    deps.onDisconnect?.({ ...info, willReconnect: false, maxAttemptsExceeded: true })
+                    return
+                }
+                if (isFirstAttempt) {
+                    showToast('Connection lost. Reconnecting...', 'warning')
+                }
+                refreshStatus('connecting')
+                deps.onReconnecting?.({ ...info, attempt: reconnectAttempt })
+            } else {
+                const hadSession = Boolean(online?.getSessionId?.())
+                const wasReconnecting = isReconnecting
+                isReconnecting = false
+                reconnectAttempt = 0
+                const terminal = isTerminalJoinError(info) || isTerminalJoinError(info?.error)
+                if (terminal) {
+                    closeActiveSession()
+                    writeSessionToBrowserUrl(null)
+                    refreshStatus('offline')
+                    showToast(`Disconnected: ${describeSeanceError(info?.error || info)}`, 'error')
+                } else if (hadSession && wasReconnecting) {
+                    refreshStatus('offline')
+                    showToast('Disconnected from session', 'error')
+                }
+            }
+            deps.onDisconnect?.(info)
         })
         errorUnsub = online.on('error', (error) => {
             console.warn('[Polymorphic] Seance error:', error)
             deps.onError?.(error)
+            if (isTerminalJoinError(error)) {
+                isReconnecting = false
+                reconnectAttempt = 0
+                closeActiveSession()
+                writeSessionToBrowserUrl(null)
+                refreshStatus('offline')
+                showToast(`Session ended: ${describeSeanceError(error)}`, 'error')
+                return
+            }
+            if (isReconnecting) {
+                return
+            }
             const code = seanceErrorCode(error)
             if (code && code !== 'readonly') showToast(describeSeanceError(error), 'error')
         })
@@ -230,7 +327,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
         const isOnline = status === 'online' || status === 'readonly'
         const sessionId = online?.getSessionId?.() || ''
-        const sessionUrl = isOnline ? (online?.getShareUrl?.() || '') : ''
+        const sessionUrl = (isOnline || isReconnecting) ? (online?.getShareUrl?.() || '') : ''
 
         // Drive the unified seance-dialog's internal view via its state; the
         // dialog is shown/hidden by its own trigger (the "go online" menu
@@ -241,8 +338,14 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         dialog.state = status === 'readonly'
             ? 'readonly'
             : isOnline ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
-        dialog.sessionId = isOnline ? sessionId : ''
+        dialog.sessionId = (isOnline || isReconnecting) ? sessionId : ''
         dialog.sessionUrl = sessionUrl
+
+        if (isReconnecting) {
+            dialog.setAttribute?.('connecting-label', 'Reconnecting…')
+        } else {
+            dialog.removeAttribute?.('connecting-label')
+        }
     }
 
     function isLayerConnected(layer = online) {
@@ -252,6 +355,8 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
     function closeActiveSession(layer = online) {
         if (!isLayerConnected(layer)) return false
+        isReconnecting = false
+        reconnectAttempt = 0
         layer.goOffline?.()
         refreshStatus('offline')
         return true
@@ -336,6 +441,8 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function goOffline() {
+        isReconnecting = false
+        reconnectAttempt = 0
         if (!online) return
         online.goOffline()
         writeSessionToBrowserUrl(null)
@@ -416,20 +523,33 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     function dispose() {
         bindCleanup?.()
         statusUnsub?.()
+        disconnectUnsub?.()
         errorUnsub?.()
         for (const unsub of extraUnsubs) unsub?.()
         extraUnsubs = []
+        isReconnecting = false
+        reconnectAttempt = 0
         online?.goOffline?.()
+        refreshStatus('offline')
         bindCleanup = null
         statusUnsub = null
+        disconnectUnsub = null
         errorUnsub = null
         online = null
     }
 
     return {
         config,
+        reconnectConfig: {
+            baseMs: reconnectBaseMs,
+            maxMs: reconnectMaxMs,
+            jitter: reconnectJitter,
+            maxAttempts: maxReconnectAttempts,
+        },
         getStatus: () => online?.getStatus?.() || 'offline',
         getSessionId: () => online?.getSessionId?.() || '',
+        isReconnecting: () => isReconnecting,
+        getReconnectAttempt: () => reconnectAttempt,
         ensureOnline,
         takeOnline,
         joinSession,

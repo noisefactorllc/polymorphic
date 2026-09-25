@@ -390,6 +390,8 @@ function isFeatureEnabled(name) {
 function onlineSessionMenuLabel() {
     const status = onlineAdapter?.getStatus?.() || 'offline'
     const sessionId = onlineAdapter?.getSessionId?.() || ''
+    const isReconnecting = onlineAdapter?.isReconnecting?.() || false
+    if (isReconnecting) return sessionId ? `reconnecting: ${sessionId}...` : 'reconnecting...'
     if (status === 'connecting') return 'connecting...'
     if (status === 'readonly') return `online (read-only): ${sessionId}...`
     if (status === 'online') return `online: ${sessionId}...`
@@ -1035,8 +1037,13 @@ function setupOnlineCollaboration() {
         // step with the connection.
         onStatus: (status) => {
             refreshMenuBar()
-            if (status === 'connecting') showToast('Connecting to session...', 'info')
+            if (status === 'connecting' && !onlineAdapter?.isReconnecting?.()) {
+                showToast('Connecting to session...', 'info')
+            }
         },
+        onReconnecting: () => refreshMenuBar(),
+        onReconnected: () => refreshMenuBar(),
+        onDisconnect: () => refreshMenuBar(),
         onModeration: () => refreshMenuBar(),
         onRemoteEdit: (frame) => flashRemoteEdit(frame),
         onRemoteMedia: (urls) => warnAboutRemoteMedia(urls),
