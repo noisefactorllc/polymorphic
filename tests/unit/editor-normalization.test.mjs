@@ -39,13 +39,63 @@ test('codeEditor.js defines .error-line using Handfish tokens with zero !importa
     assert.doesNotMatch(lineErrorRule, /!important/)
 })
 
-test('embed.js manages error markers, formats diagnostics, and bounds jump offset', () => {
+test('codeEditor.js contains zero !important declarations and zero raw color literals', () => {
+    assert.doesNotMatch(
+        codeEditorSource,
+        /!important/,
+        'codeEditor.js must not contain any !important declarations'
+    )
+    assert.doesNotMatch(
+        codeEditorSource,
+        /#[0-9a-fA-F]{3,8}\b/,
+        'codeEditor.js must not contain raw hex color literals; use Handfish tokens'
+    )
+    assert.doesNotMatch(
+        codeEditorSource,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        'codeEditor.js must not contain raw rgb/rgba or hsl/hsla literals; use Handfish tokens'
+    )
+})
+
+test('codeEditor.js enforces tabular-nums and layout stability on gutter line numbers', () => {
+    assert.match(
+        codeEditorSource,
+        /\.code-editor-gutter\s*\{[^}]*?font-variant-numeric:\s*tabular-nums/,
+        'code-editor-gutter must specify font-variant-numeric: tabular-nums'
+    )
+    assert.match(
+        codeEditorSource,
+        /\.code-editor-gutter \.line-number\s*\{[^}]*?font-variant-numeric:\s*tabular-nums/,
+        'gutter line-number must specify font-variant-numeric: tabular-nums'
+    )
+    assert.match(
+        codeEditorSource,
+        /\.line-number\.error-line\s*\{[^}]*?font-variant-numeric:\s*tabular-nums/,
+        'error-line must preserve tabular-nums to prevent horizontal shifts'
+    )
+})
+
+test('embed.js manages error markers with MutationObserver resilience and typing fast-path', () => {
     assert.match(embedSource, /import \{ parseErrorLocation, formatErrorLabel \} from '\.\/ui\/errorBanner\.js'/)
     assert.match(embedSource, /setErrorLineMarker\(loc\)/)
     assert.match(embedSource, /clearErrorLineMarker\(\)/)
     assert.match(embedSource, /targetLineIndex = Math\.max\(0, Math\.min\(loc\.line - 1, lines\.length - 1\)\)/)
     assert.match(embedSource, /setSelectionRange\(offset, Math\.max\(offset, endOffset\)\)/)
     assert.match(embedSource, /syncScroll\?\.\(\)/)
+    assert.match(embedSource, /markerObserver\s*=\s*new MutationObserver/, 'embed.js should use MutationObserver to persist error markers across re-renders')
+    assert.match(embedSource, /if \(!hasActiveErrorMarker \|\| !dslEditor\) return/, 'clearErrorLineMarker should provide an O(1) early exit when no markers are active')
+})
+
+test('embed.js waits out in-flight compiles without dropping forcerecompile or forceevalblock', () => {
+    const forceRecompileMatch = embedSource.match(/addEventListener\('forcerecompile'[\s\S]*?\}\)/)?.[0] || ''
+    assert.ok(forceRecompileMatch, 'forcerecompile handler must exist')
+    assert.doesNotMatch(forceRecompileMatch, /if \(_compileInFlight\) return/, 'forcerecompile must not drop user action')
+    assert.match(forceRecompileMatch, /while \(_compileInFlight\)/, 'forcerecompile must wait for in-flight compile')
+
+    const forceEvalBlockMatch = embedSource.match(/addEventListener\('forceevalblock'[\s\S]*?\}\)/)?.[0] || ''
+    assert.ok(forceEvalBlockMatch, 'forceevalblock handler must exist')
+    assert.doesNotMatch(forceEvalBlockMatch, /if \(_compileInFlight\) return/, 'forceevalblock must not drop user action')
+    assert.match(forceEvalBlockMatch, /while \(_compileInFlight\)/, 'forceevalblock must wait for in-flight compile')
 })
 
 test('index.html #compiler-error uses Handfish tokens without hardcoded hex or rgba', () => {
@@ -58,4 +108,5 @@ test('index.html #compiler-error uses Handfish tokens without hardcoded hex or r
     assert.doesNotMatch(errorCss, /rgba\(0,\s*0,\s*0,\s*0\.85\)/)
     assert.match(indexSource, /id="compiler-error"\s+role="alert"\s+tabindex="0"\s+aria-live="assertive"/)
 })
+
 

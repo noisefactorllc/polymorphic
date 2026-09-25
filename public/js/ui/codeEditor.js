@@ -15,9 +15,9 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
         code-editor {
             display: block;
             position: relative;
-            font-family: var(--code-editor-font, 'Noto Sans Mono', 'Noto Sans Mono Block');
-            font-size: var(--code-editor-font-size, 0.875rem);
-            line-height: var(--code-editor-line-height, 1.6);
+            font-family: var(--code-editor-font, var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block'));
+            font-size: var(--code-editor-font-size, var(--hf-size-base, 0.875rem));
+            line-height: var(--code-editor-line-height, var(--hf-leading-normal, 1.6));
             overflow: hidden;
         }
 
@@ -30,12 +30,15 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             pointer-events: none;
             user-select: none;
             text-align: right;
-            padding-right: 0.5em;
+            padding-right: var(--hf-space-2, 0.5em);
             box-sizing: border-box;
-            color: var(--code-editor-line-number-color, #aaa);
-            background: var(--code-editor-gutter-bg, rgba(0, 0, 0, 0.5));
+            color: var(--code-editor-line-number-color, var(--hf-text-dim));
+            background: var(--code-editor-gutter-bg, color-mix(in srgb, var(--hf-bg-base) 50%, transparent));
             font: inherit;
             line-height: inherit;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: 'tnum' 1;
+            white-space: nowrap;
             will-change: transform;
             z-index: 1;
             opacity: 0.5;
@@ -44,12 +47,18 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
         code-editor .code-editor-gutter .line-number {
             display: block;
             box-sizing: border-box;
+            white-space: nowrap;
+            overflow: hidden;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: 'tnum' 1;
+            transition: color var(--hf-transition-fast, 120ms ease), opacity var(--hf-transition-fast, 120ms ease);
         }
 
         code-editor .code-editor-gutter .line-number.error-line {
-            color: var(--hf-red, #ff7b72);
-            font-weight: 700;
+            color: var(--hf-red);
+            font-weight: var(--hf-weight-bold, 700);
             opacity: 1;
+            font-variant-numeric: tabular-nums;
         }
 
         code-editor .code-editor-textarea {
@@ -61,16 +70,16 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             margin: 0;
             padding: 0;
             background: transparent;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
+            border: none;
+            outline: none;
+            box-shadow: none;
             resize: none;
             font: inherit;
             line-height: inherit;
             letter-spacing: inherit;
             word-spacing: inherit;
             color: transparent;
-            caret-color: var(--code-editor-caret-color, #fff);
+            caret-color: var(--code-editor-caret-color, var(--hf-text-bright));
             white-space: pre-wrap;
             overflow-wrap: break-word;
             word-break: break-word;
@@ -92,13 +101,13 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
 
         /* Selection styling - more visible with contrasting colors */
         code-editor .code-editor-textarea::selection {
-            background: var(--code-editor-selection-bg, #667eea);
-            color: var(--code-editor-selection-fg, #fff);
+            background: var(--code-editor-selection-bg, var(--hf-accent));
+            color: var(--code-editor-selection-fg, var(--hf-text-bright));
         }
 
         code-editor .code-editor-textarea::-moz-selection {
-            background: var(--code-editor-selection-bg, #667eea);
-            color: var(--code-editor-selection-fg, #fff);
+            background: var(--code-editor-selection-bg, var(--hf-accent));
+            color: var(--code-editor-selection-fg, var(--hf-text-bright));
         }
 
         /* Display layer - positioned behind textarea for syntax highlighting */
@@ -124,6 +133,7 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
 
         code-editor .code-editor-display .code-line {
             display: block;
+            box-sizing: border-box;
             background: var(--code-editor-bg, transparent);
             -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
@@ -132,17 +142,18 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
         code-editor .code-editor-display .code-line.error-line {
             background: linear-gradient(
                 90deg,
-                color-mix(in srgb, var(--hf-red, #ff7b72) 22%, transparent) 0%,
+                color-mix(in srgb, var(--hf-red) 22%, transparent) 0%,
                 transparent 100%
             );
-            box-shadow: inset 3px 0 0 var(--hf-red, #ff7b72);
+            box-shadow: inset 3px 0 0 var(--hf-red);
+            box-sizing: border-box;
         }
 
         code-editor .code-editor-display .code-segment {
-            background: var(--text-bg-color, rgba(0, 0, 0, 0.75));
-            color: #e3e3e3;
+            background: var(--text-bg-color, color-mix(in srgb, var(--hf-bg-base) 75%, transparent));
+            color: var(--hf-text-normal);
             padding: 0.1em 0;
-            border-radius: 2px;
+            border-radius: var(--hf-radius-sm, 2px);
         }
 
         /* Focus state - subtle outline for accessibility */
@@ -152,53 +163,53 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
 
         /* Syntax highlighting colors */
         code-editor .hl-comment {
-            color: var(--hl-comment, #6a737d);
+            color: var(--hl-comment, var(--hf-text-muted));
             font-style: italic;
         }
 
         code-editor .hl-string {
-            color: var(--hl-string, #9ecbff);
+            color: var(--hl-string, var(--hf-accent-hover));
         }
 
         code-editor .hl-number {
-            color: var(--hl-number, #79b8ff);
+            color: var(--hl-number, var(--hf-accent));
         }
 
         code-editor .hl-color {
-            color: var(--hl-color, #ffab70);
+            color: var(--hl-color, var(--hf-yellow));
         }
 
         code-editor .hl-boolean {
-            color: var(--hl-boolean, #ff7b72);
+            color: var(--hl-boolean, var(--hf-red));
         }
 
         code-editor .hl-null {
-            color: var(--hl-null, #ff7b72);
+            color: var(--hl-null, var(--hf-red));
         }
 
         code-editor .hl-function {
-            color: var(--hl-function, #d2a8ff);
+            color: var(--hl-function, var(--hf-accent-4));
         }
 
         code-editor .hl-parameter {
-            color: var(--hl-parameter, #ffa657);
+            color: var(--hl-parameter, var(--hf-accent-hover));
         }
 
         code-editor .hl-output {
-            color: var(--hl-output, #7ee787);
-            font-weight: 600;
+            color: var(--hl-output, var(--hf-green));
+            font-weight: var(--hf-weight-semibold, 600);
         }
 
         code-editor .hl-punctuation {
-            color: var(--hl-punctuation, #e0e0e0);
+            color: var(--hl-punctuation, var(--hf-text-dim));
         }
 
         code-editor .hl-operator {
-            color: var(--hl-operator, #ff7b72);
+            color: var(--hl-operator, var(--hf-red));
         }
 
         code-editor .hl-identifier {
-            color: var(--hl-identifier, #e0e0e0);
+            color: var(--hl-identifier, var(--hf-text-normal));
         }
 
         /* Selection highlight overlay */

@@ -662,14 +662,52 @@ render(o0)`
 
 let activeErrorLoc = null
 let markerTimeout = null
+let markerObserver = null
+let hasActiveErrorMarker = false
 
 function applyErrorLineMarker() {
     if (!activeErrorLoc || !dslEditor) return
+    let applied = false
     const lineEl = dslEditor.querySelector?.(`.code-editor-display [data-line-number="${activeErrorLoc.line}"]`)
-    if (lineEl) lineEl.classList.add('error-line')
+    if (lineEl) {
+        lineEl.classList.add('error-line')
+        applied = true
+    }
     const gutterEl = dslEditor.querySelector?.('.code-editor-gutter')
-    if (gutterEl && gutterEl.children && gutterEl.children[activeErrorLoc.line - 1]) {
-        gutterEl.children[activeErrorLoc.line - 1].classList.add('error-line')
+    if (gutterEl) {
+        const lineNumbers = gutterEl.querySelectorAll?.('.line-number')
+        const targetGutter = (lineNumbers && lineNumbers[activeErrorLoc.line - 1]) ||
+                             gutterEl.children?.[activeErrorLoc.line - 1]
+        if (targetGutter) {
+            targetGutter.classList.add('error-line')
+            applied = true
+        }
+    }
+    if (applied) {
+        hasActiveErrorMarker = true
+    }
+}
+
+function attachMarkerObserver() {
+    if (markerObserver || !dslEditor) return
+    try {
+        if (typeof MutationObserver !== 'undefined') {
+            markerObserver = new MutationObserver(() => {
+                if (activeErrorLoc) {
+                    applyErrorLineMarker()
+                }
+            })
+            markerObserver.observe(dslEditor, { childList: true, subtree: true })
+        }
+    } catch {
+        // MutationObserver unavailable in non-browser harness
+    }
+}
+
+function detachMarkerObserver() {
+    if (markerObserver) {
+        try { markerObserver.disconnect() } catch {}
+        markerObserver = null
     }
 }
 
@@ -677,20 +715,24 @@ function setErrorLineMarker(loc) {
     clearErrorLineMarker()
     activeErrorLoc = loc
     applyErrorLineMarker()
+    attachMarkerObserver()
     if (markerTimeout) clearTimeout(markerTimeout)
     markerTimeout = setTimeout(() => {
         if (activeErrorLoc === loc) applyErrorLineMarker()
         markerTimeout = null
-    }, 750)
+    }, 200)
 }
 
 function clearErrorLineMarker() {
     activeErrorLoc = null
+    detachMarkerObserver()
     if (markerTimeout) {
         clearTimeout(markerTimeout)
         markerTimeout = null
     }
-    if (!dslEditor) return
+    // Fast path: if no error markers have been applied, avoid expensive DOM queries during typing
+    if (!hasActiveErrorMarker || !dslEditor) return
+    hasActiveErrorMarker = false
     const prevLineEls = dslEditor.querySelectorAll?.('.code-editor-display .error-line')
     if (prevLineEls) {
         for (const el of prevLineEls) el.classList.remove('error-line')
@@ -1713,20 +1755,14 @@ function setupDslEditor() {
     // Handle force recompile event from Ctrl/Cmd+Enter
     // The code-editor component dispatches 'forcerecompile' events
     dslEditor.addEventListener('forcerecompile', async () => {
-        // Single-flight gate: drop this call if a compile is already running
-        if (_compileInFlight) {
-            const overlay = document.getElementById('dsl-overlay')
-            if (overlay) {
-                overlay.classList.remove('busy')
-                void overlay.offsetWidth
-                overlay.classList.add('busy')
-            }
-            return
-        }
         // Clear pending hot reload
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
             hotReloadTimeout = null
+        }
+        // Single-flight gate: wait out any in-flight compile instead of dropping user action
+        while (_compileInFlight) {
+            await new Promise(resolve => setTimeout(resolve, 25))
         }
         try {
             _compileInFlight = true
@@ -1756,19 +1792,13 @@ function setupDslEditor() {
 
     // Cmd+Shift+Enter / Alt+Enter — evaluate current block (or selection)
     dslEditor.addEventListener('forceevalblock', async () => {
-        // Single-flight gate: drop this call if a compile is already running
-        if (_compileInFlight) {
-            const overlay = document.getElementById('dsl-overlay')
-            if (overlay) {
-                overlay.classList.remove('busy')
-                void overlay.offsetWidth
-                overlay.classList.add('busy')
-            }
-            return
-        }
         if (hotReloadTimeout) {
             clearTimeout(hotReloadTimeout)
             hotReloadTimeout = null
+        }
+        // Single-flight gate: wait out any in-flight compile instead of dropping user action
+        while (_compileInFlight) {
+            await new Promise(resolve => setTimeout(resolve, 25))
         }
         const sel = getSelectionOrBlock(dslEditor)
         if (!sel || !sel.text.trim()) {
