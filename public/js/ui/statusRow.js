@@ -15,57 +15,57 @@ if (!document.getElementById(STYLES_ID)) {
     style.textContent = `
         .status-row {
             position: fixed;
-            left: 0.75rem;
-            right: 0.75rem;
-            bottom: 0.5rem;
+            left: var(--hf-space-3, 0.75rem);
+            right: var(--hf-space-3, 0.75rem);
+            bottom: var(--hf-space-2, 0.5rem);
             display: flex;
-            gap: 0.5rem;
+            gap: var(--hf-space-2, 0.5rem);
             justify-content: center;
             align-items: center;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
-            font-size: 0.6875rem;
-            color: #d9deeb;
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
+            font-size: var(--hf-size-xs, 0.6875rem);
+            color: var(--hf-text-normal);
             z-index: 230;
             pointer-events: none;
-            transition: opacity 0.2s;
+            transition: opacity var(--hf-transition-fast, 0.2s);
         }
         .status-row.hidden { opacity: 0; pointer-events: none; }
         .status-chip {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            background: rgba(10, 12, 17, 0.72);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 0.25rem 0.55rem;
-            border-radius: 999px;
+            gap: var(--hf-space-1, 0.35rem);
+            background: color-mix(in srgb, var(--hf-bg-base, var(--hf-color-1)) 85%, transparent);
+            border: 1px solid var(--hf-border-subtle);
+            backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            padding: var(--hf-space-1, 0.25rem) var(--hf-space-2, 0.55rem);
+            border-radius: var(--hf-radius-pill, 999px);
             cursor: pointer;
             pointer-events: auto;
-            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            transition: background var(--hf-transition-fast, 0.15s), border-color var(--hf-transition-fast, 0.15s), color var(--hf-transition-fast, 0.15s);
             user-select: none;
             white-space: nowrap;
         }
         .status-chip:hover {
-            background: rgba(102, 126, 234, 0.25);
-            border-color: rgba(165, 184, 255, 0.4);
+            background: color-mix(in srgb, var(--hf-accent) 25%, transparent);
+            border-color: var(--hf-border-hover);
         }
         .status-chip .icon-material { font-size: 13px; }
         .status-chip-dot {
             width: 6px;
             height: 6px;
-            border-radius: 50%;
-            background: #555;
+            border-radius: var(--hf-radius-full, 50%);
+            background: var(--hf-text-muted);
         }
-        .status-chip.on .status-chip-dot { background: #4ade80; }
-        .status-chip.warn .status-chip-dot { background: #facc15; }
-        .status-chip.err .status-chip-dot { background: #ff6b6b; }
+        .status-chip.on .status-chip-dot { background: var(--hf-green); }
+        .status-chip.warn .status-chip-dot { background: var(--hf-yellow); }
+        .status-chip.err .status-chip-dot { background: var(--hf-red); }
         .status-chip.recording {
-            border-color: rgba(255, 107, 107, 0.4);
-            color: #ffb4b4;
+            border-color: color-mix(in srgb, var(--hf-red) 40%, transparent);
+            color: color-mix(in srgb, var(--hf-red) 60%, var(--hf-text-bright));
         }
         .status-chip.recording .status-chip-dot {
-            background: #ff4d4d;
+            background: var(--hf-red);
             animation: status-rec-pulse 1.4s infinite;
         }
         @keyframes status-rec-pulse {
@@ -76,29 +76,31 @@ if (!document.getElementById(STYLES_ID)) {
         /* MIDI-driven BPM chip uses an amber accent so it's distinguishable
            from manual at a glance. */
         .status-chip.midi {
-            border-color: rgba(255, 176, 112, 0.45);
-            color: #ffd0a0;
+            border-color: color-mix(in srgb, var(--hf-yellow) 45%, transparent);
+            color: color-mix(in srgb, var(--hf-yellow) 60%, var(--hf-text-bright));
         }
-        .status-chip.midi .status-chip-dot { background: #ffb070; }
+        .status-chip.midi .status-chip-dot { background: var(--hf-yellow); }
 
         /* The shared <tempo-bar> component lives in the status row (mounted via
            statusRow.mount). It carries the same chrome as the other chips so it
            reads as part of the row, and is scaled to the row's compact size. */
         .status-row tempo-bar {
-            background: rgba(10, 12, 17, 0.72);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 0.1rem 0.5rem;
-            border-radius: 999px;
-            font-size: 0.6875rem;
+            background: color-mix(in srgb, var(--hf-bg-base, var(--hf-color-1)) 85%, transparent);
+            border: 1px solid var(--hf-border-subtle);
+            backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            padding: 0.1rem var(--hf-space-2, 0.5rem);
+            border-radius: var(--hf-radius-pill, 999px);
+            font-size: var(--hf-size-xs, 0.6875rem);
             transition: box-shadow 0.18s ease;
         }
         /* Downbeat flash — keeps the BPM indication visually live, replacing the
            old bpm-chip dot pulse. Re-triggered per downbeat from the 'beat'
            event in embed.js. */
         .status-row tempo-bar.tempo-beat {
-            box-shadow: 0 0 0 1px rgba(165, 184, 255, 0.55), 0 0 10px rgba(165, 184, 255, 0.35);
+            box-shadow:
+                0 0 0 1px color-mix(in srgb, var(--hf-accent) 55%, transparent),
+                0 0 10px color-mix(in srgb, var(--hf-accent) 35%, transparent);
         }
     `
     document.head.appendChild(style)

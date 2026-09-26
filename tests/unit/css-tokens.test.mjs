@@ -358,6 +358,49 @@ test('public/css/menu.css toolbar buttons follow Handfish component guidelines (
     )
 })
 
+test('public/js/ui/statusRow.js uses Handfish semantic tokens and contains zero raw color literals', () => {
+    const statusRowPath = path.resolve(__dirname, '../../public/js/ui/statusRow.js')
+    const statusRowCode = fs.readFileSync(statusRowPath, 'utf8')
+
+    const styleMatch = statusRowCode.match(/style\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, 'statusRow.js must define injected style.textContent')
+    const css = styleMatch[1]
+
+    assert.doesNotMatch(
+        css,
+        /!important/,
+        'statusRow.js injected CSS must not use !important'
+    )
+    assert.doesNotMatch(
+        css,
+        /#[0-9a-fA-F]{3,8}\b/,
+        'statusRow.js injected CSS must not contain raw hex color literals'
+    )
+    assert.doesNotMatch(
+        css,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        'statusRow.js injected CSS must not contain raw rgb/rgba/hsl/hsla literals'
+    )
+    assert.match(css, /var\(--hf-text-normal/, 'status row text must use var(--hf-text-normal)')
+    assert.match(css, /var\(--hf-text-muted/, 'idle chip dot must use var(--hf-text-muted)')
+    assert.match(css, /var\(--hf-text-bright/, 'recording text must mix with var(--hf-text-bright)')
+    assert.match(css, /var\(--hf-bg-base/, 'chip background must derive from var(--hf-bg-base)')
+    assert.match(css, /var\(--hf-border-subtle/, 'chip borders must use var(--hf-border-subtle)')
+    assert.match(css, /var\(--hf-border-hover/, 'chip hover border must use var(--hf-border-hover)')
+    assert.match(css, /var\(--hf-accent/, 'chip hover background must use var(--hf-accent)')
+    assert.match(css, /var\(--hf-green/, 'active dot must use var(--hf-green)')
+    assert.match(css, /var\(--hf-yellow/, 'warn/midi dot must use var(--hf-yellow)')
+    assert.match(css, /var\(--hf-red/, 'error/recording dot must use var(--hf-red)')
+    assert.match(css, /var\(--hf-font-family-mono/, 'mono text must use var(--hf-font-family-mono)')
+    assert.match(css, /var\(--hf-radius-pill/, 'chip radius must use var(--hf-radius-pill)')
+    assert.match(css, /var\(--hf-glass-blur-sm/, 'chip backdrop blur must use var(--hf-glass-blur-sm)')
+    assert.doesNotMatch(
+        statusRowCode,
+        /#d9deeb|#4ade80|#facc15|#ff6b6b|#ff4d4d|#ffb4b4|#ffd0a0|#ffb070|#555\b/,
+        'statusRow.js must not hardcode legacy hex color literals'
+    )
+})
+
 test('dialog action and close buttons declare focus-visible and active scale', () => {
     const indexHtml = fs.readFileSync(path.resolve(cssDir, '../index.html'), 'utf8')
     assert.match(
