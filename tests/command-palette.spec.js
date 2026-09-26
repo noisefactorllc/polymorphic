@@ -23,6 +23,62 @@ async function waitForApp(page) {
     await page.waitForTimeout(300)
 }
 
+test.describe('Command Palette Handfish Token Discipline', () => {
+    const shortcut = process.platform === 'darwin' ? 'Meta+k' : 'Control+k'
+
+    async function openPalette(page) {
+        await page.keyboard.press(shortcut)
+        await expect(page.locator('.cmd-palette-overlay')).toHaveClass(/visible/)
+    }
+
+    test('palette surfaces resolve from --hf-* tokens, not hardcoded rgba/hex values', async ({ page }) => {
+        await page.goto(PAGE_URL)
+        await waitForApp(page)
+        await openPalette(page)
+
+        const styles = await page.evaluate(() => {
+            const cs = el => getComputedStyle(el)
+            const palette = document.querySelector('.cmd-palette')
+            const active = document.querySelector('.cmd-palette-item.active')
+            const overlay = document.querySelector('.cmd-palette-overlay')
+            return {
+                paletteBg: cs(palette).backgroundColor,
+                paletteBorder: cs(palette).borderColor,
+                titleColor: cs(palette.querySelector('.cmd-palette-item-title')).color,
+                activeBorder: active ? cs(active).borderLeftColor : '',
+                overlayBg: cs(overlay).backgroundColor,
+                placeholderColor: cs(document.querySelector('.cmd-palette-input')).color,
+            }
+        })
+
+        // Old hardcoded values must be gone (regression guard for the token migration).
+        expect(styles.paletteBg).not.toBe('rgba(15, 17, 22, 0.96)')
+        expect(styles.paletteBorder).not.toBe('rgba(255, 255, 255, 0.08)')
+        expect(styles.titleColor).not.toBe('rgb(240, 240, 240)')
+        expect(styles.activeBorder).not.toBe('rgb(165, 184, 255)')
+        expect(styles.overlayBg).not.toBe('rgba(0, 0, 0, 0.55)')
+        // Tokens resolve to real, opaque-ish values in the live theme (not "unset").
+        expect(styles.paletteBg).not.toContain('none')
+        expect(styles.titleColor).toBeTruthy()
+        expect(styles.activeBorder).toBeTruthy()
+    })
+
+    test('palette input shows a Handfish focus-visible ring on keyboard focus', async ({ page }) => {
+        await page.goto(PAGE_URL)
+        await waitForApp(page)
+        await openPalette(page)
+
+        const outline = await page.evaluate(() => {
+            const input = document.querySelector('.cmd-palette-input')
+            input.focus()
+            const cs = getComputedStyle(input)
+            return { style: cs.outlineStyle, width: cs.outlineWidth, color: cs.outlineColor }
+        })
+        expect(outline.style).not.toBe('none')
+        expect(outline.color).not.toBe('')
+    })
+})
+
 test.describe('Command Palette Keyboard Navigation', () => {
     test('Cmd+K opens palette, arrow keys wrap predictably and maintain active item in view', async ({ page }) => {
         await page.goto(PAGE_URL)

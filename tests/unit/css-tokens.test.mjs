@@ -272,6 +272,54 @@ test('public/js/ui/recorder.js uses Handfish semantic tokens and contains zero r
     )
 })
 
+test('public/js/ui/commandPalette.js uses Handfish semantic tokens and contains zero raw color literals or !important', () => {
+    const palettePath = path.resolve(__dirname, '../../public/js/ui/commandPalette.js')
+    const paletteCode = fs.readFileSync(palettePath, 'utf8')
+
+    const styleMatch = paletteCode.match(/style\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, 'commandPalette.js must define injected style.textContent')
+    const css = styleMatch[1]
+
+    assert.doesNotMatch(
+        css,
+        /!important/,
+        'commandPalette.js injected CSS must not use !important'
+    )
+    assert.doesNotMatch(
+        css,
+        /#[0-9a-fA-F]{3,8}\b/,
+        'commandPalette.js injected CSS must not contain raw hex color literals'
+    )
+    assert.doesNotMatch(
+        css,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        'commandPalette.js injected CSS must not contain raw rgb/rgba/hsl/hsla literals'
+    )
+    assert.match(css, /var\(--hf-backdrop/, 'overlay backdrop must use var(--hf-backdrop)')
+    assert.match(css, /var\(--hf-bg-surface/, '.cmd-palette must use var(--hf-bg-surface)')
+    assert.match(css, /var\(--hf-border-subtle/, 'borders must use var(--hf-border-subtle)')
+    assert.match(css, /var\(--hf-shadow-xl/, '.cmd-palette must use var(--hf-shadow-xl)')
+    assert.match(css, /var\(--hf-accent/, 'active/hover highlight must use var(--hf-accent)')
+    assert.match(css, /var\(--hf-text-bright/, 'title text must use var(--hf-text-bright)')
+    assert.match(css, /var\(--hf-text-dim/, 'secondary text must use var(--hf-text-dim)')
+    assert.match(css, /var\(--hf-text-muted/, 'placeholder/empty text must use var(--hf-text-muted)')
+    assert.match(css, /var\(--hf-font-family-mono/, 'mono text must use var(--hf-font-family-mono)')
+    assert.match(
+        css,
+        /\.cmd-palette-input:focus-visible[\s\S]*?var\(--hf-focus-ring-width/,
+        'palette input must define a :focus-visible ring with --hf-focus-ring tokens'
+    )
+    assert.doesNotMatch(
+        css,
+        /\.cmd-palette-input\s*\{[^}]*?outline:\s*none/,
+        'palette input must not strip focus outline without a replacement focus ring'
+    )
+    // No theme-specific accent hexes: #a5b8ff (accent), legacy grays
+    for (const legacy of ['#a5b8ff', '#e3e3e3', '#f0f0f0', '#888', '#666', '#555']) {
+        assert.doesNotMatch(paletteCode, new RegExp(legacy.replace('#', '#') + '\\b'), `commandPalette.js must not hardcode ${legacy}`)
+    }
+})
+
 test('public/css/menu.css toolbar buttons follow Handfish component guidelines (padding, focus-visible, active states)', () => {
     const css = readCss('menu.css')
     // Button padding uses Handfish spacing token

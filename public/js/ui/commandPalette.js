@@ -28,13 +28,13 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
     style.textContent = `
         .cmd-palette-overlay {
             position: fixed; inset: 0;
-            background: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-            z-index: 5000;
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
+            backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
+            z-index: var(--hf-z-modal, 5000);
             display: none;
             opacity: 0;
-            transition: opacity 0.12s ease;
+            transition: opacity var(--hf-transition-fast, 0.12s ease);
         }
         .cmd-palette-overlay.visible {
             display: flex;
@@ -44,75 +44,78 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             opacity: 1;
         }
         .cmd-palette {
-            background: rgba(15, 17, 22, 0.96);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
+            background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 96%), transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            border-radius: var(--hf-radius-lg, 12px);
             width: min(680px, calc(100vw - 2rem));
-            box-shadow: 0 20px 60px -10px rgba(0,0,0,0.6);
+            box-shadow: var(--hf-shadow-xl, 0 20px 60px -10px color-mix(in srgb, var(--hf-color-1, black) 60%, transparent));
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            font-family: 'Nunito', 'Nunito Block', sans-serif;
-            color: #e3e3e3;
+            font-family: var(--hf-font-family, 'Nunito', 'Nunito Block', sans-serif);
+            color: var(--hf-text-normal, var(--hf-color-6));
         }
         .cmd-palette-input-wrap {
             display: flex;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            padding: 0 1rem;
+            border-bottom: 1px solid var(--hf-border-subtle, var(--hf-color-4));
+            padding: 0 var(--hf-space-4, 1rem);
         }
         .cmd-palette-input-wrap .icon-material {
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             font-size: 18px;
-            margin-right: 0.5rem;
+            margin-inline-end: var(--hf-space-2, 0.5rem);
         }
         .cmd-palette-input {
             flex: 1;
             background: transparent;
             border: none;
-            outline: none;
-            color: #fff;
+            color: var(--hf-text-bright, var(--hf-color-7));
             font-family: inherit;
-            font-size: 1rem;
+            font-size: var(--hf-size-md, 1rem);
             padding: 0.95rem 0.25rem;
         }
-        .cmd-palette-input::placeholder { color: #555; }
+        .cmd-palette-input:focus-visible {
+            outline: var(--hf-focus-ring-width, 2px) solid var(--hf-focus-ring-color, var(--hf-accent, var(--accent3)));
+            outline-offset: var(--hf-focus-ring-offset, 2px);
+        }
+        .cmd-palette-input::placeholder { color: var(--hf-text-muted, var(--hf-color-4)); }
         .cmd-palette-list {
             position: relative;
             list-style: none;
             margin: 0;
-            padding: 0.4rem 0;
+            padding: var(--hf-space-1, 0.4rem) 0;
             max-height: 50vh;
             overflow-y: auto;
             scrollbar-width: thin;
-            scrollbar-color: rgba(255,255,255,0.15) transparent;
+            scrollbar-color: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 15%, transparent) transparent;
         }
         .cmd-palette-list::-webkit-scrollbar { width: 6px; }
         .cmd-palette-list::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.15);
-            border-radius: 3px;
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 15%, transparent);
+            border-radius: var(--hf-radius-sm, 3px);
         }
         .cmd-palette-section {
-            padding: 0.4rem 1rem 0.2rem;
+            padding: var(--hf-space-1, 0.4rem) var(--hf-space-4, 1rem) var(--hf-space-1, 0.2rem);
             font-size: 0.6875rem;
-            color: #888;
+            color: var(--hf-text-dim, var(--hf-color-5));
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 600;
+            letter-spacing: var(--hf-tracking-wide, 0.08em);
+            font-weight: var(--hf-weight-semibold, 600);
         }
         .cmd-palette-item {
             display: flex;
             align-items: center;
-            gap: 0.7rem;
-            padding: 0.55rem 1rem;
+            gap: var(--hf-space-3, 0.7rem);
+            padding: var(--hf-space-2, 0.55rem) var(--hf-space-4, 1rem);
             cursor: pointer;
-            border-left: 2px solid transparent;
-            transition: background 0.08s;
+            border-inline-start: 2px solid transparent;
+            transition: background var(--hf-transition-fast, 0.08s), border-color var(--hf-transition-fast, 0.08s);
         }
         .cmd-palette-item:hover,
         .cmd-palette-item.active {
-            background: rgba(102, 126, 234, 0.12);
-            border-left-color: #a5b8ff;
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 12%, transparent);
+            border-inline-start-color: var(--hf-accent, var(--accent3));
         }
         .cmd-palette-item-icon {
             width: 1.5rem;
@@ -120,55 +123,55 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #a5b8ff;
+            color: var(--hf-accent, var(--accent3));
         }
         .cmd-palette-item-icon .icon-material { font-size: 18px; }
         .cmd-palette-item-main { flex: 1; min-width: 0; }
         .cmd-palette-item-title {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #f0f0f0;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            font-size: var(--hf-size-sm, 0.875rem);
+            font-weight: var(--hf-weight-medium, 500);
+            color: var(--hf-text-bright, var(--hf-color-7));
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
         }
         .cmd-palette-item-subtitle {
             font-size: 0.75rem;
-            color: #888;
-            margin-top: 0.05rem;
+            color: var(--hf-text-dim, var(--hf-color-5));
+            margin-block-start: 0.05rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .cmd-palette-item-tag {
             font-size: 0.6875rem;
-            color: #a5b8ff;
-            background: rgba(165, 184, 255, 0.08);
-            padding: 0.1rem 0.4rem;
-            border-radius: 3px;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            color: var(--hf-accent, var(--accent3));
+            background: color-mix(in srgb, var(--hf-accent, var(--accent3)) 8%, transparent);
+            padding: 0.1rem var(--hf-space-2, 0.4rem);
+            border-radius: var(--hf-radius-sm, 3px);
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
             text-transform: lowercase;
             white-space: nowrap;
         }
         .cmd-palette-empty {
-            padding: 2rem 1rem;
+            padding: var(--hf-space-6, 2rem) var(--hf-space-4, 1rem);
             text-align: center;
-            color: #666;
-            font-size: 0.875rem;
+            color: var(--hf-text-muted, var(--hf-color-4));
+            font-size: var(--hf-size-sm, 0.875rem);
         }
         .cmd-palette-footer {
             display: flex;
             justify-content: space-between;
-            padding: 0.55rem 1rem;
-            border-top: 1px solid rgba(255,255,255,0.06);
+            padding: var(--hf-space-2, 0.55rem) var(--hf-space-4, 1rem);
+            border-block-start: 1px solid var(--hf-border-subtle, var(--hf-color-4));
             font-size: 0.6875rem;
-            color: #666;
+            color: var(--hf-text-muted, var(--hf-color-4));
         }
         .cmd-palette-footer kbd {
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
             font-size: 0.625rem;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.08);
+            background: color-mix(in srgb, var(--hf-text-bright, var(--hf-color-7)) 6%, transparent);
+            border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
             padding: 0.05rem 0.35rem;
-            border-radius: 3px;
+            border-radius: var(--hf-radius-sm, 3px);
             margin: 0 0.15rem;
         }
     `
