@@ -2124,6 +2124,15 @@ async function startShader() {
     const storedBackend = (() => { try { return localStorage.getItem('polymorphic-backend') } catch { return null } })()
     const { urlBackend, preferWebGPU } = resolveBackendPreference(window.location.search, storedBackend)
 
+    // Graphics context loss recovery (Domain 4): a GPU reset (driver update,
+    // GPU process crash, tab backgrounded under memory pressure) fires
+    // `webglcontextlost` on the canvas. The renderer stops its loop and asks
+    // the browser for a fresh context; on `webglcontextrestored` we recompile
+    // the editor's current DSL — compile() recreates every GPU resource — and
+    // restart the loop. Editor text, scene snapshots and program state live
+    // outside the renderer, so nothing but the loop needs saving here.
+    let contextRecoveryInFlight = false
+
     // Create renderer
     renderer = new PolymorphicRenderer(canvas, {
         width,
@@ -2132,6 +2141,27 @@ async function startShader() {
         preferWebGPU,
         onError: (err) => {
             console.error('Render error:', err)
+        },
+        onContextLost: () => {
+            showToast('Graphics context lost — recovering your program…', 'warning')
+        },
+        onContextRestored: async () => {
+            if (contextRecoveryInFlight) return
+            contextRecoveryInFlight = true
+            try {
+                const dsl = dslEditor?.value || originalDsl || ''
+                const result = await renderer.recoverFromContextLoss(dsl)
+                if (result.success) {
+                    showToast('Graphics restored — your program is live again', 'success')
+                } else {
+                    showToast(`Could not restore your program after a graphics reset: ${result.error}`, 'error')
+                }
+            } catch (err) {
+                console.error('Context loss recovery failed:', err)
+                showToast('Could not restore your program after a graphics reset', 'error')
+            } finally {
+                contextRecoveryInFlight = false
+            }
         }
     })
     syncOutputController?.dispose()

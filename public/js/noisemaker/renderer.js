@@ -54,6 +54,8 @@ export class PolymorphicRenderer {
         this.height = options.height || canvas?.height || 512
         this.preferWebGPU = options.preferWebGPU || false
         this.loopDuration = options.loopDuration || 10
+        this.onContextLost = options.onContextLost || null
+        this.onContextRestored = options.onContextRestored || null
 
         // Create internal CanvasRenderer
         this._renderer = new CanvasRenderer({
@@ -68,9 +70,17 @@ export class PolymorphicRenderer {
         })
 
         this._initialized = false
+        this._contextLost = false
 
         // Text texture canvases, one per text effect, keyed by step index
         this._textCanvases = new Map()
+    }
+
+    /**
+     * @returns {boolean} Whether the WebGL context is currently lost
+     */
+    get contextLost() {
+        return this._contextLost
     }
 
     /**
@@ -139,6 +149,8 @@ export class PolymorphicRenderer {
      */
     async init() {
         if (this._initialized) return
+
+        this._setupContextLossHandlers()
 
         if (this.preferWebGPU) {
             const hasWebGPU = typeof navigator !== 'undefined' && Boolean(navigator.gpu)
@@ -482,6 +494,56 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * Watch the canvas for WebGL context loss and restoration.
+     *
+     * GPU resets (driver update, tab backgrounding under memory pressure,
+     * GPU process crashes) hand back a dead context via `webglcontextlost`
+     * and a fresh one via `webglcontextrestored`. Calling `preventDefault()`
+     * on the lost event tells the browser we will re-create our GPU resources
+     * on restore instead of leaving the canvas permanently blank.
+     *
+     * @private
+     */
+    _setupContextLossHandlers() {
+        if (typeof this.canvas?.addEventListener !== 'function') return
+        this._contextLostHandler = (e) => {
+            // Without preventDefault the browser never fires webglcontextrestored.
+            e.preventDefault?.()
+            this._contextLost = true
+            this.stop()
+            try {
+                this.onContextLost?.(e)
+            } catch (err) {
+                console.warn('onContextLost handler failed:', err)
+            }
+        }
+        this._contextRestoredHandler = (e) => {
+            this._contextLost = false
+            try {
+                this.onContextRestored?.(e, this)
+            } catch (err) {
+                console.warn('onContextRestored handler failed:', err)
+            }
+        }
+        this.canvas.addEventListener('webglcontextlost', this._contextLostHandler)
+        this.canvas.addEventListener('webglcontextrestored', this._contextRestoredHandler)
+    }
+
+    /**
+     * Recompile the current program into a restored context and restart the
+     * render loop. All GPU resources (shaders, textures, text/media uploads)
+     * are lost with the old context; `compile()` recreates every one of them,
+     * so recovery is a plain recompile of the caller's DSL.
+     * @param {string} dsl - DSL source to restore
+     * @returns {Promise<{success: boolean, error?: string}>}
+     */
+    async recoverFromContextLoss(dsl) {
+        const result = await this.compile(dsl)
+        if (result.success && !this.isRunning) this.start()
+        return result
+    }
+
+    /**
      * Resize the canvas
      * @param {number} width
      * @param {number} height
@@ -512,6 +574,12 @@ export class PolymorphicRenderer {
     dispose() {
         this.stop()
         this._textCanvases.clear()
+        if (this._contextLostHandler) {
+            this.canvas?.removeEventListener('webglcontextlost', this._contextLostHandler)
+            this.canvas?.removeEventListener('webglcontextrestored', this._contextRestoredHandler)
+            this._contextLostHandler = null
+            this._contextRestoredHandler = null
+        }
         if (this._renderer.dispose) {
             this._renderer.dispose()
         }
