@@ -48,7 +48,14 @@ const TYPES = {
  * root once normalized.
  */
 function resolvePath(urlPath) {
-    const decoded = decodeURIComponent(urlPath.split('?')[0])
+    let decoded
+    try {
+        decoded = decodeURIComponent(urlPath.split('?')[0])
+    } catch {
+        // A malformed percent-escape (`/%`) throws URIError; it names no file,
+        // and letting it escape would crash the server (see the 404 below).
+        return null
+    }
     const clean = normalize(decoded).replace(/\\/g, '/')
     if (clean.includes('..')) return null
 
@@ -75,22 +82,33 @@ async function pick(path) {
     }
 }
 
-createServer(async (req, res) => {
-    const target = resolvePath(req.url || '/')
-    const file = target ? await pick(target) : null
+export { resolvePath }
 
-    if (!file) {
-        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-        res.end('404\n')
-        return
-    }
+const isMain = import.meta.url === `file://${process.argv[1]}`
+if (isMain) {
+    createServer(async (req, res) => {
+        const target = resolvePath(req.url || '/')
+        const file = target ? await pick(target) : null
 
-    res.writeHead(200, {
-        'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream',
-        'cache-control': 'no-store',
+        if (!file) {
+            res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+            res.end('404\n')
+            return
+        }
+
+        res.writeHead(200, {
+            'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream',
+            'cache-control': 'no-store',
+        })
+        const stream = createReadStream(file)
+        // The file can vanish between the stat above and the open (e.g. a
+        // rebuild regenerating dist/book). An unhandled stream error would
+        // crash the server the way a malformed URL once did; drop the
+        // connection instead.
+        stream.on('error', () => res.destroy())
+        stream.pipe(res)
+    }).listen(PORT, () => {
+        process.stdout.write(`polymorphic  http://localhost:${PORT}/\n`)
+        process.stdout.write(`book         http://localhost:${PORT}/book/\n`)
     })
-    createReadStream(file).pipe(res)
-}).listen(PORT, () => {
-    process.stdout.write(`polymorphic  http://localhost:${PORT}/\n`)
-    process.stdout.write(`book         http://localhost:${PORT}/book/\n`)
-})
+}
