@@ -667,8 +667,30 @@ let hasActiveErrorMarker = false
 
 function applyErrorLineMarker() {
     if (!activeErrorLoc || !dslEditor) return
+    // Drop stale markers first so a re-application after a Handfish re-render
+    // or formatter run can never leave highlights straddling two lines.
+    if (hasActiveErrorMarker) {
+        const stale = dslEditor.querySelectorAll?.('.error-line')
+        if (stale) {
+            for (const el of stale) el.classList.remove('error-line')
+        }
+    }
+    let line = activeErrorLoc.line
+    let lineEl = dslEditor.querySelector?.(`.code-editor-display [data-line-number="${line}"]`)
+    if (!lineEl) {
+        // Clamp the reported line into the document: some compilers report
+        // line = lineCount + 1 for EOF errors (e.g. an unclosed block), and a
+        // formatter run may shift the marker after the diagnostic was captured.
+        const displayLineCount = dslEditor.querySelectorAll?.('.code-editor-display .code-line')?.length || 0
+        const gutterCount = dslEditor.querySelectorAll?.('.code-editor-gutter .line-number')?.length || 0
+        const maxLine = Math.max(displayLineCount, gutterCount)
+        const clamped = Math.max(1, Math.min(line, maxLine))
+        if (maxLine > 0 && clamped !== line) {
+            line = clamped
+            lineEl = dslEditor.querySelector?.(`.code-editor-display [data-line-number="${line}"]`)
+        }
+    }
     let applied = false
-    const lineEl = dslEditor.querySelector?.(`.code-editor-display [data-line-number="${activeErrorLoc.line}"]`)
     if (lineEl) {
         lineEl.classList.add('error-line')
         applied = true
@@ -676,8 +698,13 @@ function applyErrorLineMarker() {
     const gutterEl = dslEditor.querySelector?.('.code-editor-gutter')
     if (gutterEl) {
         const lineNumbers = gutterEl.querySelectorAll?.('.line-number')
-        const targetGutter = (lineNumbers && lineNumbers[activeErrorLoc.line - 1]) ||
-                             gutterEl.children?.[activeErrorLoc.line - 1]
+        let targetGutter = (lineNumbers && lineNumbers[line - 1]) ||
+                           gutterEl.children?.[line - 1]
+        if (!targetGutter) {
+            // Out-of-range line (EOF diagnostic): clamp to the last gutter entry.
+            const count = (lineNumbers && lineNumbers.length) || (gutterEl.children && gutterEl.children.length) || 0
+            if (count > 0) targetGutter = (lineNumbers && lineNumbers[count - 1]) || gutterEl.children[count - 1]
+        }
         if (targetGutter) {
             targetGutter.classList.add('error-line')
             applied = true
