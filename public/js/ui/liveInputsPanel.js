@@ -97,7 +97,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             display: none;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: var(--hf-shadow-xl, 0 12px 32px rgba(0,0,0,0.45));
+            box-shadow: var(--hf-shadow-xl);
         }
         .live-inputs-panel.visible { display: flex; }
         .live-inputs-header {
@@ -216,7 +216,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .level-bar-fill {
             height: 100%;
-            background: linear-gradient(90deg, #4ade80, #facc15, #ff6b6b);
+            background: linear-gradient(90deg, var(--hf-green), var(--hf-yellow), var(--hf-red));
             border-radius: 3px;
             transform-origin: left;
             transform: scaleX(0);
@@ -237,7 +237,7 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .live-input-spectrum-bar {
             flex: 1;
-            background: linear-gradient(180deg, rgba(165,184,255,0.7), rgba(102,126,234,0.4));
+            background: linear-gradient(180deg, color-mix(in srgb, var(--hf-accent) 70%, transparent), color-mix(in srgb, var(--hf-accent) 40%, transparent));
             border-radius: 1px 1px 0 0;
             min-height: 1px;
             transition: height 0.04s linear;
@@ -850,7 +850,7 @@ class LiveInputsPanel {
             const lbl = it.querySelector('.live-input-snippet-label')?.textContent || ''
             if (snippet.startsWith(lbl) || lbl.startsWith(snippet) || snippet === lbl) {
                 it.style.transition = 'background 0.05s'
-                it.style.background = 'rgba(74,222,128,0.22)'
+                it.style.background = 'color-mix(in srgb, var(--hf-green) 22%, transparent)'
                 setTimeout(() => { it.style.background = '' }, 220)
                 break
             }

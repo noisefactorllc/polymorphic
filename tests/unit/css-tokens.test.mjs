@@ -401,6 +401,46 @@ test('public/js/ui/statusRow.js uses Handfish semantic tokens and contains zero 
     )
 })
 
+test('public/js/ui/liveInputsPanel.js uses Handfish semantic tokens and contains zero raw color literals', () => {
+    const panelPath = path.resolve(__dirname, '../../public/js/ui/liveInputsPanel.js')
+    const panelCode = fs.readFileSync(panelPath, 'utf8')
+
+    const styleMatch = panelCode.match(/style\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, 'liveInputsPanel.js must define injected style.textContent')
+    const css = styleMatch[1]
+
+    assert.doesNotMatch(
+        css,
+        /!important/,
+        'liveInputsPanel.js injected CSS must not use !important'
+    )
+    assert.doesNotMatch(
+        css,
+        /#[0-9a-fA-F]{3,8}\b/,
+        'liveInputsPanel.js injected CSS must not contain raw hex color literals'
+    )
+    assert.doesNotMatch(
+        css,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        'liveInputsPanel.js injected CSS must not contain raw rgb/rgba/hsl/hsla literals'
+    )
+    assert.match(css, /var\(--hf-bg-surface/, 'panel surface must use var(--hf-bg-surface)')
+    assert.match(css, /var\(--hf-bg-elevated/, 'snippets must use var(--hf-bg-elevated)')
+    assert.match(css, /var\(--hf-border-subtle/, 'borders must use var(--hf-border-subtle)')
+    assert.match(css, /var\(--hf-shadow-xl/, 'panel shadow must use var(--hf-shadow-xl)')
+    assert.match(css, /var\(--hf-accent/, 'spectrum bars must derive from var(--hf-accent)')
+    assert.match(css, /var\(--hf-green/, 'level meter gradient must use var(--hf-green)')
+    assert.match(css, /var\(--hf-yellow/, 'level meter gradient must use var(--hf-yellow)')
+    assert.match(css, /var\(--hf-red/, 'level meter gradient must use var(--hf-red)')
+    assert.match(css, /var\(--hf-text-bright/, 'header text must use var(--hf-text-bright)')
+    // Snippet flash feedback is applied inline via color-mix with the green token.
+    assert.match(
+        panelCode,
+        /color-mix\(in srgb, var\(--hf-green\) 22%, transparent\)/,
+        'snippet flash must derive from var(--hf-green) via color-mix'
+    )
+})
+
 test('dialog action and close buttons declare focus-visible and active scale', () => {
     const indexHtml = fs.readFileSync(path.resolve(cssDir, '../index.html'), 'utf8')
     assert.match(
