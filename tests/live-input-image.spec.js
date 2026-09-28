@@ -79,3 +79,26 @@ for (const [name, program, output] of sketches) {
   })
 }
 }
+
+test('image drop failure surfaces a warning toast', async ({ page }) => {
+  await page.goto('/?dsl=' + encodeURIComponent('search synth\nsolid().write(o0)\nrender(o0)'))
+  await page.waitForFunction(() => window.__poly?.renderer?.inner?.pipeline)
+  // Break FileReader so the drop's async path rejects.
+  await page.evaluate(() => {
+    class FailingFileReader {
+      set onload(_) {}
+      readAsDataURL() {
+        setTimeout(() => this.onerror?.({ target: { error: new Error('read failed') } }), 0)
+      }
+    }
+    window.FileReader = FailingFileReader
+  })
+  await page.evaluate(() => {
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(new File([new Uint8Array(8)], 'broken.png', { type: 'image/png' }))
+    document.body.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }))
+  })
+  await expect(page.locator('.polymorphic-toast[data-type="warning"]')).toContainText('broken.png')
+  // The editor must be untouched by the failed drop.
+  await expect.poll(() => page.locator('#dsl-editor').evaluate(el => el.value)).not.toContain('data:image')
+})

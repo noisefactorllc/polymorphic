@@ -838,25 +838,25 @@ function setupFileDrop() {
     `
     overlay.style.cssText = `
         position: fixed; inset: 0;
-        background: rgba(102, 126, 234, 0.18);
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
+        background: color-mix(in srgb, var(--hf-accent, var(--accent3, #667eea)) 18%, transparent);
+        backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
+        -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
         z-index: 6000;
         display: none;
         justify-content: center; align-items: center;
         pointer-events: none;
     `
     overlay.querySelector('.file-drop-message').style.cssText = `
-        background: rgba(15,17,22,0.95);
-        border: 2px dashed rgba(165,184,255,0.6);
-        color: #fff;
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        font-size: 1rem;
+        background: color-mix(in srgb, var(--hf-bg-surface, #0f1116) 95%, transparent);
+        border: 2px dashed color-mix(in srgb, var(--hf-accent, var(--accent3, #a5b8ff)) 60%, transparent);
+        color: var(--hf-text-bright, #fff);
+        padding: var(--hf-space-6, 1.5rem) var(--hf-space-8, 2rem);
+        border-radius: var(--hf-radius-lg, 12px);
+        font-size: var(--hf-size-md, 1rem);
         display: flex;
         align-items: center;
-        gap: 0.65rem;
-        font-family: 'Nunito', sans-serif;
+        gap: var(--hf-space-2, 0.65rem);
+        font-family: var(--hf-font-family, 'Nunito', sans-serif);
     `
     overlay.querySelector('.icon-material').style.fontSize = '24px'
     document.body.appendChild(overlay)
@@ -883,7 +883,16 @@ function setupFileDrop() {
         overlay.style.display = 'none'
         const file = e.dataTransfer.files[0]
         if (!file) return
-        await handleDroppedFile(file)
+        try {
+            await handleDroppedFile(file)
+        } catch (err) {
+            // A failed drop must never surface as an unhandled promise
+            // rejection (FileReader failures, missing synth/media effect
+            // after a network hiccup, unusable video source). The user only
+            // sees silence otherwise.
+            console.error('File drop failed:', err)
+            showToast(`Couldn't use ${file.name || 'file'}: ${err?.message || err}`, 'warning')
+        }
     })
 }
 
