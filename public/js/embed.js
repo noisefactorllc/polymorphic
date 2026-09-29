@@ -2169,6 +2169,28 @@ async function startShader() {
     // outside the renderer, so nothing but the loop needs saving here.
     let contextRecoveryInFlight = false
 
+    // Shared by the WebGL context-restored path and the WebGPU device.lost
+    // path: recompile the editor's current DSL (recreating every GPU resource
+    // on a fresh context/device) and restart the loop.
+    async function recoverGraphics() {
+        if (contextRecoveryInFlight) return
+        contextRecoveryInFlight = true
+        try {
+            const dsl = dslEditor?.value || originalDsl || ''
+            const result = await renderer.recoverFromContextLoss(dsl)
+            if (result.success) {
+                showToast('Graphics restored — your program is live again', 'success')
+            } else {
+                showToast(`Could not restore your program after a graphics reset: ${result.error}`, 'error')
+            }
+        } catch (err) {
+            console.error('Context loss recovery failed:', err)
+            showToast('Could not restore your program after a graphics reset', 'error')
+        } finally {
+            contextRecoveryInFlight = false
+        }
+    }
+
     // Create renderer
     renderer = new PolymorphicRenderer(canvas, {
         width,
@@ -2181,23 +2203,13 @@ async function startShader() {
         onContextLost: () => {
             showToast('Graphics context lost — recovering your program…', 'warning')
         },
-        onContextRestored: async () => {
-            if (contextRecoveryInFlight) return
-            contextRecoveryInFlight = true
-            try {
-                const dsl = dslEditor?.value || originalDsl || ''
-                const result = await renderer.recoverFromContextLoss(dsl)
-                if (result.success) {
-                    showToast('Graphics restored — your program is live again', 'success')
-                } else {
-                    showToast(`Could not restore your program after a graphics reset: ${result.error}`, 'error')
-                }
-            } catch (err) {
-                console.error('Context loss recovery failed:', err)
-                showToast('Could not restore your program after a graphics reset', 'error')
-            } finally {
-                contextRecoveryInFlight = false
-            }
+        onContextRestored: () => {
+            return recoverGraphics()
+        },
+        onDeviceLost: (info) => {
+            showToast('GPU device lost — recovering your program…', 'warning')
+            console.warn('WebGPU device lost:', info?.reason || info || 'unknown reason')
+            return recoverGraphics()
         }
     })
     syncOutputController?.dispose()

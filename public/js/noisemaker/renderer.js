@@ -56,6 +56,14 @@ export class PolymorphicRenderer {
         this.loopDuration = options.loopDuration || 10
         this.onContextLost = options.onContextLost || null
         this.onContextRestored = options.onContextRestored || null
+        this.onDeviceLost = options.onDeviceLost || null
+
+        // WebGPU device-loss state (`device.lost` is terminal for the device,
+        // unlike WebGL's context pair). `_gpuDeviceLost` tells recovery to drop
+        // the dead pipeline so the engine builds a fresh one on a new device.
+        this._gpuDeviceLost = false
+        this._watchedGpuDevice = null
+        this._disposed = false
 
         // Create internal CanvasRenderer
         this._renderer = new CanvasRenderer({
@@ -219,6 +227,7 @@ export class PolymorphicRenderer {
 
             // Compile the DSL
             await this._renderer.compile(engineDsl)
+            this._armDeviceLostWatch()
             this._liveMediaStepIndex = this._findMediaStepIndex(engineDsl)
 
             // Check for text effects and render text textures (supports multiple).
@@ -530,16 +539,70 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * Observe the active WebGPU device for loss.
+     *
+     * The engine's WebGPU backend requests its own `GPUDevice` when it builds
+     * the pipeline (`_pipeline.backend.device`). Unlike WebGL's
+     * `webglcontextlost`/`webglcontextrestored` canvas events, WebGPU device
+     * loss is terminal for that device — no restore event will fire — so we
+     * watch `device.lost`, stop the loop, mark the loss and ask the host to
+     * drive recovery (which drops the dead pipeline and recompiles on a fresh
+     * device). Re-armed after every compile: a recovered device is a new
+     * object, and plain recompiles reuse the existing pipeline/device, so the
+     * identity check keeps exactly one `lost` handler per device.
+     *
+     * @private
+     */
+    _armDeviceLostWatch() {
+        const device = this._renderer?._pipeline?.backend?.device
+        if (!device || typeof device.lost?.then !== 'function') return
+        if (this._watchedGpuDevice === device) return
+        this._watchedGpuDevice = device
+        device.lost.then((info) => {
+            // 'destroyed' is an intentional shutdown (e.g. our own dispose),
+            // not a GPU reset — nothing to recover.
+            if (this._disposed || info?.reason === 'destroyed') return
+            this._gpuDeviceLost = true
+            this._contextLost = true
+            this.stop()
+            try {
+                this.onDeviceLost?.(info)
+            } catch (err) {
+                console.warn('onDeviceLost handler failed:', err)
+            }
+        })
+    }
+
+    /**
      * Recompile the current program into a restored context and restart the
      * render loop. All GPU resources (shaders, textures, text/media uploads)
      * are lost with the old context; `compile()` recreates every one of them,
      * so recovery is a plain recompile of the caller's DSL.
+     *
+     * For a lost WebGPU device the engine's `compile()` would reuse the
+     * existing pipeline — which is bound to the dead device — so the dead
+     * pipeline is dropped first, forcing the engine to create a fresh runtime
+     * (new adapter device, reconfigured canvas context) on the next compile.
      * @param {string} dsl - DSL source to restore
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async recoverFromContextLoss(dsl) {
+        if (this._gpuDeviceLost) {
+            this._gpuDeviceLost = false
+            this._watchedGpuDevice = null
+            const deadPipeline = this._renderer?._pipeline
+            this._renderer._pipeline = null
+            try {
+                deadPipeline?.dispose?.()
+            } catch (err) {
+                console.warn('Failed to dispose lost WebGPU pipeline:', err)
+            }
+        }
         const result = await this.compile(dsl)
-        if (result.success && !this.isRunning) this.start()
+        if (result.success) {
+            this._contextLost = false
+            if (!this.isRunning) this.start()
+        }
         return result
     }
 
@@ -573,6 +636,7 @@ export class PolymorphicRenderer {
      */
     dispose() {
         this.stop()
+        this._disposed = true
         this._textCanvases.clear()
         if (this._contextLostHandler) {
             this.canvas?.removeEventListener('webglcontextlost', this._contextLostHandler)

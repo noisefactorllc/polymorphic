@@ -38,6 +38,36 @@ function stubCanvas() {
     }
 }
 
+// Sandbox context whose CanvasRenderer stub returns the given engine, plus a
+// loader that executes the sliced PolymorphicRenderer class body in it.
+function sandboxContext(engine, canvas) {
+    return vm.createContext({
+        console,
+        SHADER_BASE_PATH: 'https://shaders.noisedeck.app/1',
+        // The engine wrapper (CanvasRenderer) is browser-only; stub it.
+        CanvasRenderer: function () { return engine },
+        // Bundle helpers are stubbed out: context-loss tests exercise loss /
+        // recovery control flow, not compilation semantics.
+        stripMediaUrlArg: dsl => dsl,
+        extractEffectNamesFromDsl: () => [],
+        extractEffectsFromDsl: () => [],
+        parseDsl: () => null,
+        findCalls: () => [],
+        stringArg: () => null,
+        textEffectsFromParsed: () => [],
+        extractMediaParams: () => null,
+        MEDIA_DEFAULTS: { url: null }
+    })
+}
+
+function loadRendererClass(context) {
+    vm.runInContext(classSource, context)
+    const Renderer = context.PolymorphicRenderer
+    // Match the class body's export shape (vm exposes top-level class binding
+    // only if declared as a var-like; recover it via a shim if needed).
+    return Renderer || vm.runInContext('PolymorphicRenderer', context)
+}
+
 async function make({ options = {}, inner = {} } = {}) {
     const canvas = stubCanvas()
     const engine = Object.assign({
@@ -57,29 +87,9 @@ async function make({ options = {}, inner = {} } = {}) {
         }
     }, inner)
 
-    const context = vm.createContext({
-        console,
-        SHADER_BASE_PATH: 'https://shaders.noisedeck.app/1',
-        // The engine wrapper (CanvasRenderer) is browser-only; stub it.
-        CanvasRenderer: function () { return engine },
-        // Bundle helpers are stubbed out: context-loss tests exercise loss /
-        // recovery control flow, not compilation semantics.
-        stripMediaUrlArg: dsl => dsl,
-        extractEffectNamesFromDsl: () => [],
-        extractEffectsFromDsl: () => [],
-        parseDsl: () => null,
-        findCalls: () => [],
-        stringArg: () => null,
-        textEffectsFromParsed: () => [],
-        extractMediaParams: () => null,
-        MEDIA_DEFAULTS: { url: null }
-    })
-    vm.runInContext(classSource, context)
-    const Renderer = context.PolymorphicRenderer
-    // Match the class body's export shape (vm exposes top-level class binding
-    // only if declared as a var-like; recover it via a shim if needed).
-    const resolved = Renderer || vm.runInContext('PolymorphicRenderer', context)
-    const renderer = new resolved(canvas, options)
+    const context = sandboxContext(engine, canvas)
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, options)
     renderer._renderer = engine
     return { renderer, engine, canvas }
 }
@@ -167,3 +177,161 @@ test('dispose() removes the context loss listeners', async () => {
 function canvas_dispatch(canvas, type) {
     return canvas.dispatch(type)
 }
+
+// ---- WebGPU device loss (`device.lost`) ----
+
+// A GPUDevice stub whose `lost` promise is resolved manually.
+function stubGpuDevice() {
+    let resolveLost
+    const lost = new Promise(resolve => { resolveLost = resolve })
+    return { lost, lose: info => resolveLost(info || { reason: 'unknown' }) }
+}
+
+// An engine stub whose compile() installs (or replaces) a pipeline with the
+// given device — mirroring how the real engine binds a fresh GPUDevice when it
+// builds a new pipeline.
+function gpuEngine(device) {
+    return {
+        isRunning: false,
+        stopCount: 0,
+        startCount: 0,
+        compileCalls: [],
+        manifest: {},
+        _pipeline: { backend: { device } },
+        async loadManifest() { return this.manifest },
+        setLoopDuration() {},
+        stop() { this.stopCount++; this.isRunning = false },
+        start() { this.startCount++; this.isRunning = true },
+        async compile(dsl) {
+            this.compileCalls.push(dsl)
+            return { success: true }
+        }
+    }
+}
+
+test('a WebGPU device loss stops the loop, marks context lost and notifies', async () => {
+    let lostInfo = null
+    const device = stubGpuDevice()
+    const canvas = stubCanvas()
+    const engine = gpuEngine(device)
+    const context = vm.createContext(sandboxContext(engine, canvas))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, { onDeviceLost: info => { lostInfo = info } })
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+    assert.equal(renderer.contextLost, false)
+
+    device.lose({ reason: 'internal' })
+    await device.lost
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.equal(lostInfo?.reason, 'internal')
+    assert.equal(renderer.contextLost, true)
+    assert.equal(engine.stopCount, 1)
+    assert.equal(engine.isRunning, false)
+})
+
+test('a destroyed WebGPU device is ignored (intentional shutdown, not a reset)', async () => {
+    let notified = 0
+    const device = stubGpuDevice()
+    const canvas = stubCanvas()
+    const engine = gpuEngine(device)
+    const context = vm.createContext(sandboxContext(engine, canvas))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, { onDeviceLost: () => { notified++ } })
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+
+    device.lose({ reason: 'destroyed' })
+    await device.lost
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.equal(notified, 0)
+    assert.equal(renderer.contextLost, false)
+    assert.equal(engine.stopCount, 0)
+})
+
+test('recoverFromContextLoss drops the dead WebGPU pipeline and rebuilds on a new device', async () => {
+    const device = stubGpuDevice()
+    const canvas = stubCanvas()
+    const disposed = []
+    const deadPipeline = { backend: { device }, dispose: () => disposed.push('dead') }
+    const engine = gpuEngine(device)
+    engine._pipeline = deadPipeline
+    const context = vm.createContext(sandboxContext(engine, canvas))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, {})
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+
+    device.lose({ reason: 'internal' })
+    await device.lost
+    await new Promise(resolve => setImmediate(resolve))
+
+    // Recovery installs a fresh pipeline/device, mirroring the engine's
+    // _createRuntime path.
+    const freshDevice = stubGpuDevice()
+    let pipelineWasDropped = false
+    engine.compile = async dsl => {
+        engine.compileCalls.push(dsl)
+        pipelineWasDropped = engine._pipeline === null
+        engine._pipeline = { backend: { device: freshDevice } }
+        return { success: true }
+    }
+    const result = await renderer.recoverFromContextLoss('osc()')
+    assert.equal(result.success, true)
+    assert.deepEqual(disposed, ['dead'])
+    assert.equal(pipelineWasDropped, true, 'dead pipeline was dropped before recompile')
+    assert.deepEqual(engine.compileCalls, ['osc()', 'osc()'])
+    assert.equal(renderer.contextLost, false)
+    assert.equal(engine.isRunning, true)
+    // The new device is watched, not the dead one.
+    assert.equal(renderer._watchedGpuDevice, freshDevice)
+
+    // A second loss on the fresh device is also handled (re-armed).
+    let lostAgain = 0
+    renderer.onDeviceLost = () => { lostAgain++ }
+    freshDevice.lose({ reason: 'internal' })
+    await freshDevice.lost
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(lostAgain, 1)
+    assert.equal(renderer.contextLost, true)
+})
+
+test('recoverFromContextLoss keeps the existing pipeline when no WebGPU device was lost', async () => {
+    const canvas = stubCanvas()
+    const engine = gpuEngine(null)
+    engine._pipeline = { backend: { getName: () => 'WebGL2' } }
+    const context = vm.createContext(sandboxContext(engine, canvas))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, {})
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+
+    const result = await renderer.recoverFromContextLoss('osc()')
+    assert.equal(result.success, true)
+    assert.notEqual(engine._pipeline, null)
+    assert.deepEqual(engine.compileCalls, ['osc()', 'osc()'])
+    assert.equal(engine.isRunning, true)
+})
+
+test('re-arming the watch on the same device does not stack duplicate lost handlers', async () => {
+    const device = stubGpuDevice()
+    const canvas = stubCanvas()
+    const engine = gpuEngine(device)
+    const context = vm.createContext(sandboxContext(engine, canvas))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, {})
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+    await renderer.compile('osc(rect())')
+    await renderer.compile('osc(tri())')
+
+    let notified = 0
+    renderer.onDeviceLost = () => { notified++ }
+    device.lose({ reason: 'internal' })
+    await device.lost
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(notified, 1)
+    assert.equal(renderer._watchedGpuDevice, device)
+})
