@@ -23,7 +23,7 @@ function harness() {
     const state = { text: 'old', handlers: {}, fromDsl(text) { this.text = text },
         toDsl() { return this.text + ':parameter' }, on(event, fn) { this.handlers[event] = fn } }
     const context = vm.createContext({
-        console, dslEditor: editor, renderer: { canvasRenderer: {}, compile(text) {
+        console, dslEditor: editor, renderer: { canvasRenderer: {}, applyImageDimensions() {}, compile(text) {
             const gate = deferred()
             compiles.push({ text, ...gate })
             return gate.promise

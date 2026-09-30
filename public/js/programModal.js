@@ -35,6 +35,7 @@ let programDeleteCheckbox = null
 let programDeleteBtn = null
 
 // Callbacks
+let getImages = () => []
 let getDsl = null
 let setDsl = null
 let showToast = null
@@ -184,6 +185,7 @@ export function closeProgramModal() {
 export function initProgramModal(options) {
     getDsl = options.getDsl
     setDsl = options.setDsl
+    getImages = options.getImages || (() => [])
     showToast = options.showToast || (typeof window !== 'undefined' ? window.showToast : null)
 
     // Cache DOM elements
@@ -239,7 +241,7 @@ function setupEventHandlers() {
 
         const program = programs.get(name)
         if (program && setDsl) {
-            setDsl(program.dsl)
+            setDsl(program.dsl, program.images || [])
             programModal?.close()
         }
     })
@@ -254,7 +256,14 @@ function setupEventHandlers() {
         if (!name || !getDsl) return
 
         const dsl = getDsl()
-        const res = programs.saveProgram(name, dsl)
+        let images
+        try {
+            images = getImages()
+        } catch (error) {
+            showToast?.(`Could not save program: ${error.message}`, 'error')
+            return
+        }
+        const res = programs.saveProgram(name, dsl, images)
         if (res && res.success === false) {
             if (res.quotaExceeded) {
                 showToast?.('Could not save program: storage quota exceeded. Free up space by deleting unused programs.', 'error')

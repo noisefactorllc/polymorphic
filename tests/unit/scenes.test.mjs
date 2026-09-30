@@ -57,3 +57,12 @@ test('Scenes clear rolls back when store write fails', () => {
     assert.strictEqual(ok, false)
     assert.strictEqual(s.load(1), 'keep')
 })
+
+test('scene image bytes survive a fresh storage reader alongside their DSL', () => {
+    const image = { id: 'a', dataUrl: 'original bytes' }
+    const store = { data: null, get() { return this.data }, set(value) { this.data = JSON.parse(JSON.stringify(value)) } }
+    new Scenes(store).save(1, 'media(url:"image:a")', [image])
+    const reloaded = new Scenes(store)
+    assert.strictEqual(reloaded.load(1), 'media(url:"image:a")')
+    assert.deepStrictEqual(reloaded.images(1), [image])
+})

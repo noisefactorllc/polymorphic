@@ -26,7 +26,7 @@ test('online adapter uses the rolling major SDK URL by default', () => {
 
     assert.equal(config.seanceUrl, DEFAULT_SEANCE_URL)
     assert.equal(config.sdkUrl, DEFAULT_SEANCE_SDK_URL)
-    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2')
+    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929')
 })
 
 test('online adapter allows tests to override SDK and server URLs on a dev host', () => {
@@ -69,6 +69,55 @@ test('getInitialDocs produces one default main DSL document from current editor 
             default: true,
         },
     ])
+})
+
+test('taking an image composition online seeds separate original assets and short references', async () => {
+    let seed
+    const images = [{ id: 'a'.repeat(64), dataUrl: 'data:image/png;base64,AAAA' }]
+    const editor = { value: 'media(url:"data:image/png;base64,AAAA").write(o0)' }
+    const layer = {
+        on() { return () => {} }, bindEditor() {}, getStatus: () => 'offline', getSessionId: () => 'ImageSession',
+        async takeOnline(value) { seed = value }, getShareUrl: () => '', writeSessionToUrl: url => url,
+    }
+    const adapter = createPolymorphicOnlineAdapter({
+        editor, location: 'https://polymorphic.test/', history: { replaceState() {} },
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        prepareImages: async () => ({ dsl: `media(url:"image:${images[0].id}").write(o0)`, images }),
+    })
+    await adapter.takeOnline()
+    assert.deepEqual(seed.images, images)
+    assert.equal(seed.docs[0].text, `media(url:"image:${images[0].id}").write(o0)`)
+    assert.equal(editor.value, seed.docs[0].text)
+})
+
+test('live image edits upload bytes before the reference and read-only editors never upload', async () => {
+    const editor = { value: 'media(url:"local").write(o0)' }
+    const image = { id: 'b'.repeat(64), dataUrl: 'original bytes' }
+    const events = []
+    let release
+    const layer = {
+        status: 'online', on() { return () => {} }, bindEditor() {}, getStatus() { return this.status },
+        getSessionId: () => 'ImageSession',
+        uploadImage: async () => { events.push('upload'); await new Promise(resolve => { release = resolve }) },
+        updateLocalText: (id, text) => events.push([id, text]),
+    }
+    const adapter = createPolymorphicOnlineAdapter({
+        editor, location: 'https://polymorphic.test/',
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        prepareImages: async () => ({ dsl: 'media(url:"image:resolved").write(o0)', images: [image] }),
+        imageBlob: async asset => asset,
+    })
+    await adapter.ensureOnline()
+    const pending = adapter.updateLocalText()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(events, ['upload'])
+    release()
+    await pending
+    assert.deepEqual(events[1], ['main', 'media(url:"image:resolved").write(o0)'])
+    layer.status = 'readonly'
+    editor.value = 'media(url:"local").write(o0)'
+    await adapter.updateLocalText()
+    assert.equal(events.length, 2)
 })
 
 test('shareBaseUrl strips volatile share code while preserving durable params', () => {
@@ -703,5 +752,89 @@ test('user going offline manually cancels active reconnection', async () => {
         type: 'info',
     })
 
+    adapter.dispose()
+})
+
+
+test('pending and rejected image replacements cannot publish through unrelated control edits', async () => {
+    const oldText = 'media(url:"image:old", rotation:0).write(o0)'
+    const editor = { value: oldText }
+    const uploaded = []
+    const published = []
+    let binding
+    const layer = {
+        status: 'online', on() { return () => {} }, bindEditor(value) { binding = value },
+        getStatus() { return this.status }, getSessionId: () => 'ImageSession',
+        uploadImage: () => new Promise((resolve, reject) => uploaded.push({ resolve, reject })),
+        updateLocalText: (_id, text) => published.push(text),
+    }
+    const adapter = createPolymorphicOnlineAdapter({
+        editor, location: 'https://polymorphic.test/',
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        prepareImages: async text => ({ dsl: text.replace('local-new', 'image:new'), images: [{ id: 'new', dataUrl: 'new original bytes' }] }),
+        imageBlob: async image => image,
+    })
+    await adapter.ensureOnline()
+    editor.value = 'media(url:"local-new", rotation:0).write(o0)'
+    const first = adapter.updateLocalText('image')
+    const firstRejected = assert.rejects(first, /upload refused/)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    editor.value = 'media(url:"local-new", rotation:25).write(o0)'
+    const control = adapter.updateLocalText('control')
+    const controlRejected = assert.rejects(control, /upload refused/)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(published, [], 'the session keeps its previous image while uploads are pending')
+    for (const upload of uploaded.splice(0)) upload.reject(new Error('upload refused'))
+    await Promise.all([firstRejected, controlRejected])
+    assert.deepEqual(published, [])
+    assert.equal(binding.validateText(editor.value).ok, false, 'editor binding also blocks the unuploaded reference')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    for (const upload of uploaded) upload.reject(new Error('upload refused'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(published, [])
+    adapter.dispose()
+})
+
+
+for (const cancel of ['edit', 'offline']) {
+    test(`initial image preparation cannot overwrite a newer draft or go online after ${cancel}`, async () => {
+        const original = 'media(url:"https://images.test/picture.png", rotation:0).write(o0)'
+        const editor = { value: original }
+        const seeds = [], toasts = []
+        let release
+        const layer = { on() { return () => {} }, bindEditor() {}, getStatus: () => 'offline', getSessionId: () => null,
+            takeOnline: async value => seeds.push(value), goOffline() {}, writeSessionToUrl: url => url }
+        const adapter = createPolymorphicOnlineAdapter({
+            editor, location: 'https://poly.test/', importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+            showToast: text => toasts.push(text),
+            prepareImages: text => new Promise(resolve => { release = () => resolve({dsl:text.replace('https://images.test/picture.png','image:ready'),images:[{id:'ready'}]}) }),
+        })
+        const creating = adapter.takeOnline()
+        while (!release) await Promise.resolve()
+        if (cancel === 'edit') editor.value = original.replace('rotation:0','rotation:42')
+        else adapter.goOffline()
+        const expected = editor.value
+        release()
+        await creating
+        assert.equal(editor.value, expected)
+        assert.deepEqual(seeds, [], 'no session may be created from canceled or stale preparation')
+        if (cancel === 'edit') assert.ok(toasts.some(text => /changed|latest/i.test(text)))
+        adapter.dispose()
+    })
+}
+
+test('go offline during the initial SDK import cancels session creation before image preparation', async () => {
+    let releaseSdk, prepared = 0, created = 0
+    const sdk = new Promise(resolve => { releaseSdk = resolve })
+    const adapter = createPolymorphicOnlineAdapter({
+        editor:{value:'media(url:"local")'}, location:'https://poly.test/', importSdk:() => sdk,
+        prepareImages:async () => { prepared++; return {dsl:'prepared',images:[]} },
+    })
+    const creating = adapter.takeOnline()
+    adapter.goOffline()
+    releaseSdk({createOnlineDslLayer:() => ({on(){return () => {}},bindEditor(){},getStatus:()=> 'offline',getSessionId:()=> null, takeOnline:async () => {created++}})})
+    await creating
+    assert.equal(prepared, 0)
+    assert.equal(created, 0)
     adapter.dispose()
 })

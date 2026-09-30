@@ -21,6 +21,14 @@ globalThis.__portableRuntime = { CanvasRenderer, Effect, registerStarterOps: nam
 const source = (await readFile(new URL('../../public/js/sharingLoader.js', import.meta.url), 'utf8'))
     .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, Effect, registerStarterOps, mergeIntoEnums } = globalThis.__portableRuntime')
 const loader = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+
+test('composition imports retain the original image payloads for rendering and reshare', async t => {
+    const previous = globalThis.fetch
+    const images = [{ id: 'a'.repeat(64), dataUrl: 'data:image/png;base64,AAAA' }]
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ code: 'abcdef', dsl: 'media().write(o0)', images }) })
+    t.after(() => { globalThis.fetch = previous })
+    assert.deepEqual((await loader.loadFromCode('abcdef')).images, images)
+})
 const data = {
     name: 'Volume', func: 'volume', namespace: 'synth3d', starter: true,
     textures: { volume: { type: '3d', width: 16, height: 16, depth: 16 } },

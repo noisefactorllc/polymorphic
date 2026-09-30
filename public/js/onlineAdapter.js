@@ -1,6 +1,6 @@
 export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
 // Bypass browsers that cached the older alias without Cache-Control.
-export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2'
+export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929'
 
 export const DEFAULT_RECONNECT_BASE_MS = 500
 export const DEFAULT_RECONNECT_MAX_MS = 8000
@@ -189,6 +189,10 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     // its buttons on that status, so a double click used to create two
     // sessions and orphan the first (two of ten creates per IP per hour).
     let actionInFlight = false
+    let actionVersion = 0
+    let preparedImageText = null
+    let imagePreparationVersion = 0
+    const uploadedImages = new Set()
 
     async function ensureOnline() {
         if (online) return online
@@ -208,6 +212,13 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         })
         bindCleanup = online.bindEditor({
             editor,
+            validateText: text => {
+                const allowed = deps.validatePublication?.() ?? true
+                if (allowed !== true) return allowed
+                if (!deps.prepareImages || !/\burl\b/.test(text) || text === preparedImageText) return true
+                publishImageText(text, 'editor').catch(error => showToast(error.message, 'error'))
+                return { ok: false, reason: 'Preparing composition images' }
+            },
             onRemoteText: (text, context) => applyRemoteDslText(text, context, {
                 editor,
                 applyCurrentDsl,
@@ -354,6 +365,9 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function closeActiveSession(layer = online) {
+        imagePreparationVersion++
+        preparedImageText = null
+        uploadedImages.clear()
         if (!isLayerConnected(layer)) return false
         isReconnecting = false
         reconnectAttempt = 0
@@ -375,10 +389,27 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     async function takeOnline() {
         if (actionInFlight) return null
         actionInFlight = true
+        const version = ++actionVersion
         try {
+            const text = getCurrentDsl()
             const layer = await ensureOnline()
+            if (version !== actionVersion) return null
             closeActiveSession(layer)
-            await layer.takeOnline(getInitialDocs(getCurrentDsl()))
+            const prepared = deps.prepareImages ? await deps.prepareImages(text) : null
+            if (version !== actionVersion || layer !== online) return null
+            if (getCurrentDsl() !== text) {
+                showToast('Program changed while preparing images. Go online again to share the latest version.', 'info')
+                return null
+            }
+            if (prepared) {
+                if (editor) editor.value = prepared.dsl
+                preparedImageText = prepared.dsl
+            }
+            await layer.takeOnline(prepared?.images.length
+                ? { docs: getInitialDocs(prepared.dsl), images: prepared.images }
+                : getInitialDocs(prepared?.dsl ?? text))
+            if (version !== actionVersion || layer !== online) return null
+            for (const image of prepared?.images || []) uploadedImages.add(image.id)
             rememberSessionId(layer.getSessionId())
             writeSessionToBrowserUrl(layer.getSessionId())
             refreshStatus()
@@ -441,10 +472,11 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function goOffline() {
+        actionVersion++
         isReconnecting = false
         reconnectAttempt = 0
         if (!online) return
-        online.goOffline()
+        closeActiveSession()
         writeSessionToBrowserUrl(null)
         refreshStatus('offline')
         showToast('Offline', 'info')
@@ -452,7 +484,28 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
 
     function updateLocalText(source = 'local') {
         if (!online) return null
+        if ((deps.validatePublication?.() ?? true) !== true) return null
+        if (deps.prepareImages && /\burl\b/.test(getCurrentDsl())) return publishImageText(getCurrentDsl(), source)
+        imagePreparationVersion++
         return online.updateLocalText(DEFAULT_DOC_ID, getCurrentDsl(), { source })
+    }
+
+    async function publishImageText(text, source) {
+        const version = ++imagePreparationVersion
+        const layer = online, sessionId = layer?.getSessionId?.()
+        if (!layer || !sessionId || !['online', 'connecting'].includes(layer.getStatus())) return null
+        const prepared = await deps.prepareImages(text)
+        if (version !== imagePreparationVersion || getCurrentDsl() !== text || layer !== online || sessionId !== layer.getSessionId()) return null
+        for (const image of prepared.images) {
+            if (uploadedImages.has(image.id)) continue
+            await layer.uploadImage(await deps.imageBlob(image))
+            if (version !== imagePreparationVersion || layer !== online || sessionId !== layer.getSessionId()) return null
+            uploadedImages.add(image.id)
+        }
+        if (version !== imagePreparationVersion || getCurrentDsl() !== text || layer !== online || sessionId !== layer.getSessionId()) return null
+        preparedImageText = prepared.dsl
+        if (editor) editor.value = prepared.dsl
+        return layer.updateLocalText(DEFAULT_DOC_ID, prepared.dsl, { source })
     }
 
     async function copyShareUrl() {
@@ -521,6 +574,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function dispose() {
+        actionVersion++
         bindCleanup?.()
         statusUnsub?.()
         disconnectUnsub?.()
@@ -551,6 +605,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         isReconnecting: () => isReconnecting,
         getReconnectAttempt: () => reconnectAttempt,
         ensureOnline,
+        getImage: async id => (await ensureOnline()).getImage(id),
         takeOnline,
         joinSession,
         joinFromUrl,

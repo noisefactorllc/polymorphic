@@ -87,11 +87,12 @@ export class Programs {
      * @param {string} dsl - DSL source code
      * @returns {{ success: boolean, quotaExceeded?: boolean, error?: unknown, recovered?: boolean }}
      */
-    saveProgram(name, dsl) {
+    saveProgram(name, dsl, images = []) {
         const previous = this.programs[name]
         this.programs[name] = {
             name,
             dsl,
+            images,
             savedAt: Date.now()
         }
         const res = this.save()

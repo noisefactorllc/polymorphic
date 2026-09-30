@@ -96,6 +96,8 @@ class ShareModal {
 
         this.isOpen = true;
         this.dsl = dsl;
+        this.images = options.images || [];
+        this.hasLiveMedia = options.hasLiveMedia;
         this.canvas = canvas;
 
         this.overlay = document.getElementById('share-modal');
@@ -280,6 +282,12 @@ class ShareModal {
                 screenshot: this.screenshot || '',
                 effects: effectZips
             };
+
+            if (this.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first');
+            if (/\burl\b/.test(payload.dsl)) {
+                const { prepareImagesForShare, getReferencedImages } = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929');
+                Object.assign(payload, await prepareImagesForShare(payload.dsl, getReferencedImages(payload.dsl, this.images)));
+            }
 
             const response = await fetch('https://sharing.noisedeck.app/api/embed/shorten', {
                 method: 'POST',

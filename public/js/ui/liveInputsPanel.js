@@ -641,6 +641,10 @@ class LiveInputsPanel {
         this._sourceCleanup = Promise.resolve()
     }
 
+    get hasLiveMedia() { return Boolean(this._currentStream || this._currentObjectUrl) }
+
+    stopMediaSource() { return this._stopActiveSource() }
+
     /**
      * Use a video file (e.g., from a drop) as the active media source.
      * Public counterpart to the internal _activateSource('video') path —

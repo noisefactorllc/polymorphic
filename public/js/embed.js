@@ -67,6 +67,7 @@ const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE
 
 // Renderer reference (set after initialization)
 let renderer = null
+let compositionImages = []
 let syncOutputDialog = null
 let syncOutputController = null
 
@@ -280,7 +281,7 @@ if (menuBarEl) {
                             label: 'share publicly...',
                             onSelect: () => {
                                 const dsl = dslEditor?.value || ''
-                                shareModal.open({ dsl, canvas })
+                                shareModal.open({ dsl, canvas, images: renderer?.images || [], hasLiveMedia: liveInputsPanel.hasLiveMedia })
                             },
                         },
                         { type: 'separator', id: 'onlineCollabMenuSeparator', hidden: () => !onlineCollabUiVisible },
@@ -928,6 +929,7 @@ async function handleDroppedFile(file) {
 }
 
 async function insertImageFile(dataUrl) {
+    await liveInputsPanel.stopMediaSource()
     await renderer.inner.loadEffects(['synth/media'])
     insertImageSource(dslEditor, dataUrl, getEffect('synth.media').globals)
 }
@@ -1025,11 +1027,12 @@ function showCanvas() {
     refreshMenuBar()
 }
 
-function publishLocalDsl(source) {
+async function publishLocalDsl(source) {
     try {
-        onlineAdapter?.updateLocalText(source)
+        await onlineAdapter?.updateLocalText(source)
     } catch (err) {
         console.debug('[Polymorphic] Online local text update failed:', err)
+        showToast(err.message || 'Could not share image', 'error')
     }
 }
 
@@ -1109,6 +1112,18 @@ function setupOnlineCollaboration() {
         editor: dslEditor,
         dialog: seanceDialog,
         getCurrentDsl: () => dslEditor?.value || '',
+        validatePublication: () => liveInputsPanel.hasLiveMedia
+            ? { ok: false, reason: 'Only image sources can go online; stop the camera or video first' } : true,
+        prepareImages: async dsl => {
+            if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can go online; stop the camera or video first')
+            if (!/\burl\b/.test(dsl)) return { dsl, images: [] }
+            const target = renderer
+            const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, target.images || []))
+            for (const image of prepared.images) if (!target.images.some(asset => asset.id === image.id)) target.images.push(image)
+            return prepared
+        },
+        imageBlob: async image => (await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')).imageToBlob(image),
         applyCurrentDsl: applyCurrentDslFromOnline,
         showToast,
         // Keep the menu label (the only always-visible session indicator) in
@@ -1439,6 +1454,12 @@ async function handleEditInApp(appName, appUrl) {
         if (screenshot) payload.screenshot = screenshot
         if (effectZips.length > 0) payload.effects = effectZips
 
+        if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first')
+        if (/\burl\b/.test(payload.dsl)) {
+            const { prepareImagesForShare, getReferencedImages } = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            Object.assign(payload, await prepareImagesForShare(payload.dsl, getReferencedImages(payload.dsl, renderer.images || [])))
+        }
+
         // Upload to sharing service
         const response = await fetch(SHARE_API_URL, {
             method: 'POST',
@@ -1485,6 +1506,7 @@ async function handleEditInNoodles() {
  */
 function handleLoadFromUrl(composition) {
     if (!composition) return
+    renderer.images = composition.images || []
     
     console.log('[Polymorphic] Loaded composition from URL:', composition.title || 'Untitled')
     
@@ -1593,6 +1615,12 @@ async function recompileShader(overrideDsl) {
         await preloadFontsForDsl(dsl)
         if (superseded()) return { success: false, superseded: true }
 
+        if (/\burl\b/.test(dsl)) {
+            const tools = renderer._imageTools || await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            if (tools.getMediaSources(dsl).some(source => source.url && source.url !== 'live')) await liveInputsPanel.stopMediaSource()
+            if (superseded()) return { success: false, superseded: true }
+        }
+
         const result = await renderer.compile(dsl)
         if (result.success) {
             // This is the program actually installed by the renderer, even
@@ -1662,6 +1690,7 @@ function syncProgramStateFromDsl(dsl) {
     suppressDslReact = true
     try {
         programState.fromDsl(dsl)
+        renderer.applyImageDimensions(programState)
         programStateDsl = dsl
     } catch (err) {
         console.warn('[Polymorphic] programState.fromDsl failed:', err)
@@ -1938,6 +1967,8 @@ function setupProgramState() {
     // surfaces and particle state are preserved.
     programState.on('change', () => {
         if (suppressDslReact) return
+        suppressDslReact = true
+        try { renderer.applyImageDimensions(programState) } finally { suppressDslReact = false }
         if (!dslEditor || !programState) return
         // Parameter controls still describe the last successful compile while
         // a newer draft is loading (or has a compile error).
@@ -1954,7 +1985,7 @@ function setupProgramState() {
         // drops media() urls. Carry them back from the current editor text so a
         // parameter tweak doesn't silently strip the image on save/share/re-run.
         // The engine's currentDsl stays the stripped version (what it compiled).
-        const editorDsl = restoreMediaUrls(dslEditor.value, newDsl)
+        const editorDsl = (renderer._imageTools?.restoreMediaUrls || restoreMediaUrls)(dslEditor.value, newDsl)
         if (editorDsl === dslEditor.value) return
         suppressDslReact = true
         try {
@@ -2123,6 +2154,7 @@ async function startShader() {
         try {
             // Load composition and register any portable effects
             const composition = await loadFromCode(code)
+            compositionImages = composition.images || []
             dsl = composition.dsl
             title = composition.title
         } catch (err) {
@@ -2212,6 +2244,14 @@ async function startShader() {
             return recoverGraphics()
         }
     })
+    renderer.images = compositionImages
+    renderer.resolveImage = async id => {
+        const blob = await onlineAdapter.getImage(id)
+        const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+        const image = await tools.prepareImage(blob)
+        if (!renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
+        return blob
+    }
     syncOutputController?.dispose()
     syncOutputController = initializeSyncOutputController({
         renderer: renderer.inner,
@@ -2486,7 +2526,15 @@ function setupMenuBar() {
                 // since live coders save mid-edit.
                 const dsl = dslEditor?.value || ''
                 if (dsl.trim()) {
-                    const res = scenes.save(slot, dsl)
+                    let images
+                    try {
+                        images = renderer?.getImageAssets(dsl) || []
+                    } catch (error) {
+                        showToast(`Could not save scene ${slot}: ${error.message}`, 'error')
+                        e.preventDefault()
+                        return
+                    }
+                    const res = scenes.save(slot, dsl, images)
                     if (res && res.success === false) {
                         if (res.quotaExceeded) {
                             showToast(`Could not save scene ${slot}: storage quota exceeded`, 'error')
@@ -2512,6 +2560,7 @@ function setupMenuBar() {
                 if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ||
                            el.isContentEditable || el.closest?.('code-editor'))) return
                 const dsl = scenes.load(slot)
+                if (dsl) renderer.images = scenes.images(slot)
                 if (dsl && dslEditor) {
                     dslEditor.value = dsl
                     publishLocalDsl('scene-load')
@@ -2571,7 +2620,9 @@ function init() {
     // Initialize program modal
     initProgramModal({
         getDsl: () => dslEditor?.value || '',
-        setDsl: (dsl) => {
+        getImages: () => renderer?.getImageAssets(dslEditor?.value || '') || [],
+        setDsl: (dsl, images = []) => {
+            if (renderer) renderer.images = images
             if (dslEditor) {
                 dslEditor.value = dsl
                 publishLocalDsl('program-load')

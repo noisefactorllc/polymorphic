@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 
 export const SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2'
 
@@ -60,7 +60,7 @@ export async function startSeanceServer({ origin = 'http://localhost:3017' } = {
         cwd: harnessPaths.root,
         env: {
             ...process.env,
-            PYTHONPATH: harnessPaths.root,
+            PYTHONPATH: [harnessPaths.root, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
             SEANCE_BIND: `127.0.0.1:${port}`,
             SEANCE_SECRET: key,
             SEANCE_DB: join(tmp, 'seance.db'),

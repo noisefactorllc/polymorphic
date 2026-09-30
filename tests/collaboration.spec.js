@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+import { routePortableImagesLocal } from './portableImagesLocal.js'
 import { SEANCE_SDK_URL, hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
 
 const BASE_SKETCH = [
@@ -221,9 +222,96 @@ test('remote text received during a delayed compile reaches the renderer and con
   expect(await guest.evaluate(() => window.__poly.programState.toDsl())).toContain('80')
 })
 
+test('image seed and later replacement reach another client with original bytes and rendered pixels', async ({ page, context }) => {
+  test.setTimeout(120000)
+  await preparePage(page)
+  await page.goto(appPath({ dsl: 'search synth\nmedia().write(o0)\nrender(o0)' }))
+  await waitForApp(page)
+  const sources = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 3; canvas.height = 2
+    const context = canvas.getContext('2d')
+    return ['#ff0000', '#00ff00', '#0000ff'].map(color => {
+      context.fillStyle = color; context.fillRect(0, 0, 3, 2)
+      return canvas.toDataURL('image/png')
+    })
+  })
+  const dsl = `search synth\nmedia(url: "${sources[0]}").write(o0)\nmedia(url: "${sources[1]}").write(o1)\nrender(o0)`
+  await setEditorText(page, dsl)
+  await expect.poll(() => imagePixel(page)).toEqual([255, 0, 0, 255])
+  const sessionId = await takeOnline(page)
+  await closeDialog(page)
+  const guest = await context.newPage()
+  await preparePage(guest)
+  await guest.goto(appPath({ dsl: 'search synth\nmedia().write(o0)\nrender(o0)' }))
+  await waitForApp(guest)
+  await guest.evaluate(async () => {
+    const panel = window.__poly.liveInputsPanel
+    const source = document.createElement('canvas')
+    source.width = source.height = 16
+    source.getContext('2d').fillRect(0, 0, 16, 16)
+    panel._currentStream = source.captureStream(30)
+    panel._videoEl.srcObject = panel._currentStream
+    await panel._videoEl.play()
+    panel._startTextureLoop(panel._videoEl)
+  })
+  await joinById(guest, sessionId)
+  await closeDialog(guest)
+  await expect.poll(() => guest.evaluate(() => window.__poly.liveInputsPanel.hasLiveMedia)).toBe(false)
+  await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([255, 0, 0, 255])
+  await expect.poll(() => guest.evaluate(() => window.__poly.renderer.images.map(image => image.dataUrl).sort())).toEqual(sources.slice(0, 2).sort())
+  expect(await editorText(guest)).not.toContain('data:')
+  await setEditorText(page, (await editorText(page)).replace('render(o0)', 'render(o1)'))
+  await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([0, 255, 0, 255])
+  await guest.keyboard.press('Control+Shift+Digit1')
+  await guest.evaluate(async () => (await import('/js/programModal.js')).openProgramModal('save'))
+  await guest.fill('#programNameInput', 'Image save boundary')
+  await guest.click('#programSaveBtn')
+  const saved = await guest.evaluate(() => ({ scene:localStorage.getItem('polymorphic-scenes'), program:localStorage.getItem('polymorphic-programs') }))
+  let releaseImage, imageRequested = false
+  const download = new Promise(resolve => { releaseImage = resolve })
+  await guest.route('**/v1/sessions/*/images/*', async route => {
+    imageRequested = true
+    await download
+    await route.continue()
+  })
+  const next = (await editorText(page)).replace(/media\(url: "image:[a-f0-9]+"\)/, `media(url: "${sources[2]}")`).replace('render(o1)', 'render(o0)')
+  await setEditorText(page, next)
+  try {
+    await expect.poll(() => imageRequested, { timeout:30000 }).toBe(true)
+    await guest.keyboard.press('Control+Shift+Digit1')
+    await expect(guest.locator('.polymorphic-toast')).toContainText('Could not save scene')
+    await guest.evaluate(async () => (await import('/js/programModal.js')).openProgramModal('save'))
+    await guest.fill('#programNameInput', 'Image save boundary')
+    await guest.check('#programOverwriteCheckbox')
+    await guest.click('#programSaveBtn')
+    await expect(guest.locator('.polymorphic-toast')).toContainText('Could not save program')
+    expect(await guest.evaluate(() => ({ scene:localStorage.getItem('polymorphic-scenes'), program:localStorage.getItem('polymorphic-programs') }))).toEqual(saved)
+    await guest.keyboard.press('Escape')
+  } finally {
+    releaseImage()
+  }
+  await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([0, 0, 255, 255])
+  expect(await guest.evaluate(() => window.__poly.renderer.images.map(image => image.dataUrl))).toContain(sources[2])
+  const reshared = await guest.evaluate(async () => {
+    const helper = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+    return helper.prepareImagesForShare(document.getElementById('dsl-editor').value, window.__poly.renderer.images)
+  })
+  expect(reshared.images.map(image => image.dataUrl).sort()).toEqual(sources.slice(1).sort())
+})
+
+async function imagePixel(page) {
+  return page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d'); context.drawImage(document.getElementById('canvas'), 0, 0, 1, 1)
+    return [...context.getImageData(0, 0, 1, 1).data]
+  })
+}
+
 async function preparePage(page) {
   await routeHandfishLocal(page)
   await routeSeanceSdkLocal(page)
+  await routePortableImagesLocal(page)
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,

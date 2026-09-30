@@ -6,36 +6,10 @@
  */
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
-import { stripMediaUrlArg } from './dslSanitize.js'
-import { parseDsl } from './dslParse.js'
-import { findCalls, stringArg } from './dslQuery.js'
 import { textEffectsFromParsed } from './textParams.js'
 
 // Shader assets served from the shaders CDN.
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
-
-/**
- * Default media parameters for media effects
- */
-const MEDIA_DEFAULTS = {
-    url: null
-}
-
-/**
- * Extract media effect parameters from DSL
- * @param {string} dsl - DSL source code
- * @returns {Object|null} Media parameters or null if no media effect
- */
-function extractMediaParams(dsl) {
-    // Read the url off the parsed program. The syntax parser accepts `url`
-    // even though the engine rejects it, so this works on the DSL as authored
-    // — and a url with parens or quotes in it survives, which no source-level
-    // pattern could guarantee.
-    const [call] = findCalls(parseDsl(dsl), 'media')
-    const url = stringArg(call, 'url')
-
-    return url ? { ...MEDIA_DEFAULTS, url } : null
-}
 
 /**
  * PolymorphicRenderer - Renderer for Polymorphic live-coding environment
@@ -77,6 +51,11 @@ export class PolymorphicRenderer {
             onError: options.onError
         })
 
+        this.images = []
+        this.resolveImage = null
+        this._imageTools = null
+        this._imageDimensions = []
+        this._currentDsl = ''
         this._initialized = false
         this._contextLost = false
 
@@ -198,6 +177,27 @@ export class PolymorphicRenderer {
         this._renderer.stop()
     }
 
+    getImageAssets(dsl = this._currentDsl) {
+        if (!this._imageTools && /\burl\b/.test(dsl)) throw new Error('Images are still loading; try again shortly')
+        return this._imageTools?.getReferencedImages(dsl, this.images) || []
+    }
+
+    /** Keep decoded image dimensions when ProgramState applies control values. */
+    applyImageDimensions(programState) {
+        if (!this._imageDimensions.length) return
+        const effects = programState.getStructure()
+        const overrides = {}
+        for (const { step, width, height } of this._imageDimensions) {
+            const effect = effects.find(effect => effect.effectKey === 'synth.media' && (effect.temp ?? effect.stepIndex) === step)
+            if (!effect) continue
+            const key = `step_${effect.stepIndex}`
+            const current = programState.getValue(key, 'imageSize')
+            if (current?.[0] !== width || current?.[1] !== height) programState.setValue(key, 'imageSize', [width, height])
+            overrides[`step_${step}`] = { imageSize: [width, height] }
+        }
+        this._renderer.applyStepParameterValues(overrides)
+    }
+
     /**
      * Compile a DSL program
      * @param {string} dsl - DSL source code
@@ -213,7 +213,8 @@ export class PolymorphicRenderer {
             // them for every engine/parser call. Media url extraction below
             // still reads from the original `dsl`, since that is the only copy
             // that still carries the url.
-            const engineDsl = stripMediaUrlArg(dsl)
+            if (/\burl\b/.test(dsl)) this._imageTools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            const engineDsl = this._imageTools ? this._imageTools.stripMediaUrls(dsl) : dsl
 
             // Extract effect names and load them if needed
             const effectData = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
@@ -228,6 +229,8 @@ export class PolymorphicRenderer {
             // Compile the DSL
             await this._renderer.compile(engineDsl)
             this._armDeviceLostWatch()
+            this._imageDimensions = []
+            this._currentDsl = dsl
             this._liveMediaStepIndex = this._findMediaStepIndex(engineDsl)
 
             // Check for text effects and render text textures (supports multiple).
@@ -245,21 +248,7 @@ export class PolymorphicRenderer {
                 }
             }
 
-            // Check for media effects and load image
-            const mediaParams = extractMediaParams(dsl)
-            if (mediaParams && mediaParams.url) {
-                // Store for re-rendering on resize
-                this._lastMediaParams = mediaParams
-                // Find the step index for the media effect
-                const mediaStepIndex = this._findMediaStepIndex(engineDsl)
-                this._lastMediaStepIndex = mediaStepIndex
-                // Wait until the pipeline backend can accept the media texture
-                await this._waitForPipeline()
-                await this._loadAndRenderMediaTexture(mediaParams, mediaStepIndex)
-            } else {
-                this._lastMediaParams = null
-                this._lastMediaStepIndex = 0
-            }
+            if (this._imageTools) this._imageDimensions = await this._imageTools.bindMediaImages(this._renderer, dsl, this.images, { extractEffectsFromDsl, resolveImage: this.resolveImage })
 
             return { success: true }
         } catch (err) {
@@ -345,86 +334,6 @@ export class PolymorphicRenderer {
         }
 
         return null
-    }
-
-    /**
-     * Load an image from URL and render to texture for media effects
-     * @param {Object} params - Media parameters (url)
-     * @param {number} stepIndex - Step index for texture ID
-     * @private
-     */
-    async _loadAndRenderMediaTexture(params, stepIndex = 0) {
-        if (!this._renderer._pipeline) return
-
-        try {
-            // Load the image
-            const img = new Image()
-            img.crossOrigin = 'anonymous'
-            
-            await new Promise((resolve, reject) => {
-                img.onload = resolve
-                img.onerror = () => reject(new Error(`Failed to load image: ${params.url}`))
-                img.src = params.url
-            })
-
-            // Store the loaded image for resize
-            this._lastMediaImage = img
-
-            // Render to texture
-            this._renderMediaTexture(img, stepIndex)
-        } catch (err) {
-            console.error('Failed to load media image:', err)
-        }
-    }
-
-    /**
-     * Render media image to texture
-     * @param {HTMLImageElement} img - Loaded image
-     * @param {number} stepIndex - Step index for texture ID
-     * @private
-     */
-    _renderMediaTexture(img, stepIndex = 0) {
-        if (!this._renderer._pipeline || !img) return
-
-        // Create media canvas if needed
-        if (!this._mediaCanvas) {
-            this._mediaCanvas = document.createElement('canvas')
-            this._mediaCanvas.style.display = 'none'
-        }
-
-        const canvas = this._mediaCanvas
-        // Match the actual canvas dimensions
-        canvas.width = this.width
-        canvas.height = this.height
-
-        const ctx = canvas.getContext('2d')
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-        // Calculate aspect-ratio-preserving fit
-        const imgAspect = img.width / img.height
-        const canvasAspect = canvas.width / canvas.height
-
-        let drawWidth, drawHeight, drawX, drawY
-
-        if (imgAspect > canvasAspect) {
-            // Image is wider - fit to width, center vertically
-            drawWidth = canvas.width
-            drawHeight = canvas.width / imgAspect
-            drawX = 0
-            drawY = (canvas.height - drawHeight) / 2
-        } else {
-            // Image is taller - fit to height, center horizontally
-            drawHeight = canvas.height
-            drawWidth = canvas.height * imgAspect
-            drawX = (canvas.width - drawWidth) / 2
-            drawY = 0
-        }
-
-        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight)
-
-        // Upload to texture with step-indexed ID
-        const textureId = `imageTex_step_${stepIndex}`
-        this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
     }
 
     /**
@@ -625,10 +534,7 @@ export class PolymorphicRenderer {
             }
         }
         
-        // Re-render media texture with new dimensions if we have a loaded image
-        if (this._lastMediaImage) {
-            this._renderMediaTexture(this._lastMediaImage, this._lastMediaStepIndex || 0)
-        }
+        if (this._imageTools && this._currentDsl) this._imageTools.bindMediaImages(this._renderer, this._currentDsl, this.images, { extractEffectsFromDsl, resolveImage: this.resolveImage }).catch(error => console.error('Image resize failed:', error))
     }
 
     /**

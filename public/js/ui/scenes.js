@@ -36,12 +36,12 @@ export class Scenes {
         this._store = store || localStorageStore
         this._slots = this._store.get() || {}
     }
-    save(slot, dsl) {
+    save(slot, dsl, images = []) {
         if (!Number.isInteger(slot) || slot < 1 || slot > 9) {
             throw new Error('Scene slot must be 1..9')
         }
         const previous = this._slots[slot]
-        this._slots[slot] = dsl
+        this._slots[slot] = images.length ? { dsl, images } : dsl
         const res = this._store.set(this._slots)
         if (res && res.success === false) {
             if (previous !== undefined) this._slots[slot] = previous
@@ -51,10 +51,14 @@ export class Scenes {
         return { success: true }
     }
     load(slot) {
-        return this._slots[slot] || null
+        const saved = this._slots[slot]
+        return (typeof saved === 'string' ? saved : saved?.dsl) || null
+    }
+    images(slot) {
+        return this._slots[slot]?.images || []
     }
     list() {
-        return Object.keys(this._slots).map(k => ({ slot: Number(k), dsl: this._slots[k] }))
+        return Object.keys(this._slots).map(k => ({ slot: Number(k), dsl: this.load(k) }))
     }
     clear(slot) {
         const previous = this._slots[slot]
