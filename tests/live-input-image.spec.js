@@ -3,7 +3,7 @@ import { routePortableImagesLocal } from './portableImagesLocal.js'
 
 test.beforeEach(async ({ page }) => routePortableImagesLocal(page))
 
-test('image dimensions survive initial ProgramState sync and parameter controls', async ({ page }) => {
+test('image dimensions survive initial ProgramState sync, controls, and context recovery', async ({ page }) => {
   await page.goto('/')
   const dataUrl = await page.evaluate(() => {
     const source = document.createElement('canvas'); source.width = 96; source.height = 32
@@ -22,6 +22,31 @@ test('image dimensions survive initial ProgramState sync and parameter controls'
   expect(result.before).toEqual([[96, 32]])
   expect(result.after).toEqual([[96, 32]])
   expect(result.dsl).toContain(dataUrl)
+
+  const supported = await page.evaluate(() => {
+    window.__imageContextLoss = document.getElementById('canvas').getContext('webgl2').getExtension('WEBGL_lose_context')
+    return Boolean(window.__imageContextLoss)
+  })
+  test.skip(!supported, 'WEBGL_lose_context is required to verify image recovery')
+  await page.evaluate(() => window.__imageContextLoss.loseContext())
+  await page.waitForFunction(() => window.__poly.renderer.contextLost && !window.__poly.renderer.isRunning)
+  await page.evaluate(() => window.__imageContextLoss.restoreContext())
+  await expect(page.locator('.polymorphic-toast')).toHaveText('Graphics restored — your program is live again')
+  const restored = await page.evaluate(() => {
+    const app = window.__poly
+    app.programState.setValue('step_0', 'offsetX', 2)
+    app.renderer.inner.render(0)
+    const canvas = document.getElementById('canvas'), gl = canvas.getContext('webgl2'), pixel = new Uint8Array(4)
+    gl.readPixels(canvas.width / 2, canvas.height / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
+    return {
+      dimensions: app.renderer.inner.pipeline.graph.passes.filter(pass => pass.effectKey === 'synth.media').map(pass => [...pass.uniforms.imageSize]),
+      dsl: document.getElementById('dsl-editor').value,
+      pixel: [...pixel],
+    }
+  })
+  expect(restored.dimensions).toEqual([[96, 32]])
+  expect(restored.dsl).toContain(dataUrl)
+  expect(restored.pixel).toEqual([255, 0, 0, 255])
 })
 
 const sketches = [

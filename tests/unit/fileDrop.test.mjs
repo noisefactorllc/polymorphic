@@ -31,7 +31,7 @@ function makeOverlay() {
     }
 }
 
-function makeSandbox({ fileReader, liveInputsPanel, renderer }) {
+function makeSandbox({ fileReader, liveInputsPanel = { stopMediaSource: async () => {} }, renderer }) {
     const overlay = makeOverlay()
     const handlers = {}
     const dropTarget = {
