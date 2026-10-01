@@ -19,7 +19,7 @@ import { insertImageSource } from './noisemaker/imageSource.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
@@ -489,8 +489,8 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
         shaders
     }
 
-    // Register the effect
-    registerPortableEffect(effectData)
+    // Register the effect (shared contract validates and may reject the ZIP)
+    await registerPortableEffect(effectData)
 
     // Store the imported files for the "edit in <app>" menu options
     importedEffectStore.files.clear()
@@ -2248,6 +2248,8 @@ async function startShader() {
         }
     })
     renderer.images = compositionImages
+    // Portable effects registered after boot update the renderer's live state.
+    setRuntimeRenderer(renderer.canvasRenderer)
     renderer.resolveImage = async id => {
         const blob = await onlineAdapter.getImage(id)
         const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')

@@ -9,9 +9,7 @@
 
 import {
     CanvasRenderer,
-    Effect,
-    registerStarterOps,
-    mergeIntoEnums
+    unregisterEffect
 } from './noisemaker/bundle.js'
 
 const SHARING_API_BASE = 'https://sharing.noisedeck.app'
@@ -75,93 +73,81 @@ export function portableDefinition(data) {
 }
 
 /**
+ * Renderer instance (if the app has booted one) that portable effects register
+ * through, so enum merges and loaded-effect tracking stay live on the
+ * renderer's own state. Before boot, registration falls back to a static
+ * receiver sharing the engine prototype.
+ * @type {object|null}
+ */
+let runtimeRenderer = null
+
+/**
+ * Provide the booted noisemaker CanvasRenderer instance.
+ * @param {object} renderer - CanvasRenderer from the PolymorphicRenderer
+ */
+export function setRuntimeRenderer(renderer) {
+    runtimeRenderer = renderer ?? null
+}
+
+/**
  * Register a portable effect from the sharing API response format
  * Effects come pre-parsed with shaders embedded.
+ *
+ * Registration, validation and starter classification are delegated to the
+ * shared CanvasRenderer.registerPortableEffect contract (noisemaker cb22a05),
+ * which rejects untrusted definitions: reserved/prototype-polluting keys,
+ * non-identifier funcs, passes without programs, missing shader sources and
+ * undeclared paramAliases. A portable effect this loader registered earlier
+ * may be replaced (re-importing an updated ZIP); unknown duplicates are
+ * rejected by the shared contract.
+ *
  * @param {object} effectData - Effect data from the API
- * @returns {object} Registered effect info
+ * @returns {Promise<object>} Registered effect info
  */
-export function registerPortableEffect(effectData) {
-    const {
-        name,
-        func,
-        namespace,
-        globals = {},
-        passes = [],
-        shaders = {}
-    } = { ...portableDefinition(effectData), shaders: effectData.shaders || {} }
+export async function registerPortableEffect(effectData) {
+    const definition = portableDefinition(effectData)
+    const shaders = effectData.shaders || {}
+    const func = definition.func || definition.name
+    const effectId = `user/${func}`
 
-    const effectFunc = func || name
+    // The shared contract rejects duplicates; replacement of an effect this
+    // product registered earlier (e.g. re-importing an updated ZIP) is allowed.
+    if (loadedPortableEffects.has(effectId)) {
+        for (const key of [func, `user.${func}`, `user/${func}`]) {
+            unregisterEffect(key)
+        }
+    }
 
-    // Retain the complete declarative contract for re-sharing
-    const effectId = `${namespace}/${effectFunc}`
-    loadedPortableEffects.set(effectId, { ...portableDefinition(effectData), shaders })
+    const receiver = runtimeRenderer ?? {
+        registerEffectWithRuntime: CanvasRenderer.prototype.registerEffectWithRuntime,
+        _enums: {},
+        _loadedEffects: new Map()
+    }
+    const registered = await CanvasRenderer.prototype
+        .registerPortableEffect.call(receiver, { ...definition, shaders })
 
-    // Construct a real Effect instance so lifecycle hooks (asyncInit, onInit,
-    // onUpdate, onDestroy) inherit from Effect.prototype. Plain objects fail
-    // the pipeline's `effectDef.asyncInit === Effect.prototype.asyncInit` guard
-    // and crash compilation with `t.asyncInit is not a function`.
-    const instance = new Effect(portableDefinition(effectData))
-    instance.starter = effectData.starter
-    instance.shaders = shaders
-
-    // Determine if this is a starter effect (no pipeline inputs)
-    const isStarter = checkIsStarter(instance)
-
-    // Build effect wrapper
+    // Product wrapper: retain the engine result plus the fields the app and
+    // the unit contract read back.
     const effect = {
-        id: `${namespace}/${effectFunc}`,
-        namespace,
-        name: effectFunc,
-        func: effectFunc,
-        instance,
-        globals,
-        passes,
+        id: effectId,
+        namespace: 'user',
+        name: registered.name,
+        func,
+        instance: registered.instance,
+        globals: definition.globals,
+        passes: definition.passes,
         shaders,
         isUserEffect: true,
         isPortable: true
     }
 
-    // Build the full effect key (namespace.func)
-    const fullEffectKey = `${namespace}.${effect.func}`
+    // Retain the complete declarative contract for re-sharing (only after a
+    // successful registration so rejected definitions are not kept).
+    loadedPortableEffects.set(effectId, { ...definition, shaders })
 
-    // Use the engine's registration contract for parameter types and aliases.
-    const choicesToRegister = CanvasRenderer.prototype.registerEffectWithRuntime(effect)
-    if (choicesToRegister && Object.keys(choicesToRegister).length > 0) {
-        mergeIntoEnums(choicesToRegister)
-    }
-
-    if (isStarter) {
-        registerStarterOps([fullEffectKey])
-    }
-
-    console.log(`[sharingLoader] Registered portable effect: ${effectFunc}`)
+    console.log(`[sharingLoader] Registered portable effect: ${func}`)
 
     return effect
-}
-
-/**
- * Check if an effect is a starter (doesn't need pipeline input)
- * @private
- */
-function checkIsStarter(instance) {
-    if (typeof instance.starter === 'boolean') return instance.starter
-    const passes = instance.passes || []
-    if (passes.length === 0) return true
-
-    const pipelineInputs = [
-        'inputTex', 'inputTex3d', 'inputGeo', 'src',
-        'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'
-    ]
-
-    for (const pass of passes) {
-        if (!pass.inputs) continue
-        const inputs = Object.values(pass.inputs)
-        if (inputs.some(val => pipelineInputs.includes(val))) {
-            return false
-        }
-    }
-
-    return true
 }
 
 /**
@@ -178,7 +164,7 @@ export async function loadFromCode(code) {
     if (composition.effects && Array.isArray(composition.effects)) {
         for (const effectData of composition.effects) {
             try {
-                const registered = registerPortableEffect(effectData)
+                const registered = await registerPortableEffect(effectData)
                 registeredEffects.push(registered)
             } catch (err) {
                 console.error(`Failed to register effect ${effectData.name}:`, err)

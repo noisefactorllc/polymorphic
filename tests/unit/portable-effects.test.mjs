@@ -7,6 +7,7 @@ const runtimeRegistrations = []
 const starters = new Set()
 const enums = []
 let runtimeEnums
+const runtimeEffects = new Map()
 class Effect {
     constructor(config) { Object.assign(this, config) }
     asyncInit() {}
@@ -14,12 +15,98 @@ class Effect {
 class CanvasRenderer {
     registerEffectWithRuntime(effect) {
         runtimeRegistrations.push(effect)
+        runtimeEffects.set(effect.namespace + '.' + effect.name, effect)
         return runtimeEnums
     }
+    // Mirrors the shared CanvasRenderer.registerPortableEffect contract shipped
+    // in noisemaker cb22a05: validation, duplicate rejection, starter inference.
+    async registerPortableEffect(definition) {
+        const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+        const fail = message => { throw new Error(`Portable effect: ${message}`) }
+        if (!isRecord(definition)) fail('expected a definition object')
+        const { namespace, passes, shaders, globals, starter } = definition
+        const func = definition.func ?? definition.name
+        if (typeof func !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(func)) fail('func must be a DSL identifier')
+        const reserved = [...Object.getOwnPropertyNames(Object.prototype), 'prototype']
+        if (reserved.includes(func)) fail(`reserved func ${func}`)
+        const pending = [definition]
+        const visited = new Set()
+        while (pending.length) {
+            const value = pending.pop()
+            if (!value || typeof value !== 'object' || visited.has(value)) continue
+            visited.add(value)
+            for (const [key, child] of Object.entries(value)) {
+                if (reserved.includes(key)) fail(`reserved metadata key ${key}`)
+                if (child && typeof child === 'object') pending.push(child)
+            }
+        }
+        if (namespace !== undefined && namespace !== 'user') fail('namespace must be user')
+        if (starter !== undefined && typeof starter !== 'boolean') fail('starter must be boolean')
+        if (!Array.isArray(passes) || passes.length === 0) fail('passes must be a nonempty array')
+        if (!isRecord(shaders)) fail('loaded shaders are required')
+        const hasSource = source => typeof source === 'string' && source.trim().length > 0
+        for (const pass of passes) {
+            if (!isRecord(pass) || typeof pass.program !== 'string' || !pass.program) fail('each pass must name a program')
+            for (const field of ['inputs', 'outputs']) {
+                if (pass[field] !== undefined && (!isRecord(pass[field]) || Object.values(pass[field]).some(value => !hasSource(value)))) {
+                    fail(`pass ${field} must map names to nonempty texture references`)
+                }
+            }
+            const source = shaders[pass.program]
+            if (!isRecord(source) || ![source.glsl, source.wgsl].some(hasSource)) {
+                fail(`missing shader source for ${pass.program}`)
+            }
+        }
+        for (const language of ['glsl', 'wgsl']) {
+            if (passes.some(pass => hasSource(shaders[pass.program][language]))) {
+                for (const pass of passes) {
+                    if (!hasSource(shaders[pass.program][language])) fail(`missing ${language} shader source for ${pass.program}`)
+                }
+            }
+        }
+        if (globals !== undefined && (!isRecord(globals) || Object.values(globals).some(spec => !isRecord(spec)))) {
+            fail('globals must contain parameter objects')
+        }
+        for (const [key, spec] of Object.entries(globals || {})) {
+            if (spec.choices !== undefined && (!isRecord(spec.choices) || Object.values(spec.choices).some(value =>
+                value !== null && (spec.type === 'string' ? typeof value !== 'string' : !Number.isFinite(value))))) {
+                fail(`choices for ${key} must map names to ${spec.type === 'string' ? 'strings' : 'numbers'} or null`)
+            }
+        }
+        if (definition.paramAliases !== undefined && (!isRecord(definition.paramAliases) ||
+            Object.values(definition.paramAliases).some(target => typeof target !== 'string' || !Object.hasOwn(globals || {}, target)))) {
+            fail('paramAliases must map names to declared globals')
+        }
+        if (runtimeEffects.has(`user.${func}`) || runtimeEffects.has(`user/${func}`)) fail(`user.${func} is already registered`)
+        const instance = new Effect({ ...definition, func, namespace: 'user' })
+        instance.shaders = shaders
+        const pipelineInputs = ['inputTex', 'inputTex3d', 'inputGeo', 'inputXyz', 'inputVel', 'inputRgba', 'src', 'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7']
+        instance.starter = starter ?? !passes.some(pass =>
+            Object.values(pass.inputs || {}).some(input => pipelineInputs.includes(input)))
+        const effect = { namespace: 'user', name: func, instance }
+        this.registerEffectWithRuntime(effect)
+        this._enums = await mergeIntoEnumsFn(runtimeEnums)
+        if (instance.starter) addStarters([`user.${func}`])
+        this._loadedEffects.set(`user/${func}`, effect)
+        return effect
+    }
 }
-globalThis.__portableRuntime = { CanvasRenderer, Effect, registerStarterOps: names => names.forEach(name => starters.add(name)), mergeIntoEnums: value => enums.push(value) }
+function mergeIntoEnumsEn() { return runtimeEnums }
+function addStarters(names) { names.forEach(name => starters.add(name)) }
+// Mirrors the engine's mergeIntoEnums: nothing to merge leaves enums untouched.
+function mergeIntoEnumsFn(source) {
+    if (!source || typeof source !== 'object' || Object.keys(source).length === 0) return source || {}
+    enums.push(source)
+    return source
+}
+globalThis.__portableRuntime = {
+    CanvasRenderer, Effect,
+    registerStarterOps: names => names.forEach(name => starters.add(name)),
+    mergeIntoEnums: value => { enums.push(value); return value },
+    unregisterEffect: name => runtimeEffects.delete(name)
+}
 const source = (await readFile(new URL('../../public/js/sharingLoader.js', import.meta.url), 'utf8'))
-    .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, Effect, registerStarterOps, mergeIntoEnums } = globalThis.__portableRuntime')
+    .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, unregisterEffect } = globalThis.__portableRuntime')
 const loader = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 
 test('composition imports retain the original image payloads for rendering and reshare', async t => {
@@ -39,26 +126,29 @@ const data = {
     shaders: { main: { glsl: 'glsl source', wgsl: 'wgsl source' } }
 }
 
-test('registers volume metadata on an Effect instance in user namespace', () => {
-    const result = loader.registerPortableEffect(data)
+test('registers volume metadata on an Effect instance in user namespace', async () => {
+    const result = await loader.registerPortableEffect(data)
     assert.ok(result.instance instanceof Effect)
     assert.equal(result.instance.asyncInit, Effect.prototype.asyncInit)
     assert.equal(result.namespace, 'user')
     for (const key of ['textures', 'outputTex3d', 'outputGeo', 'uniformLayout', 'uniformLayouts', 'defaultProgram', 'passes', 'shaders']) {
         assert.deepEqual(result.instance[key], data[key], key)
     }
-    assert.equal(runtimeRegistrations.at(-1), result)
+    assert.equal(runtimeRegistrations.at(-1).instance, result.instance)
+    assert.equal(result.shaders, data.shaders)
+    assert.equal(result.isUserEffect, true)
+    assert.equal(result.isPortable, true)
     assert.equal(loader.getLoadedPortableEffects().get('user/volume').outputTex3d, 'volume')
 })
 
-test('3D input consumers infer filters when starter metadata is omitted', () => {
-    const effect = loader.registerPortableEffect({ ...data, namespace: 'user', func: 'volumeFilter', starter: undefined, passes: [{ inputs: { density: 'inputTex3d' } }] })
+test('3D input consumers infer filters when starter metadata is omitted', async () => {
+    const effect = await loader.registerPortableEffect({ ...data, namespace: 'user', func: 'volumeFilter', starter: undefined, passes: [{ program: 'main', inputs: { density: 'inputTex3d' } }] })
     assert.equal(starters.has('user.volumeFilter'), false)
     assert.equal(effect.instance.outputTex3d, 'volume')
 })
 
-test('explicit false starter is retained for effects with no declared pass inputs', () => {
-    loader.registerPortableEffect({ ...data, namespace: 'user', func: 'explicitFilter', starter: false })
+test('explicit false starter is retained for effects with no declared pass inputs', async () => {
+    await loader.registerPortableEffect({ ...data, namespace: 'user', func: 'explicitFilter', starter: false })
     assert.equal(starters.has('user.explicitFilter'), false)
 })
 
@@ -67,10 +157,10 @@ for (const [label, starter, expected] of [
     ['explicit_filter', false, false],
     ['explicit_starter', true, true]
 ]) {
-    test(`geometry-only input respects ${label} starter classification`, () => {
+    test(`geometry-only input respects ${label} starter classification`, async () => {
         const func = `geometry_${label}`
-        loader.registerPortableEffect({ ...data, func, starter,
-            passes: [{ inputs: { geometry: 'inputGeo' }, outputs: { color: 'outputTex' } }]
+        await loader.registerPortableEffect({ ...data, func, starter,
+            passes: [{ program: 'main', inputs: { geometry: 'inputGeo' }, outputs: { color: 'outputTex' } }]
         })
         assert.equal(starters.has(`user.${func}`), expected)
     })
@@ -116,9 +206,9 @@ test('share modal packages the 3D definition and each shader language for re-sha
     }
 })
 
-test('uses engine registration for aliases and parameter declarations', () => {
+test('uses engine registration for aliases and parameter declarations', async () => {
     const before = runtimeRegistrations.length
-    loader.registerPortableEffect({ ...data, func: 'cell3d',
+    await loader.registerPortableEffect({ ...data, func: 'cell3d',
         paramAliases: { cellVariation: 'variation' },
         globals: { variation: { type: 'float', default: 100, min: 0, max: 100 } }
     })
@@ -129,13 +219,13 @@ test('uses engine registration for aliases and parameter declarations', () => {
     assert.deepEqual(registered.instance.globals.variation, { type: 'float', default: 100, min: 0, max: 100 })
 })
 
-test('merges the engine registration result for generated choices', () => {
+test('merges the engine registration result for generated choices', async () => {
     const before = enums.length
     runtimeEnums = { user: { volume: { volumeSize: {
         'Size 16': { type: 'Number', value: 16 }, Size16: { type: 'Number', value: 16 }
     } } } }
     try {
-        loader.registerPortableEffect({ ...data, globals: { volumeSize: { type: 'int', choices: { 'Size 16': 16 } } } })
+        await loader.registerPortableEffect({ ...data, globals: { volumeSize: { type: 'int', choices: { 'Size 16': 16 } } } })
         assert.equal(enums.length, before + 1)
         assert.deepEqual(enums.at(-1), { user: { volume: { volumeSize: {
             'Size 16': { type: 'Number', value: 16 }, Size16: { type: 'Number', value: 16 }
@@ -143,13 +233,57 @@ test('merges the engine registration result for generated choices', () => {
     } finally { runtimeEnums = undefined }
 })
 
-test('does not merge enums when the engine has no generated choices', () => {
+test('does not merge enums when the engine has no generated choices', async () => {
     const before = enums.length
     runtimeEnums = {}
     try {
-        loader.registerPortableEffect({ ...data, globals: {
+        await loader.registerPortableEffect({ ...data, globals: {
             mode: { type: 'int', enum: 'shared.modes', choices: { first: 0 }, default: 0 }
         } })
         assert.equal(enums.length, before)
     } finally { runtimeEnums = undefined }
+})
+
+for (const [label, payload] of [
+    ['prototype-polluting metadata key', JSON.parse(`{
+        "func": "polluted", "namespace": "user", "passes": [{"program": "main"}],
+        "shaders": {"main": {"glsl": "g", "wgsl": "w"}}, "globals": {"constructor": {"type": "int"}}
+    }`)],
+    ['reserved func name', { ...data, func: 'constructor' }],
+    ['missing shader source', { ...data, func: 'dryEffect', shaders: { main: { glsl: '  ' } } }],
+    ['pass without a program', { ...data, func: 'programless', passes: [{ inputs: {} }] }],
+    ['paramAlias outside declared globals', { ...data, func: 'aliased', paramAliases: { size: 'volume' }, globals: {} }]
+]) {
+    test(`rejects ${label} from untrusted compositions`, async () => {
+        await assert.rejects(() => loader.registerPortableEffect(payload))
+        assert.equal(loader.getLoadedPortableEffects().has(payload.func && `user/${payload.func}`), false)
+    })
+}
+
+test('a duplicate registration from outside the loader is rejected', async () => {
+    const external = new CanvasRenderer()
+    external._enums = {}
+    external._loadedEffects = new Map()
+    await external.registerPortableEffect({ ...loader.portableDefinition(data), func: 'externalDup', shaders: data.shaders })
+    await assert.rejects(() => loader.registerPortableEffect({ ...data, func: 'externalDup' }))
+})
+
+test('re-importing a loaded portable effect replaces it through the shared contract', async () => {
+    const first = await loader.registerPortableEffect({ ...data, func: 'reImported', shaders: { main: { glsl: 'first', wgsl: 'first' } } })
+    const second = await loader.registerPortableEffect({ ...data, func: 'reImported', shaders: { main: { glsl: 'second', wgsl: 'second' } } })
+    assert.notEqual(second.instance, first.instance)
+    assert.equal(second.instance.shaders.main.glsl, 'second')
+    assert.equal(loader.getLoadedPortableEffects().get('user/reImported').shaders.main.glsl, 'second')
+})
+
+test('loadFromCode skips an effect that fails validation and keeps the program', async t => {
+    const previous = globalThis.fetch
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+        code: 'abc123', dsl: 'volume().write(o0)',
+        effects: [{ ...data, func: 'codeVolume' }, { ...data, func: 'broken', shaders: {} }]
+    }) })
+    t.after(() => { globalThis.fetch = previous })
+    const composition = await loader.loadFromCode('abc123')
+    assert.equal(composition.effects.length, 1)
+    assert.equal(composition.dsl, 'volume().write(o0)')
 })
