@@ -287,6 +287,30 @@ test('a failed replacement preserves the prior registered effect and its retenti
     assert.deepEqual(loader.getLoadedPortableEffects().get('user/keptEffect'), retainedBefore)
 })
 
+test('a retry failure after unregistration invalidates the retained entry', async () => {
+    await loader.registerPortableEffect({ ...data, func: 'retryFail', shaders: { main: { glsl: 'kept', wgsl: 'kept' } } })
+    const original = CanvasRenderer.prototype.registerPortableEffect
+    let calls = 0
+    CanvasRenderer.prototype.registerPortableEffect = function () {
+        // First call: the shared contract rejects a now-duplicate name after
+        // validation; retry call: an injected post-validation failure.
+        if (++calls === 1) throw new Error('Portable effect: user.retryFail is already registered')
+        throw new Error('Portable effect: injected post-validation retry failure')
+    }
+    try {
+        await assert.rejects(() => loader.registerPortableEffect({
+            ...data, func: 'retryFail', shaders: { main: { glsl: 'new', wgsl: 'new' } }
+        }), /injected post-validation retry failure/)
+        assert.equal(calls, 2, 'the loader must retry after dropping the prior registration')
+        assert.equal(runtimeEffects.has('user.retryFail'), false,
+            'the prior runtime registration is gone once unregistered')
+        assert.equal(loader.getLoadedPortableEffects().has('user/retryFail'), false,
+            'no retained entry may survive for an effect that no longer resolves')
+    } finally {
+        CanvasRenderer.prototype.registerPortableEffect = original
+    }
+})
+
 test('loadFromCode skips an effect that fails validation and keeps the program', async t => {
     const previous = globalThis.fetch
     globalThis.fetch = async () => ({ ok: true, json: async () => ({

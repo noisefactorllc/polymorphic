@@ -129,11 +129,18 @@ export async function registerPortableEffect(effectData) {
         if (!duplicate || !loadedPortableEffects.has(effectId)) throw error
         // Replacement of an effect this loader registered earlier (e.g.
         // re-importing an updated ZIP): drop the prior registration keys and
-        // retry. If the retry still fails, no phantom retention is left.
+        // retry. If the retry still fails, the prior runtime registration is
+        // already gone, so a retained entry would re-share an effect that no
+        // longer resolves — invalidate it and surface the error.
         for (const key of [func, `user.${func}`, `user/${func}`]) {
             unregisterEffect(key)
         }
-        registered = await register()
+        try {
+            registered = await register()
+        } catch (retryError) {
+            loadedPortableEffects.delete(effectId)
+            throw retryError
+        }
     }
 
     // Product wrapper: retain the engine result plus the fields the app and
