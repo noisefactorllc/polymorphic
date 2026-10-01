@@ -15,18 +15,18 @@ if (!document.getElementById(STYLES_ID)) {
             position: fixed;
             right: 1rem;
             bottom: 1rem;
-            background: rgba(10, 12, 17, 0.85);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 6px;
-            color: #d9deeb;
+            background: color-mix(in srgb, var(--hf-bg-base) 85%, transparent);
+            border: 1px solid var(--hf-border-subtle);
+            border-radius: var(--hf-radius-md, 6px);
+            color: var(--hf-text-normal);
             padding: 0.45rem 0.65rem;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block', monospace;
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
             font-size: 0.6875rem;
             line-height: 1.4;
             z-index: 220;
             display: none;
             min-width: 170px;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+            box-shadow: var(--hf-shadow-lg);
         }
         .perf-overlay.visible { display: block; }
         .perf-row {
@@ -35,13 +35,13 @@ if (!document.getElementById(STYLES_ID)) {
             gap: 0.65rem;
         }
         .perf-row .label {
-            color: #888;
+            color: var(--hf-text-muted);
         }
         .perf-row .value {
-            color: #fff;
+            color: var(--hf-text-bright);
         }
-        .perf-row .value.warn { color: #facc15; }
-        .perf-row .value.bad { color: #ff6b6b; }
+        .perf-row .value.warn { color: var(--hf-yellow); }
+        .perf-row .value.bad { color: var(--hf-red); }
         .perf-graph {
             display: flex;
             align-items: flex-end;
@@ -51,12 +51,12 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .perf-graph-bar {
             flex: 1;
-            background: rgba(165,184,255,0.5);
+            background: color-mix(in srgb, var(--hf-accent) 50%, transparent);
             border-radius: 1px 1px 0 0;
             min-height: 1px;
         }
-        .perf-graph-bar.over { background: #ff6b6b; }
-        .perf-graph-bar.warn { background: #facc15; }
+        .perf-graph-bar.over { background: var(--hf-red); }
+        .perf-graph-bar.warn { background: var(--hf-yellow); }
         body.live-inputs-open .perf-overlay {
             right: calc(280px + 2rem);
         }

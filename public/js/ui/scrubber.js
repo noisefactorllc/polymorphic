@@ -39,28 +39,28 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
         }
         .scrubber-tooltip {
             position: fixed;
-            background: var(--hf-bg-surface, rgba(15, 17, 22, 0.96));
+            background: var(--hf-bg-surface);
             backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
             -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(8px));
-            border: 1px solid var(--hf-border, rgba(165, 184, 255, 0.5));
-            color: var(--hf-text-bright, #fff);
+            border: 1px solid var(--hf-border);
+            color: var(--hf-text-bright);
             padding: var(--hf-space-1, 0.3rem) var(--hf-space-2, 0.55rem);
             border-radius: var(--hf-radius-md, 6px);
             font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
             font-size: var(--hf-size-sm, 0.75rem);
             pointer-events: none;
             z-index: 5500;
-            box-shadow: var(--hf-shadow-lg, 0 4px 16px rgba(0,0,0,0.4));
+            box-shadow: var(--hf-shadow-lg);
             transition: opacity 0.1s;
         }
         .scrubber-tooltip-value {
             font-weight: 600;
-            color: var(--hf-text-bright, #fff);
+            color: var(--hf-text-bright);
             letter-spacing: -0.01em;
         }
         .scrubber-tooltip-hint {
             font-size: var(--hf-size-xs, 0.625rem);
-            color: var(--hf-text-dim, #aaa);
+            color: var(--hf-text-dim);
             margin-top: var(--hf-space-1, 0.15rem);
         }
     `

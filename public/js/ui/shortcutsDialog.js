@@ -17,7 +17,7 @@ if (!document.getElementById(STYLES_ID)) {
     style.textContent = `
         .shortcuts-overlay {
             position: fixed; inset: 0;
-            background: rgba(0,0,0,0.55);
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
             backdrop-filter: blur(6px);
             -webkit-backdrop-filter: blur(6px);
             z-index: 5200;
@@ -36,7 +36,7 @@ if (!document.getElementById(STYLES_ID)) {
             background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 96%), transparent);
             border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
             border-radius: var(--hf-radius-lg, 12px);
-            box-shadow: var(--hf-shadow-xl, 0 18px 48px -10px rgba(0,0,0,0.6));
+            box-shadow: var(--hf-shadow-xl);
             width: min(640px, calc(100vw - 2rem));
             max-height: calc(100vh - 12vh);
             color: var(--hf-text-normal, var(--hf-color-6));

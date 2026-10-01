@@ -222,6 +222,64 @@ test('public/js/ui/shortcutsDialog.js uses Handfish semantic tokens', () => {
     )
 })
 
+function assertInjectedCssTokenClean(moduleName) {
+    const modulePath = path.resolve(__dirname, `../../public/js/ui/${moduleName}`)
+    const code = fs.readFileSync(modulePath, 'utf8')
+    const styleMatch = code.match(/style(?:El)?\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, `${moduleName} must define injected style.textContent`)
+    const css = styleMatch[1]
+
+    assert.doesNotMatch(
+        css,
+        /#[0-9a-fA-F]{3,8}\b/,
+        `${moduleName} injected CSS must not contain raw hex color literals`
+    )
+    assert.doesNotMatch(
+        css,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        `${moduleName} injected CSS must not contain raw rgb/rgba/hsl/hsla literals`
+    )
+}
+
+test('perfOverlay, scrubber, and import dialogs injected CSS contain zero raw color literals', () => {
+    for (const moduleName of [
+        'perfOverlay.js',
+        'scrubber.js',
+        'import-effect-dialog.js',
+        'import-from-url-dialog.js',
+        'gallery.js',
+        'shortcutsDialog.js',
+    ]) {
+        assertInjectedCssTokenClean(moduleName)
+    }
+})
+
+test('gallery and shortcuts overlays use the Handfish backdrop token', () => {
+    const galleryCode = fs.readFileSync(path.resolve(__dirname, '../../public/js/ui/gallery.js'), 'utf8')
+    const shortcutsCode = fs.readFileSync(path.resolve(__dirname, '../../public/js/ui/shortcutsDialog.js'), 'utf8')
+    for (const [name, code] of [['gallery.js', galleryCode], ['shortcutsDialog.js', shortcutsCode]]) {
+        assert.match(
+            code,
+            /var\(--hf-backdrop/,
+            `${name} overlay backdrop must use var(--hf-backdrop)`
+        )
+    }
+})
+
+test('scrubber !important declarations are confined to cursor and user-select guards', () => {
+    const scrubberCode = fs.readFileSync(path.resolve(__dirname, '../../public/js/ui/scrubber.js'), 'utf8')
+    const styleMatch = scrubberCode.match(/style\.textContent\s*=\s*`([\s\S]*?)`/m)
+    assert.ok(styleMatch, 'scrubber.js must define injected style.textContent')
+    for (const decl of styleMatch[1].split(';')) {
+        if (!decl.includes('!important')) continue
+        assert.match(
+            decl,
+            /(?:cursor|user-select)\s*:/,
+            `scrubber.js injected CSS may only use !important for cursor or user-select guards, got: ${decl.trim()}`
+        )
+    }
+})
+
 test('public/js/ui/recorder.js uses Handfish semantic tokens and contains zero raw color literals or !important', () => {
     const recorderPath = path.resolve(__dirname, '../../public/js/ui/recorder.js')
     const recorderCode = fs.readFileSync(recorderPath, 'utf8')

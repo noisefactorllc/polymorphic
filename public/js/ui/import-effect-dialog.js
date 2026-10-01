@@ -18,7 +18,7 @@ if (!document.getElementById(STYLES_ID)) {
         .import-effect-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.6);
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             display: flex;
@@ -39,7 +39,7 @@ if (!document.getElementById(STYLES_ID)) {
             border-radius: var(--hf-radius, 8px);
             width: 400px;
             max-width: 90vw;
-            box-shadow: var(--hf-shadow-xl, 0 25px 50px -12px rgba(0, 0, 0, 0.5));
+            box-shadow: var(--hf-shadow-xl);
             overflow: hidden;
             color: var(--hf-text-normal, var(--hf-color-6));
         }

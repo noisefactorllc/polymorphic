@@ -33,7 +33,7 @@ if (!document.getElementById(STYLES_ID)) {
     style.textContent = `
         .gallery-overlay {
             position: fixed; inset: 0;
-            background: rgba(0,0,0,0.6);
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             z-index: 5000;
@@ -53,7 +53,7 @@ if (!document.getElementById(STYLES_ID)) {
             background: color-mix(in srgb, var(--hf-bg-surface, var(--hf-color-2)) var(--hf-surface-opacity, 96%), transparent);
             border: 1px solid var(--hf-border-subtle, var(--hf-color-4));
             border-radius: var(--hf-radius-lg, 14px);
-            box-shadow: var(--hf-shadow-xl, 0 20px 60px -10px rgba(0,0,0,0.6));
+            box-shadow: var(--hf-shadow-xl);
             width: min(900px, calc(100vw - 2rem));
             max-height: calc(100vh - 5vh - 2rem);
             display: flex;
@@ -184,7 +184,7 @@ if (!document.getElementById(STYLES_ID)) {
         .gallery-card:hover {
             border-color: var(--hf-accent, var(--accent3));
             transform: translateY(-2px);
-            box-shadow: var(--hf-shadow-lg, 0 10px 24px -6px rgba(0,0,0,0.4));
+            box-shadow: var(--hf-shadow-lg);
         }
         .gallery-card.loading {
             opacity: 0.5;
@@ -192,7 +192,7 @@ if (!document.getElementById(STYLES_ID)) {
         }
         .gallery-card-thumb {
             aspect-ratio: 16 / 9;
-            background: var(--hf-bg-base, #0a0a0f);
+            background: var(--hf-bg-base);
             position: relative;
             overflow: hidden;
         }
@@ -215,7 +215,7 @@ if (!document.getElementById(STYLES_ID)) {
             justify-content: center;
             color: var(--hf-text-muted, var(--hf-color-4));
             font-size: 0.75rem;
-            background: color-mix(in srgb, var(--hf-bg-base, #0f1117) 80%, transparent);
+            background: color-mix(in srgb, var(--hf-bg-base) 80%, transparent);
         }
         .gallery-card-body {
             padding: 0.65rem 0.85rem 0.85rem;
