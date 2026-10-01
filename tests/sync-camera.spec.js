@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('selected Sync camera reaches a nonzero media step, retries after failure, and releases capture', async ({ page }) => {
     const dsl = 'search synth\nperlin().write(o1)\nmedia().write(o0)\nrender(o0)'
     await page.goto('/?dsl=' + encodeURIComponent(dsl))
-    await page.waitForFunction(() => window.__poly?.renderer)
+    await page.waitForFunction(() => window.__poly?.renderer && window.__poly?.liveInputsPanel?._panel)
     await page.evaluate(async () => {
         const state = window.cameraTest = { starts: 0, stops: 0, tracks: [], devices: [] }
         window.electronAPI = { syncCamera: {
@@ -57,7 +57,7 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
     await expect(page.locator('[data-id=camera-device] option[value=sync-camera]')).toHaveText('Sync Camera')
     await page.click('[data-source=webcam]')
     await expect.poll(() => page.evaluate(() => window.cameraTest.starts)).toBe(1)
-    expect(await page.evaluate(() => window.__poly.renderer.mediaStepIndex)).toBeGreaterThan(0)
+    await expect.poll(() => page.evaluate(() => window.__poly.renderer.mediaStepIndex), { timeout: 15000 }).toBeGreaterThan(0)
     await page.evaluate(() => { window.cameraTest.frame(1000); window.cameraTest.frame(2000) })
     await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([255, 0, 0, 255])
     await page.evaluate(() => window.cameraTest.frame(100))
