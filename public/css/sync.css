@@ -139,7 +139,8 @@
     padding: 0.52rem 0.62rem;
     border: 1px solid var(--sync-line);
     border-radius: var(--hf-radius-md, 0.3rem);
-    background: color-mix(in srgb, var(--sync-panel) 76%, black 24%);
+    /* Fixed dark shade anchor: must darken the input in every theme */
+    background: color-mix(in srgb, var(--sync-panel) 76%, oklch(0% 0 0) 24%);
     color: var(--sync-copy);
     font: 0.76rem/1.25 'Noto Sans Mono', 'Noto Sans Mono Blank', monospace;
 }

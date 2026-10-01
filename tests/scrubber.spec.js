@@ -206,12 +206,32 @@ test('scrubber clamps parameter bounds with zero turnaround lag', async ({ page 
         const lastNL = before.lastIndexOf('\n')
         const colNum = idx - lastNL - 1
         const r = ta.getBoundingClientRect()
-        const padTop = parseFloat(cs.paddingTop) || 0
-        const padLeft = parseFloat(cs.paddingLeft) || 0
-        return {
-            x: r.x + padLeft + colNum * charW + 4,
-            y: r.y + padTop + lineNum * lineH + lineH / 2,
+        const x0 = r.x + (parseFloat(cs.paddingLeft) || 0) + colNum * charW + 4
+        const y = r.y + (parseFloat(cs.paddingTop) || 0) + lineNum * lineH + lineH / 2
+        // The estimated x can drift off the digit under different font
+        // metrics; probe nearby x positions until the caret lands on the
+        // literal's offset (idx or idx+1). Mirror the scrubber's own caret
+        // resolution order: caretPositionFromPoint first (textarea offsets),
+        // caretRangeFromPoint only when it actually hit the textarea — the
+        // display wrapper returns offsets meaningless for ta.value.
+        const caretAt = (x) => {
+            if (typeof document.caretPositionFromPoint === 'function') {
+                const cp = document.caretPositionFromPoint(x, y)
+                if (cp && cp.offsetNode === ta) return cp.offset
+            }
+            if (typeof document.caretRangeFromPoint === 'function') {
+                const cr = document.caretRangeFromPoint(x, y)
+                if (cr && cr.startContainer === ta) return cr.startOffset
+            }
+            return null
         }
+        let best = null
+        for (let dx = -4; dx <= 4; dx += 0.25) {
+            const off = caretAt(x0 + dx * charW)
+            if (off === idx || off === idx + 1) { best = x0 + dx * charW; break }
+        }
+        if (best == null) throw new Error(`could not land caret on octaves literal (idx ${idx})`)
+        return { x: best, y }
     })
 
     // Drag left by 50px (octaves minimum is 1)

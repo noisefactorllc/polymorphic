@@ -625,7 +625,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: var(--hf-backdrop, rgba(0, 0, 0, 0.8));
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
             backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
             -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
             z-index: 300;
@@ -989,7 +989,7 @@
         }
         
         #programModal::backdrop {
-            background: var(--hf-backdrop, rgba(0, 0, 0, 0.5));
+            background: var(--hf-backdrop, color-mix(in srgb, var(--hf-color-1, black) 62%, transparent));
             backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
             -webkit-backdrop-filter: var(--hf-glass-blur-sm, blur(4px));
         }

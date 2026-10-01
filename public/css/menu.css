@@ -52,6 +52,15 @@
     --ui-chrome-shadow-blend: 72%;
     --ui-chrome-shadow-shade: 28%;
 
+    /* Chrome tint endpoints for the titlebar gradient. These are directional
+       anchors, not surface colors: the highlight must lighten and the shadow
+       must darken the menu background in EVERY theme, so they are fixed
+       neutral OKLCH endpoints rather than theme-flipping tokens (flipping
+       them via --hf-text-bright/--hf-color-1 inverts the gradient in the
+       light theme). */
+    --ui-chrome-highlight-color: oklch(100% 0 0);
+    --ui-chrome-shadow-color: oklch(0% 0 0);
+
     /* Font family definitions */
     --font-accent: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
 
@@ -94,10 +103,10 @@
     inset: 0;
     --ui-titlebar-highlight: color-mix(in srgb,
             var(--menu-bg) var(--ui-chrome-highlight-blend),
-            white var(--ui-chrome-highlight-tint));
+            var(--ui-chrome-highlight-color) var(--ui-chrome-highlight-tint));
     --ui-titlebar-shadow: color-mix(in srgb,
             var(--menu-bg) var(--ui-chrome-shadow-blend),
-            black var(--ui-chrome-shadow-shade));
+            var(--ui-chrome-shadow-color) var(--ui-chrome-shadow-shade));
     --ui-titlebar-gradient: linear-gradient(180deg,
             var(--ui-titlebar-highlight) 0%,
             var(--menu-bg) 55%,

@@ -98,6 +98,18 @@ test('public/css/menu.css maps theme variables to Handfish tokens', () => {
     assert.match(map.get('--menu-border') || '', /var\(--hf-/)
 })
 
+test('public/css/menu.css chrome gradient anchors are fixed directional endpoints', () => {
+    const css = readCss('menu.css')
+    // The titlebar gradient must lighten at top and darken at bottom in EVERY
+    // theme, so its endpoints are fixed neutral OKLCH anchors — theme-flipping
+    // tokens (e.g. --hf-text-bright) would invert the gradient in the light
+    // theme. See the comment on the definitions in menu.css.
+    assert.match(css, /--ui-chrome-highlight-color:\s*oklch\(100%\s*0\s*0\)/)
+    assert.match(css, /--ui-chrome-shadow-color:\s*oklch\(0%\s*0\s*0\)/)
+    assert.doesNotMatch(css, /--ui-chrome-highlight-color:\s*var\(--hf-/)
+    assert.doesNotMatch(css, /--ui-chrome-shadow-color:\s*var\(--hf-/)
+})
+
 test('public/css/menu.css tooltip uses Handfish design tokens', () => {
     const css = readCss('menu.css')
     assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-bg-surface/)
@@ -239,6 +251,61 @@ function assertInjectedCssTokenClean(moduleName) {
         /\b(?:rgba?|hsla?)\s*\(/i,
         `${moduleName} injected CSS must not contain raw rgb/rgba/hsl/hsla literals`
     )
+    // Named CSS color literals are hardcoding too (e.g. `black` fallbacks).
+    // Black and white commonly appear in shadow/gesture values; reject every
+    // other named color outright and reject black/white unless the token
+    // fallback chain already provides a `--hf-` reference.
+    const NAMED_COLORS = 'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|grey|green|greenyellow|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat'
+    assert.doesNotMatch(
+        css,
+        new RegExp(`\\b(?:${NAMED_COLORS})\\b`, 'i'),
+        `${moduleName} injected CSS must not contain named color literals; use --hf-* tokens`
+    )
+    // Inside a var() fallback chain a bare `black`/`white` terminal fallback
+    // hardcodes the value the token resolves to; assert every black/white
+    // occurrence is wrapped in an inner var() token reference instead.
+    // Non-color properties (`white-space`) legitimately contain `white`, so
+    // only color-ish declarations are inspected.
+    const COLOR_PROPS = /(?:^|\n)\s*(?:color|background(?:-color)?|border(?:-\w+)?-color|box-shadow|text-shadow|fill|stroke|-webkit-text-fill-color)\s*:/
+    for (const decl of css.split(';')) {
+        const valuePart = decl.includes(':') ? decl.slice(decl.indexOf(':') + 1) : ''
+        if (!/\b(?:black|white)\b/.test(valuePart)) continue
+        assert.match(
+            decl,
+            COLOR_PROPS,
+            `${moduleName} black/white outside a color declaration is unexpected: ${decl.trim()}`
+        )
+        assert.match(
+            decl,
+            /var\(--hf-color-1(?:,\s*(?:black|white)\s*)?\)/,
+            `${moduleName} injected CSS must not use a bare black/white fallback outside a var(--hf-color-1) chain: ${decl.trim()}`
+        )
+    }
+    // The same rule applies to stylesheets and inline style blocks in HTML:
+    // a bare `black`/`white` color value is hardcoding even inside a fallback.
+    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/menu.css'), 'menu.css')
+    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/sync.css'), 'sync.css')
+    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/touch.css'), 'touch.css')
+    const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
+    assertNoBareBlackWhite(html, 'public/index.html')
+}
+
+function assertNoBareBlackWhite(css, label) {
+    const COLOR_PROPS = /(?:^|\n)\s*(?:color|background(?:-color)?|border(?:-\w+)?-color|box-shadow|text-shadow|fill|stroke|-webkit-text-fill-color)\s*:/
+    for (const decl of css.split(';')) {
+        const valuePart = decl.includes(':') ? decl.slice(decl.indexOf(':') + 1) : ''
+        if (!/\b(?:black|white)\b/.test(valuePart)) continue
+        assert.match(
+            decl,
+            COLOR_PROPS,
+            `${label} black/white outside a color declaration is unexpected: ${decl.trim()}`
+        )
+        assert.match(
+            decl,
+            /var\(--hf-color-1(?:,\s*(?:black|white)\s*)?\)/,
+            `${label} must not use a bare black/white fallback outside a var(--hf-color-1) chain: ${decl.trim()}`
+        )
+    }
 }
 
 test('perfOverlay, scrubber, and import dialogs injected CSS contain zero raw color literals', () => {

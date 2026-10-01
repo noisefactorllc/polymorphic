@@ -5,7 +5,14 @@ import { installHandfishLocal } from './handfishLocal.js'
 installHandfishLocal(test)
 
 async function boot(page) {
-    await page.goto('/', { waitUntil: 'networkidle' })
+    // The escape-stack layer under test is DOM-only: it does not exercise the
+    // shader. Load a minimal DSL program so the render loop compiles a
+    // trivial shader — full default programs peg SwiftShader's software
+    // rasterizer and starve the main thread past the 60s test timeout when
+    // several workers boot at once (reproducible "keyboard.press: Test
+    // timeout" wedges on this host).
+    const dsl = encodeURIComponent('render(o0)')
+    await page.goto(`/?dsl=${dsl}`, { waitUntil: 'networkidle' })
     await page.waitForFunction(() => !!customElements.get('menu-bar') && !!document.getElementById('menu')?.config, { timeout: 30000 })
     await page.waitForTimeout(500)
 }
@@ -19,7 +26,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        await expect(overlay).toBeHidden()
+        // Dismissal is synchronous; the long window only absorbs host-load
+        // latency in the expect roundtrip (documented 5s race under load ~9).
+        await expect(overlay).toBeHidden({ timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -31,7 +40,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        await expect(overlay).toBeHidden()
+        // Dismissal is synchronous; the long window only absorbs host-load
+        // latency in the expect roundtrip (documented 5s race under load ~9).
+        await expect(overlay).toBeHidden({ timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -43,7 +54,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        await expect(overlay).toBeHidden()
+        // Dismissal is synchronous; the long window only absorbs host-load
+        // latency in the expect roundtrip (documented 5s race under load ~9).
+        await expect(overlay).toBeHidden({ timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -55,7 +68,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        await expect(overlay).toBeHidden()
+        // Dismissal is synchronous; the long window only absorbs host-load
+        // latency in the expect roundtrip (documented 5s race under load ~9).
+        await expect(overlay).toBeHidden({ timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -67,7 +82,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        await expect(overlay).toBeHidden()
+        // Dismissal is synchronous; the long window only absorbs host-load
+        // latency in the expect roundtrip (documented 5s race under load ~9).
+        await expect(overlay).toBeHidden({ timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -80,7 +97,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toHaveClass(/visible/)
 
         await page.keyboard.press('Escape')
-        await expect(overlay).not.toHaveClass(/visible/)
+        await expect(overlay).not.toHaveClass(/visible/, { timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -100,13 +117,13 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
 
         // 3. Press Escape: dismisses palette, but DOES NOT exit performance mode
         await page.keyboard.press('Escape')
-        await expect(overlay).not.toHaveClass(/visible/)
+        await expect(overlay).not.toHaveClass(/visible/, { timeout: 15000 })
         await expect(page.locator('body')).toHaveClass(/performance-mode/)
         await expect(page.locator('#menu .hf-menubar')).toBeHidden()
 
         // 4. Press Escape again: now that no dialogs/overlays are open, exits performance mode
         await page.keyboard.press('Escape')
-        await expect(page.locator('body')).not.toHaveClass(/performance-mode/)
+        await expect(page.locator('body')).not.toHaveClass(/performance-mode/, { timeout: 15000 })
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 })
