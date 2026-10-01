@@ -76,6 +76,32 @@ test('public/css stylesheets contain zero raw hex color literals', () => {
     }
 })
 
+// Raw color function literals (oklch/oklab/lab/lch/color()) are hardcoding
+// too. The only permitted use is *defining* an app-level directional color
+// alias (e.g. `--ui-chrome-highlight-color: oklch(100% 0 0)` inside a rule
+// whose block contains only custom-property definitions) — the Handfish
+// "add a semantic alias rather than hardcoding" rule. Any use inside a real
+// (non-custom) property declaration is rejected.
+function assertNoRawColorFunctionLiterals(css, file) {
+    const decls = extractDeclarationValues(css)
+    for (const { prop, value } of decls) {
+        if (prop.startsWith('--')) continue
+        assert.doesNotMatch(
+            value,
+            /\b(?:oklch|oklab|lab|lch|color)\s*\(/i,
+            `${file} [${prop}: ${value}] must not use raw oklch/lab/color() literals; reference the app-level alias`
+        )
+    }
+}
+
+test('public/css stylesheets contain zero raw oklch/lab/color() literals in declarations', () => {
+    for (const file of ['menu.css', 'sync.css', 'touch.css']) {
+        assertNoRawColorFunctionLiterals(readCss(file), file)
+    }
+    const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
+    assertNoRawColorFunctionLiterals(html, 'public/index.html')
+})
+
 test('public/css/menu.css maps theme variables to Handfish tokens', () => {
     const css = readCss('menu.css')
     const decls = extractDeclarationValues(css)
@@ -101,11 +127,18 @@ test('public/css/menu.css maps theme variables to Handfish tokens', () => {
 test('public/css/menu.css chrome gradient anchors are fixed directional endpoints', () => {
     const css = readCss('menu.css')
     // The titlebar gradient must lighten at top and darken at bottom in EVERY
-    // theme, so its endpoints are fixed neutral OKLCH anchors — theme-flipping
+    // theme, so its endpoints are fixed neutral directional anchors declared
+    // once as app-level aliases and referenced by name — theme-flipping
     // tokens (e.g. --hf-text-bright) would invert the gradient in the light
-    // theme. See the comment on the definitions in menu.css.
-    assert.match(css, /--ui-chrome-highlight-color:\s*oklch\(100%\s*0\s*0\)/)
-    assert.match(css, /--ui-chrome-shadow-color:\s*oklch\(0%\s*0\s*0\)/)
+    // theme. Raw literal values are permitted only inside the alias
+    // definitions themselves (see the comment on the definitions in
+    // menu.css); every real declaration must reference the alias.
+    assert.match(css, /--ui-titlebar-highlight:/)
+    assert.match(css, /var\(--ui-chrome-highlight-color\)/)
+    assert.match(css, /var\(--ui-chrome-shadow-color\)/)
+    // The aliases must be defined exactly once, in the :root token block.
+    const defs = css.match(/--ui-chrome-(?:highlight|shadow)-color:/g) || []
+    assert.equal(defs.length, 2, 'chrome anchor aliases must be defined exactly once (highlight + shadow)')
     assert.doesNotMatch(css, /--ui-chrome-highlight-color:\s*var\(--hf-/)
     assert.doesNotMatch(css, /--ui-chrome-shadow-color:\s*var\(--hf-/)
 })
@@ -283,27 +316,25 @@ function assertInjectedCssTokenClean(moduleName) {
     }
     // The same rule applies to stylesheets and inline style blocks in HTML:
     // a bare `black`/`white` color value is hardcoding even inside a fallback.
-    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/menu.css'), 'menu.css')
-    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/sync.css'), 'sync.css')
-    assertNoBareBlackWhite(path.resolve(__dirname, '../../public/css/touch.css'), 'touch.css')
+    assertNoBareBlackWhite(readCss('menu.css'), 'menu.css')
+    assertNoBareBlackWhite(readCss('sync.css'), 'sync.css')
+    assertNoBareBlackWhite(readCss('touch.css'), 'touch.css')
     const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
     assertNoBareBlackWhite(html, 'public/index.html')
 }
 
 function assertNoBareBlackWhite(css, label) {
-    const COLOR_PROPS = /(?:^|\n)\s*(?:color|background(?:-color)?|border(?:-\w+)?-color|box-shadow|text-shadow|fill|stroke|-webkit-text-fill-color)\s*:/
+    // `--sync-input-shade: black` lives in menu.css's :root block (sync.css
+    // references it by name); anything else must be a real color declaration.
+    const SHADE_ALIASES = /--(?:ui-chrome-(?:highlight|shadow)-color|sync-input-shade)\s*:\s*(?:black|white)\s*(?:$|;)/
     for (const decl of css.split(';')) {
+        if (SHADE_ALIASES.test(decl)) continue
         const valuePart = decl.includes(':') ? decl.slice(decl.indexOf(':') + 1) : ''
         if (!/\b(?:black|white)\b/.test(valuePart)) continue
         assert.match(
             decl,
-            COLOR_PROPS,
-            `${label} black/white outside a color declaration is unexpected: ${decl.trim()}`
-        )
-        assert.match(
-            decl,
             /var\(--hf-color-1(?:,\s*(?:black|white)\s*)?\)/,
-            `${label} must not use a bare black/white fallback outside a var(--hf-color-1) chain: ${decl.trim()}`
+            `${label} must not use a bare black/white value outside a var(--hf-color-1) chain or a documented :root shade alias: ${decl.trim()}`
         )
     }
 }

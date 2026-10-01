@@ -26,9 +26,9 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        // Dismissal is synchronous; the long window only absorbs host-load
-        // latency in the expect roundtrip (documented 5s race under load ~9).
-        await expect(overlay).toBeHidden({ timeout: 15000 })
+        // Dismissal is synchronous on keydown; the 5s default window is the
+        // documented budget for one expect roundtrip under host load.
+        await expect(overlay).toBeHidden()
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -40,9 +40,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        // Dismissal is synchronous; the long window only absorbs host-load
-        // latency in the expect roundtrip (documented 5s race under load ~9).
-        await expect(overlay).toBeHidden({ timeout: 15000 })
+        await expect(overlay).toBeHidden()
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -54,9 +52,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        // Dismissal is synchronous; the long window only absorbs host-load
-        // latency in the expect roundtrip (documented 5s race under load ~9).
-        await expect(overlay).toBeHidden({ timeout: 15000 })
+        await expect(overlay).toBeHidden()
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -68,9 +64,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        // Dismissal is synchronous; the long window only absorbs host-load
-        // latency in the expect roundtrip (documented 5s race under load ~9).
-        await expect(overlay).toBeHidden({ timeout: 15000 })
+        await expect(overlay).toBeHidden()
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -82,9 +76,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toBeVisible()
 
         await page.keyboard.press('Escape')
-        // Dismissal is synchronous; the long window only absorbs host-load
-        // latency in the expect roundtrip (documented 5s race under load ~9).
-        await expect(overlay).toBeHidden({ timeout: 15000 })
+        await expect(overlay).toBeHidden()
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -97,7 +89,7 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         await expect(overlay).toHaveClass(/visible/)
 
         await page.keyboard.press('Escape')
-        await expect(overlay).not.toHaveClass(/visible/, { timeout: 15000 })
+        await expect(overlay).not.toHaveClass(/visible/)
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
     })
 
@@ -117,13 +109,52 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
 
         // 3. Press Escape: dismisses palette, but DOES NOT exit performance mode
         await page.keyboard.press('Escape')
-        await expect(overlay).not.toHaveClass(/visible/, { timeout: 15000 })
+        await expect(overlay).not.toHaveClass(/visible/)
         await expect(page.locator('body')).toHaveClass(/performance-mode/)
         await expect(page.locator('#menu .hf-menubar')).toBeHidden()
 
         // 4. Press Escape again: now that no dialogs/overlays are open, exits performance mode
         await page.keyboard.press('Escape')
-        await expect(page.locator('body')).not.toHaveClass(/performance-mode/, { timeout: 15000 })
+        await expect(page.locator('body')).not.toHaveClass(/performance-mode/)
         await expect(page.locator('#menu .hf-menubar')).toBeVisible()
+    })
+
+    // Latency-focused behavioral check: Escape dismissal is synchronous (the
+    // keydown handler removes the class/hides the element before returning),
+    // so the FIRST animation frame after the real keydown must already show
+    // the overlay gone. The measurement runs inside the page around the
+    // CDP-injected keydown, so host polling delay between Playwright
+    // roundtrips cannot inflate it — a genuinely delayed dismissal fails
+    // this check while slow test plumbing does not.
+    test('Escape dismissal completes within one animation frame of keydown', async ({ page }) => {
+        await boot(page)
+
+        await page.evaluate(() => document.getElementById('viewMenuItem-shortcuts').click())
+        const overlay = page.locator('.shortcuts-overlay')
+        await expect(overlay).toBeVisible()
+
+        // Pre-arm a one-frame probe keyed on the actual Escape keydown, then
+        // press the key. t0 is taken inside the page's own keydown handler,
+        // so the Playwright press() roundtrip cannot inflate the measurement;
+        // the 8s guard only bounds the test itself.
+        await page.evaluate(() => {
+            window.__escapeProbe = new Promise((resolve) => {
+                const overlayEl = document.querySelector('.shortcuts-overlay')
+                document.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Escape') return
+                    const t0 = performance.now()
+                    requestAnimationFrame(() => {
+                        const gone = overlayEl.style.display === 'none' || !overlayEl.classList.contains('visible')
+                        resolve({ gone, latencyMs: performance.now() - t0 })
+                    })
+                }, { once: true, capture: true })
+                setTimeout(() => resolve({ gone: false, latencyMs: -1 }), 8000)
+            })
+        })
+        await page.keyboard.press('Escape')
+        const result = await page.evaluate(() => window.__escapeProbe)
+        expect(result.gone).toBe(true)
+        expect(result.latencyMs).toBeGreaterThanOrEqual(0)
+        expect(result.latencyMs).toBeLessThan(50)
     })
 })

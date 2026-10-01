@@ -55,11 +55,18 @@
     /* Chrome tint endpoints for the titlebar gradient. These are directional
        anchors, not surface colors: the highlight must lighten and the shadow
        must darken the menu background in EVERY theme, so they are fixed
-       neutral OKLCH endpoints rather than theme-flipping tokens (flipping
-       them via --hf-text-bright/--hf-color-1 inverts the gradient in the
-       light theme). */
-    --ui-chrome-highlight-color: oklch(100% 0 0);
-    --ui-chrome-shadow-color: oklch(0% 0 0);
+       neutral endpoints rather than theme-flipping tokens (flipping them via
+       --hf-text-bright/--hf-color-1 inverts the gradient in the light
+       theme). Defined as app-level color aliases (declared once here,
+       referenced by name everywhere) per the Handfish "add a semantic alias
+       rather than hardcoding" rule — their values intentionally do not flip
+       with the theme because their job is directional contrast, not surface
+       theming. */
+    --ui-chrome-highlight-color: white;
+    --ui-chrome-shadow-color: black;
+    /* Directional shade anchor for the sync name input (see the matching
+       comment on its use in sync.css). */
+    --sync-input-shade: black;
 
     /* Font family definitions */
     --font-accent: 'Comfortaa', 'Comfortaa Block', 'Nunito', 'Nunito Block';
