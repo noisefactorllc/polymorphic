@@ -250,8 +250,25 @@
         body.performance-mode .status-row,
         body.performance-mode .output-picker,
         body.performance-mode .recording-indicator { display: none !important; }
-        /* Hide the cursor only after a few idle seconds, not on entry — see cursorIdle.js */
-        body.performance-mode.cursor-idle { cursor: none; }
+        /* The rendered cursor dot (see cursorIdle.js) replaces the OS cursor in
+           performance mode; it fades out after idle instead of vanishing. */
+        body.performance-mode { cursor: none; }
+        body.performance-mode .cursor-fade-dot {
+            display: block;
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: var(--hf-radius-full, 9999px);
+            background: var(--hf-accent, #667eea);
+            opacity: 1;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 2147483647;
+        }
+        body.performance-mode .cursor-fade-dot.cursor-idle {
+            opacity: 0;
+            transition: opacity 500ms ease;
+        }
 
         /* Embed mode — same effect as performance mode but applied via ?embed=1 */
         body.embed-mode #menu,
