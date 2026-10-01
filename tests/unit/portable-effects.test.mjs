@@ -15,6 +15,7 @@ class Effect {
 class CanvasRenderer {
     registerEffectWithRuntime(effect) {
         runtimeRegistrations.push(effect)
+        runtimeEffects.set(effect.name, effect)
         runtimeEffects.set(effect.namespace + '.' + effect.name, effect)
         return runtimeEnums
     }
@@ -78,6 +79,7 @@ class CanvasRenderer {
             fail('paramAliases must map names to declared globals')
         }
         if (runtimeEffects.has(`user.${func}`) || runtimeEffects.has(`user/${func}`)) fail(`user.${func} is already registered`)
+        const previousBare = runtimeEffects.get(func)
         const instance = new Effect({ ...definition, func, namespace: 'user' })
         instance.shaders = shaders
         const pipelineInputs = ['inputTex', 'inputTex3d', 'inputGeo', 'inputXyz', 'inputVel', 'inputRgba', 'src', 'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7']
@@ -85,6 +87,11 @@ class CanvasRenderer {
             Object.values(pass.inputs || {}).some(input => pipelineInputs.includes(input)))
         const effect = { namespace: 'user', name: func, instance }
         this.registerEffectWithRuntime(effect)
+        // Mirrors the shared contract's bare-name restore: a pre-existing
+        // lookup under the bare func survives registration; when none existed,
+        // the registration's own bare entry stands.
+        if (previousBare === undefined) runtimeEffects.delete(func)
+        else runtimeEffects.set(func, previousBare)
         this._enums = await mergeIntoEnumsFn(runtimeEnums)
         if (instance.starter) addStarters([`user.${func}`])
         this._loadedEffects.set(`user/${func}`, effect)
@@ -103,10 +110,12 @@ globalThis.__portableRuntime = {
     CanvasRenderer, Effect,
     registerStarterOps: names => names.forEach(name => starters.add(name)),
     mergeIntoEnums: value => { enums.push(value); return value },
-    unregisterEffect: name => runtimeEffects.delete(name)
+    unregisterEffect: name => runtimeEffects.delete(name),
+    getEffect: name => runtimeEffects.get(name),
+    registerEffect: (name, effect) => runtimeEffects.set(name, effect)
 }
 const source = (await readFile(new URL('../../public/js/sharingLoader.js', import.meta.url), 'utf8'))
-    .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, unregisterEffect } = globalThis.__portableRuntime')
+    .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, getEffect, registerEffect, unregisterEffect } = globalThis.__portableRuntime')
 const loader = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 
 test('composition imports retain the original image payloads for rendering and reshare', async t => {
@@ -274,6 +283,23 @@ test('re-importing a loaded portable effect replaces it through the shared contr
     assert.notEqual(second.instance, first.instance)
     assert.equal(second.instance.shaders.main.glsl, 'second')
     assert.equal(loader.getLoadedPortableEffects().get('user/reImported').shaders.main.glsl, 'second')
+    // The bare name was first claimed by this loader (no built-in occupied
+    // it), so the replacement must own it again.
+    assert.equal(runtimeEffects.get('reImported'), second.instance)
+})
+
+test('a built-in under the same bare name survives import and re-import', async () => {
+    const builtin = new Effect({ name: 'collide', asyncInit() {} })
+    runtimeEffects.set('collide', builtin)
+    const first = await loader.registerPortableEffect({ ...data, func: 'collide', shaders: { main: { glsl: 'first', wgsl: 'first' } } })
+    assert.equal(runtimeEffects.get('collide'), builtin,
+        'the initial import must not remove the built-in bare alias')
+    assert.equal(runtimeEffects.get('user.collide').instance, first.instance)
+    const second = await loader.registerPortableEffect({ ...data, func: 'collide', shaders: { main: { glsl: 'second', wgsl: 'second' } } })
+    assert.equal(runtimeEffects.get('collide'), builtin,
+        're-importing must not remove the built-in bare alias')
+    assert.equal(runtimeEffects.get('user.collide').instance, second.instance)
+    assert.notEqual(second.instance, first.instance)
 })
 
 test('a failed replacement preserves the prior registered effect and its retention', async () => {

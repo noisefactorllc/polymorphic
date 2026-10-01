@@ -9,6 +9,8 @@
 
 import {
     CanvasRenderer,
+    getEffect,
+    registerEffect,
     unregisterEffect
 } from './noisemaker/bundle.js'
 
@@ -119,6 +121,11 @@ export async function registerPortableEffect(effectData) {
         .registerPortableEffect.call(receiver, { ...definition, shaders })
 
     let registered
+    const retained = loadedPortableEffects.get(effectId)
+    // The bare-name lookup before any registration: undefined when the name is
+    // unclaimed, otherwise a built-in (or another module's) effect that the
+    // shared contract will restore around its own registration.
+    const preBare = getEffect(func)
     try {
         // The shared contract validates completely before touching any
         // registry state, so a rejected definition leaves the prior effect
@@ -126,13 +133,16 @@ export async function registerPortableEffect(effectData) {
         registered = await register()
     } catch (error) {
         const duplicate = error instanceof Error && error.message.includes('is already registered')
-        if (!duplicate || !loadedPortableEffects.has(effectId)) throw error
+        if (!duplicate || !retained) throw error
         // Replacement of an effect this loader registered earlier (e.g.
-        // re-importing an updated ZIP): drop the prior registration keys and
-        // retry. If the retry still fails, the prior runtime registration is
-        // already gone, so a retained entry would re-share an effect that no
-        // longer resolves — invalidate it and surface the error.
-        for (const key of [func, `user.${func}`, `user/${func}`]) {
+        // re-importing an updated ZIP): drop only the user.* registration keys
+        // and retry. The bare name is left alone — the shared contract
+        // deliberately restores a pre-existing built-in lookup under it, and
+        // dropping it here would remove that alias. If the retry still fails,
+        // the prior runtime registration is already gone, so a retained entry
+        // would re-share an effect that no longer resolves — invalidate it and
+        // surface the error.
+        for (const key of [`user.${func}`, `user/${func}`]) {
             unregisterEffect(key)
         }
         try {
@@ -141,6 +151,14 @@ export async function registerPortableEffect(effectData) {
             loadedPortableEffects.delete(effectId)
             throw retryError
         }
+    }
+
+    // The shared contract restores whatever bare lookup existed before its
+    // registration. When the bare name was first claimed by this loader (no
+    // built-in occupied it), that restore puts the stale prior instance back;
+    // point the bare name at the replacement instead.
+    if (retained && preBare === undefined) {
+        registerEffect(func, registered.instance)
     }
 
     // Product wrapper: retain the engine result plus the fields the app and
