@@ -110,21 +110,31 @@ export async function registerPortableEffect(effectData) {
     const func = definition.func || definition.name
     const effectId = `user/${func}`
 
-    // The shared contract rejects duplicates; replacement of an effect this
-    // product registered earlier (e.g. re-importing an updated ZIP) is allowed.
-    if (loadedPortableEffects.has(effectId)) {
-        for (const key of [func, `user.${func}`, `user/${func}`]) {
-            unregisterEffect(key)
-        }
-    }
-
     const receiver = runtimeRenderer ?? {
         registerEffectWithRuntime: CanvasRenderer.prototype.registerEffectWithRuntime,
         _enums: {},
         _loadedEffects: new Map()
     }
-    const registered = await CanvasRenderer.prototype
+    const register = () => CanvasRenderer.prototype
         .registerPortableEffect.call(receiver, { ...definition, shaders })
+
+    let registered
+    try {
+        // The shared contract validates completely before touching any
+        // registry state, so a rejected definition leaves the prior effect
+        // untouched.
+        registered = await register()
+    } catch (error) {
+        const duplicate = error instanceof Error && error.message.includes('is already registered')
+        if (!duplicate || !loadedPortableEffects.has(effectId)) throw error
+        // Replacement of an effect this loader registered earlier (e.g.
+        // re-importing an updated ZIP): drop the prior registration keys and
+        // retry. If the retry still fails, no phantom retention is left.
+        for (const key of [func, `user.${func}`, `user/${func}`]) {
+            unregisterEffect(key)
+        }
+        registered = await register()
+    }
 
     // Product wrapper: retain the engine result plus the fields the app and
     // the unit contract read back.

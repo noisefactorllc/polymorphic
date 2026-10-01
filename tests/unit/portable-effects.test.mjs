@@ -276,6 +276,17 @@ test('re-importing a loaded portable effect replaces it through the shared contr
     assert.equal(loader.getLoadedPortableEffects().get('user/reImported').shaders.main.glsl, 'second')
 })
 
+test('a failed replacement preserves the prior registered effect and its retention', async () => {
+    const first = await loader.registerPortableEffect({ ...data, func: 'keptEffect', shaders: { main: { glsl: 'kept', wgsl: 'kept' } } })
+    const retainedBefore = loader.getLoadedPortableEffects().get('user/keptEffect')
+    await assert.rejects(() => loader.registerPortableEffect({
+        ...data, func: 'keptEffect', shaders: { main: { glsl: '  ' } }
+    }))
+    assert.equal(runtimeEffects.get('user.keptEffect').instance, first.instance,
+        'the working runtime effect must survive a rejected re-import')
+    assert.deepEqual(loader.getLoadedPortableEffects().get('user/keptEffect'), retainedBefore)
+})
+
 test('loadFromCode skips an effect that fails validation and keeps the program', async t => {
     const previous = globalThis.fetch
     globalThis.fetch = async () => ({ ok: true, json: async () => ({
