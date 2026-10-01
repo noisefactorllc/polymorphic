@@ -87,9 +87,10 @@ class CanvasRenderer {
             Object.values(pass.inputs || {}).some(input => pipelineInputs.includes(input)))
         const effect = { namespace: 'user', name: func, instance }
         this.registerEffectWithRuntime(effect)
-        // Mirrors the shared contract's bare-name restore: a pre-existing
-        // lookup under the bare func survives registration; when none existed,
-        // the registration's own bare entry stands.
+        // Mirrors the shared contract exactly (canvas.js registerPortableEffect):
+        // when no bare lookup existed before, the contract unregisters the bare
+        // name its registration created — portable effects belong to user.*;
+        // otherwise the pre-existing built-in lookup is restored.
         if (previousBare === undefined) runtimeEffects.delete(func)
         else runtimeEffects.set(func, previousBare)
         this._enums = await mergeIntoEnumsFn(runtimeEnums)
@@ -283,9 +284,10 @@ test('re-importing a loaded portable effect replaces it through the shared contr
     assert.notEqual(second.instance, first.instance)
     assert.equal(second.instance.shaders.main.glsl, 'second')
     assert.equal(loader.getLoadedPortableEffects().get('user/reImported').shaders.main.glsl, 'second')
-    // The bare name was first claimed by this loader (no built-in occupied
-    // it), so the replacement must own it again.
-    assert.equal(runtimeEffects.get('reImported'), second.instance)
+    // The contract's rule: portable effects belong to user.*; the bare name
+    // resolves to nothing when no built-in held it, before or after re-import.
+    assert.equal(runtimeEffects.get('reImported'), undefined)
+    assert.equal(runtimeEffects.get('user.reImported').instance, second.instance)
 })
 
 test('a built-in under the same bare name survives import and re-import', async () => {

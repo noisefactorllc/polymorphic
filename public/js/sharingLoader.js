@@ -9,8 +9,6 @@
 
 import {
     CanvasRenderer,
-    getEffect,
-    registerEffect,
     unregisterEffect
 } from './noisemaker/bundle.js'
 
@@ -122,10 +120,9 @@ export async function registerPortableEffect(effectData) {
 
     let registered
     const retained = loadedPortableEffects.get(effectId)
-    // The bare-name lookup before any registration: undefined when the name is
-    // unclaimed, otherwise a built-in (or another module's) effect that the
-    // shared contract will restore around its own registration.
-    const preBare = getEffect(func)
+    // The bare-name lookup is owned by the shared contract: after registration
+    // it resolves to a pre-existing built-in (restored) or to nothing at all
+    // (portable effects belong to user.*), so the loader never touches it.
     try {
         // The shared contract validates completely before touching any
         // registry state, so a rejected definition leaves the prior effect
@@ -151,14 +148,6 @@ export async function registerPortableEffect(effectData) {
             loadedPortableEffects.delete(effectId)
             throw retryError
         }
-    }
-
-    // The shared contract restores whatever bare lookup existed before its
-    // registration. When the bare name was first claimed by this loader (no
-    // built-in occupied it), that restore puts the stale prior instance back;
-    // point the bare name at the replacement instead.
-    if (retained && preBare === undefined) {
-        registerEffect(func, registered.instance)
     }
 
     // Product wrapper: retain the engine result plus the fields the app and
