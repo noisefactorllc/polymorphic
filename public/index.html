@@ -250,7 +250,8 @@
         body.performance-mode .status-row,
         body.performance-mode .output-picker,
         body.performance-mode .recording-indicator { display: none !important; }
-        body.performance-mode { cursor: none; }
+        /* Hide the cursor only after a few idle seconds, not on entry — see cursorIdle.js */
+        body.performance-mode.cursor-idle { cursor: none; }
 
         /* Embed mode — same effect as performance mode but applied via ?embed=1 */
         body.embed-mode #menu,

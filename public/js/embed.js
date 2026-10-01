@@ -28,6 +28,7 @@ import { buildPaletteActions } from './ui/paletteActions.js'
 import { formatDsl } from './ui/formatter.js'
 import { insertAtCursor, getSelectionOrBlock, blockRangeAt } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
+import { getCursorIdleHider } from './ui/cursorIdle.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
 import { recorder } from './ui/recorder.js'
 import { perfOverlay } from './ui/perfOverlay.js'
@@ -941,6 +942,8 @@ async function insertImageFile(dataUrl) {
 function togglePerformanceMode() {
     document.body.classList.toggle('performance-mode')
     const on = document.body.classList.contains('performance-mode')
+    if (on) getCursorIdleHider().start()
+    else getCursorIdleHider().stop()
     showToast(on ? 'Performance mode — press ⌘⇧H or Esc to exit' : 'Performance mode off', 'info')
 }
 
@@ -2511,6 +2514,7 @@ function setupMenuBar() {
             }
             e.preventDefault()
             document.body.classList.remove('performance-mode')
+            getCursorIdleHider().stop()
             showToast('Performance mode off', 'info')
         }
         // Scene shortcuts: 1..9 recalls, Cmd/Ctrl+Shift+1..9 saves.
