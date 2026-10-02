@@ -20,7 +20,15 @@ test.use({
 
 installHandfishLocal(test)
 
-async function boot(page) {
+// Fixed light boot program passed to every test via the documented ?dsl=
+// scheme. A fresh visit boots a random gallery example whose compile time
+// under software GL varies from ~1s to tens of seconds, which turned several
+// tests in this spec into load-dependent 60s timeouts. This program must stay
+// light AND different from the clipboard test's copied value so its reset
+// assertion remains meaningful.
+const BOOT_DSL = 'search synth, filter\n\nperlin(scale: 75, octaves: 2)\n  .write(o0)\n\nrender(o0)'
+
+async function boot(page, { dsl } = {}) {
     await page.addInitScript(() => {
         window.__openedUrls = []
         window.open = (url) => { window.__openedUrls.push(String(url)); return null }
@@ -31,7 +39,9 @@ async function boot(page) {
             contentType: 'application/json',
             body: JSON.stringify({ code: 'TESTCODE' })
         }))
-    await page.goto('/', { waitUntil: 'networkidle' })
+    // An explicit dsl boots via the documented ?dsl= scheme for deterministic
+    // boot cost; the default keeps the random gallery example.
+    await page.goto(dsl ? `/?dsl=${encodeURIComponent(dsl)}` : '/', { waitUntil: 'networkidle' })
     await page.waitForFunction(() => !!customElements.get('menu-bar') && !!document.getElementById('menu')?.config, { timeout: 30000 })
     await page.waitForTimeout(2000)
 }
@@ -88,7 +98,7 @@ const EXPECTED = {
 }
 
 test('menu tree renders every baseline item exactly (labels, order, separators, ids)', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     const tree = await page.evaluate(() => {
         const bar = document.getElementById('menu')
         const byId = {}
@@ -140,7 +150,7 @@ test('menu tree renders every baseline item exactly (labels, order, separators, 
 })
 
 test('dialog and overlay items open their targets; downloads fire', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     const clickItem = id => page.evaluate(i => document.getElementById(i).click(), id)
 
     await clickItem('aboutMenuItem')
@@ -193,7 +203,7 @@ test('dialog and overlay items open their targets; downloads fire', async ({ pag
 })
 
 test('Sync target opens with Polymorphic identity and browser-readable product help', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     await page.evaluate(() => document.getElementById('syncOutputMenuItem').click())
 
     await expect(page.locator('#syncOutputDialog')).toBeVisible()
@@ -208,7 +218,7 @@ test('Sync target opens with Polymorphic identity and browser-readable product h
 })
 
 test('view menu checkmarks pull live state; toggles flip panels and mirrored buttons', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     const viewTrigger = page.locator('#viewMenuTitle')
     const checked = id => page.locator(`#${id}`).getAttribute('aria-checked')
 
@@ -271,7 +281,7 @@ test('view menu checkmarks pull live state; toggles flip panels and mirrored but
 })
 
 test('program clipboard roundtrip, edit-in flows, and reset', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     // seed a known program and copy it through the real clipboard
     await page.evaluate(() => {
         const ed = document.getElementById('dsl-editor')
@@ -289,8 +299,9 @@ test('program clipboard roundtrip, edit-in flows, and reset', async ({ page }) =
         ed.dispatchEvent(new CustomEvent('input', { bubbles: true }))
     })
     await page.evaluate(() => document.getElementById('pasteProgram').click())
-    await page.waitForTimeout(400)
-    expect(await page.evaluate(() => document.getElementById('dsl-editor').value)).toBe('osc(3).write(o0)')
+    // wait for observable app state (editor value restored) instead of a fixed sleep
+    await expect.poll(() => page.evaluate(() => document.getElementById('dsl-editor').value), { timeout: 10000 })
+        .toBe('osc(3).write(o0)')
 
     // edit-in flows: mocked share -> window.open with ?code=
     for (const [id, host] of [
@@ -307,12 +318,13 @@ test('program clipboard roundtrip, edit-in flows, and reset', async ({ page }) =
 
     // reset to original restores the boot program
     await page.evaluate(() => document.getElementById('resetMenuItem').click())
-    await page.waitForTimeout(400)
-    expect(await page.evaluate(() => document.getElementById('dsl-editor').value)).not.toBe('osc(3).write(o0)')
+    // wait for observable app state (editor value changed) instead of a fixed sleep
+    await expect.poll(() => page.evaluate(() => document.getElementById('dsl-editor').value), { timeout: 10000 })
+        .not.toBe('osc(3).write(o0)')
 })
 
 test('icon toolbar: play/pause, code editor, perf, record; palette delegation; performance mode + Escape', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
     const ppIcon = () => page.evaluate(() => document.getElementById('play-pause-btn-menu').querySelector('.hf-icon').textContent)
 
     // play/pause flips icon, tooltip, aria-label, and the canvas paused class
@@ -399,7 +411,7 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
 })
 
 test('theme switching preserves contrast across menu dropdowns and modals', async ({ page }) => {
-    await boot(page)
+    await boot(page, { dsl: BOOT_DSL })
 
     // Open view menu dropdown
     await page.locator('#viewMenuTitle').click()
