@@ -43,7 +43,9 @@ async function boot(page, { dsl } = {}) {
     // boot cost; the default keeps the random gallery example.
     await page.goto(dsl ? `/?dsl=${encodeURIComponent(dsl)}` : '/', { waitUntil: 'networkidle' })
     await page.waitForFunction(() => !!customElements.get('menu-bar') && !!document.getElementById('menu')?.config, { timeout: 30000 })
-    await page.waitForTimeout(2000)
+    // Boot is done when the render loop is running (same observable signal
+    // context-loss.spec uses) — not a fixed sleep.
+    await page.waitForFunction(() => window.__poly?.renderer?.isRunning === true, { timeout: 30000 })
 }
 
 const EXPECTED = {
@@ -316,11 +318,11 @@ test('program clipboard roundtrip, edit-in flows, and reset', async ({ page }) =
         expect(opened.toLowerCase()).toContain(host)
     }
 
-    // reset to original restores the boot program
+    // reset to original restores the boot program exactly
     await page.evaluate(() => document.getElementById('resetMenuItem').click())
-    // wait for observable app state (editor value changed) instead of a fixed sleep
+    // wait for observable app state (editor value restored) instead of a fixed sleep
     await expect.poll(() => page.evaluate(() => document.getElementById('dsl-editor').value), { timeout: 10000 })
-        .not.toBe('osc(3).write(o0)')
+        .toBe(BOOT_DSL)
 })
 
 test('icon toolbar: play/pause, code editor, perf, record; palette delegation; performance mode + Escape', async ({ page }) => {
