@@ -19,6 +19,8 @@
  * @module ui/effectControls
  */
 
+import { isEnabled, memberEnumPath, memberEntries, memberPathFor, resourceName, volumeSizeOwner } from './effectControlValues.js'
+
 const STYLES_ID = 'effect-controls-panel-styles'
 
 function injectStyles() {
@@ -192,6 +194,12 @@ function injectStyles() {
             grid-column: 1 / -1;
         }
 
+        /* A parameter whose enabledBy condition is unmet does nothing, so it
+           cannot be operated, as in the engine's own UI. */
+        effect-controls .ec-control-group.ec-disabled {
+            opacity: 0.4;
+        }
+
         effect-controls .ec-control-label {
             font-size: 0.6875rem;
             font-weight: 600;
@@ -351,6 +359,7 @@ class EffectControls extends HTMLElement {
         this._closeBtn = null
         this._bodyEl = null
         this._controlHandles = new Map()
+        this._gatedGroups = new Map()
         this._applyingFromState = false
         this._programStateListener = null
         this._rendered = false
@@ -422,6 +431,7 @@ class EffectControls extends HTMLElement {
         this._effectDef = null
         this._effectKey = null
         this._controlHandles.clear()
+        this._gatedGroups.clear()
         this.setAttribute('hidden', '')
     }
 
@@ -497,6 +507,7 @@ class EffectControls extends HTMLElement {
     _renderBody() {
         this._bodyEl.innerHTML = ''
         this._controlHandles.clear()
+        this._gatedGroups.clear()
         const def = this._effectDef
         if (!def || !def.globals || Object.keys(def.globals).length === 0) {
             const empty = document.createElement('div')
@@ -537,6 +548,21 @@ class EffectControls extends HTMLElement {
 
             this._bodyEl.appendChild(section)
         }
+        this._updateGates()
+    }
+
+    /** Disable each control whose `ui.enabledBy` condition is unmet. */
+    _updateGates() {
+        const globals = this._effectDef?.globals
+        if (!this._gatedGroups.size || !globals) return
+        const values = {}
+        for (const [name, spec] of Object.entries(globals)) values[name] = this._readValue(name, spec)
+        for (const { group, enabledBy } of this._gatedGroups.values()) {
+            const enabled = isEnabled(enabledBy, values, globals)
+            group.inert = !enabled
+            group.setAttribute('aria-disabled', String(!enabled))
+            group.classList.toggle('ec-disabled', !enabled)
+        }
     }
 
     _buildControlGroup(paramName, spec) {
@@ -544,6 +570,7 @@ class EffectControls extends HTMLElement {
         const group = document.createElement('div')
         group.className = 'ec-control-group'
         group.dataset.paramKey = paramName
+        if (spec.ui?.enabledBy) this._gatedGroups.set(paramName, { group, enabledBy: spec.ui.enabledBy })
 
         if (kind === 'string' || kind === 'vec2' || kind === 'vec3' || kind === 'color' || kind === 'choices' || kind === 'enum' || kind === 'enumInt' || kind === 'member' || kind === 'surface' || kind === 'volume' || kind === 'geometry') {
             // Most types render reasonably wide; sliders/booleans share a row well.
@@ -597,9 +624,24 @@ class EffectControls extends HTMLElement {
         return group
     }
 
+    /**
+     * The program step a parameter's value lives on. Normally the panel's own
+     * step; a 3D consumer's `volumeSize` lives on the step that creates the
+     * volume, because the engine ignores the consumer's own value.
+     */
+    _stepKeyFor(paramName) {
+        if (paramName !== 'volumeSize' || !this._effectKey) return this._effectKey
+        const stepIndex = Number(this._effectKey.slice('step_'.length))
+        const plans = this._programState?.getCompiled?.()?.plans
+        const passes = this._programState?._renderer?.pipeline?.graph?.passes
+        if (!plans || !passes) return this._effectKey
+        const owner = volumeSizeOwner(plans, passes, stepIndex)
+        return owner === null ? this._effectKey : `step_${owner}`
+    }
+
     _readValue(paramName, spec) {
         if (this._programState && this._effectKey) {
-            const v = this._programState.getValue(this._effectKey, paramName)
+            const v = this._programState.getValue(this._stepKeyFor(paramName), paramName)
             if (v !== undefined) return v
         }
         if (this._effectInfo?.args && paramName in this._effectInfo.args) {
@@ -613,10 +655,11 @@ class EffectControls extends HTMLElement {
         if (!this._programState || !this._effectKey) return
         this._applyingFromState = true
         try {
-            this._programState.setValue(this._effectKey, paramName, value)
+            this._programState.setValue(this._stepKeyFor(paramName), paramName, value)
         } finally {
             this._applyingFromState = false
         }
+        this._updateGates()
         this.dispatchEvent(new CustomEvent('paramchange', {
             bubbles: true,
             detail: { effectKey: this._effectKey, paramName, value, spec }
@@ -652,11 +695,12 @@ class EffectControls extends HTMLElement {
         for (const [paramName, spec] of Object.entries(this._effectDef.globals)) {
             const handle = this._controlHandles.get(paramName)
             if (!handle?.setValue) continue
-            const value = this._programState.getValue(this._effectKey, paramName)
+            const value = this._programState.getValue(this._stepKeyFor(paramName), paramName)
             if (value === undefined) continue
             if (isAutomationValue(value)) continue
             handle.setValue(value, spec)
         }
+        this._updateGates()
     }
 
     // -------------------------------------------------------------------------
@@ -796,7 +840,7 @@ class EffectControls extends HTMLElement {
         select.addEventListener('change', () => {
             const raw = select.value
             const parsed = parseChoiceValue(raw, spec)
-            this._commitValue(paramName, parsed, spec)
+            this._commitChoice(paramName, parsed, spec)
         })
 
         return {
@@ -822,7 +866,7 @@ class EffectControls extends HTMLElement {
 
         select.addEventListener('change', () => {
             const v = parseInt(select.value, 10)
-            this._commitValue(paramName, v, spec)
+            this._commitChoice(paramName, v, spec)
         })
 
         return {
@@ -833,25 +877,20 @@ class EffectControls extends HTMLElement {
 
     _buildMember(paramName, spec, value) {
         const select = document.createElement('select-dropdown')
-        const enumPath = spec.enumPath || spec.enum
-        const enumObj = lookupEnum(this._enums, enumPath)
-        const options = []
-        if (enumObj && typeof enumObj === 'object') {
-            for (const key of Object.keys(enumObj)) {
-                options.push({ value: key, text: key })
-            }
-        }
-        select.setOptions(options)
-        select.value = memberValueAsString(value)
+        const enumPath = memberEnumPath(spec)
+        const entries = memberEntries(lookupEnum(this._enums, enumPath), enumPath)
+        select.setOptions(entries.map(e => ({ value: e.path, text: e.key })))
+        select.value = memberPathFor(entries, value)
 
+        // The full enum path, as the engine's own UI writes it: the DSL
+        // writer emits a member value verbatim.
         select.addEventListener('change', () => {
-            const v = select.value
-            this._commitValue(paramName, { type: 'Member', path: enumPath ? [enumPath, v] : [v] }, spec)
+            this._commitChoice(paramName, select.value, spec)
         })
 
         return {
             element: select,
-            setValue: (v) => { select.value = memberValueAsString(v) }
+            setValue: (v) => { select.value = memberPathFor(entries, v) }
         }
     }
 
@@ -861,7 +900,7 @@ class EffectControls extends HTMLElement {
         select.setOptions(opts.map(o => ({ value: String(o), text: String(o) })))
         select.value = String(value ?? spec.default ?? '')
         select.addEventListener('change', () => {
-            this._commitValue(paramName, select.value, spec)
+            this._commitChoice(paramName, select.value, spec)
         })
         return {
             element: select,
@@ -872,13 +911,20 @@ class EffectControls extends HTMLElement {
     _buildOptionSelect(paramName, options, value) {
         const select = document.createElement('select-dropdown')
         select.setOptions(options.map(o => ({ value: o, text: o })))
-        select.value = typeof value === 'string' ? value : (options[0] || '')
+        select.value = resourceName(value) || options[0] || ''
         select.addEventListener('change', () => {
-            this._commitValue(paramName, select.value)
+            this._commitChoice(paramName, select.value)
+            // Which surface, volume or geometry a pass reads is part of the
+            // compiled graph, not a uniform, so a live write cannot rebind
+            // it. Both hosts already answer this event with a recompile.
+            this._programState?.emit?.('recompileNeeded')
         })
         return {
             element: select,
-            setValue: (v) => { if (typeof v === 'string') select.value = v }
+            setValue: (v) => {
+                const name = resourceName(v)
+                if (name) select.value = name
+            }
         }
     }
 
@@ -908,9 +954,38 @@ class EffectControls extends HTMLElement {
         btn.style.fontSize = '0.75rem'
         btn.textContent = spec.ui?.buttonLabel || paramName
         btn.addEventListener('click', () => {
-            this._commitValue(paramName, true, spec)
+            this._pulse(paramName, spec)
         })
         return { element: btn }
+    }
+
+    /**
+     * A button is momentary, as in the engine's own UI: its uniform is true
+     * for the frames that render it, then false again. It is written to this
+     * step's passes directly rather than through program state, where it
+     * would stay true and fire on every frame.
+     */
+    _pulse(paramName, spec) {
+        const passes = this._programState?._renderer?.pipeline?.graph?.passes
+        if (!passes || !this._effectKey) return
+        const step = Number(this._effectKey.slice('step_'.length))
+        const name = spec?.uniform || paramName
+        const targets = passes.filter(p => p.stepIndex === step && p.uniforms && name in p.uniforms)
+        const set = (v) => { for (const p of targets) p.uniforms[name] = v }
+        set(true)
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => set(false))))
+    }
+
+    /**
+     * Commit a choice from a dropdown. On an effect that keeps simulation
+     * state, a different choice restarts it: a spawn layout, a seed source or
+     * a rule only shows from a fresh start, and that is what a recompile of
+     * the program would show.
+     */
+    _commitChoice(paramName, value, spec) {
+        this._commitValue(paramName, value, spec)
+        const reset = this._effectDef?.globals?.resetState
+        if (reset?.ui?.control === 'button') this._pulse('resetState', reset)
     }
 
     _buildUnsupported(spec) {
@@ -959,14 +1034,6 @@ function parseChoiceValue(raw, spec) {
     } catch {
         return raw
     }
-}
-
-function memberValueAsString(value) {
-    if (typeof value === 'string') return value
-    if (value && typeof value === 'object' && Array.isArray(value.path)) {
-        return value.path[value.path.length - 1] ?? ''
-    }
-    return ''
 }
 
 function lookupEnum(enums, path) {
