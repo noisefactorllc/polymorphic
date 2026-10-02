@@ -32,6 +32,11 @@ test('a lost WebGL context pauses the loop and warns, then restores the program 
   })
   test.skip(!supported, 'WEBGL_lose_context is required to simulate a GPU reset')
 
+  // waitForApp only proves the backend exists; on a fast GPU the render loop
+  // may not have started yet. Wait for the loop itself so losing the context
+  // mid-boot cannot masquerade as a lost-context regression.
+  await page.waitForFunction(() => window.__poly.renderer.isRunning, null, { timeout: 30000 })
+
   const wasRunning = await page.evaluate(() => window.__poly.renderer.isRunning)
   expect(wasRunning).toBe(true)
 
