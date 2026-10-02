@@ -24,6 +24,10 @@
       "why": "a blur needs a hard edge to soften, and the derived program blurs a noise field that has none",
       "program": "search filter, synth\n\ntestPattern(pattern: checkerboard, gridSize: 8)\n  .blur(radiusX: 18, radiusY: 18)\n  .write(o0)\n\nrender(o0)\n"
     },
+    "filter/bulge": {
+      "why": "wrap only decides what fills the frame where the bulge reaches past its edge, and an unrotated bulge never does, so the derived program left all three wrap modes looking the same",
+      "program": "search synth, filter\n\ntestPattern(gridSize: 8)\n  .bulge(rotation: 45)\n  .write(o0)\n\nrender(o0)\n"
+    },
     "filter/feedback": {
       "why": "feedback only shows when something is fed back and moved, so the loop needs a mix, a blend mode and a transform",
       "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .feedback(mix: 49, blendMode: lighten, scaleAmt: 102, rotation: 3, intensity: -25)\n  .write(o0)\n\nrender(o0)\n"
@@ -60,6 +64,10 @@
       "why": "operator's program: constant-interpolated noise gives the flat regions an outline can actually trace, where the smooth default has no boundaries to ink",
       "program": "search filter, synth\n\nnoise(\n  type: constant,\n  ridges: true,\n  loopScale: 100\n)\n  .outline(thickness: 2.7)\n  .write(o0)\n\nrender(o0)\n"
     },
+    "filter/pixelSort": {
+      "why": "wrap only shows where an angled sort reads past the frame's edge, and the derived program sorts straight along the rows",
+      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .pixelSort(angled: 45)\n  .write(o0)\n\nrender(o0)\n"
+    },
     "filter/pondRipples": {
       "why": "a ripple bends straight lines, and there are none in a noise field to bend",
       "program": "search filter, synth\n\ntestPattern(pattern: gridLines, gridSize: 10)\n  .pondRipples(amount: 70, ridges: 14, speed: 2)\n  .write(o0)\n\nrender(o0)\n"
@@ -68,9 +76,21 @@
       "why": "scratches belong on a picture; the derived program puts them on a flat grey fill",
       "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .scratches(density: 0.7, alpha: 0.9, seed: 3)\n  .write(o0)\n\nrender(o0)\n"
     },
+    "filter/tetraColorArray": {
+      "why": "color mode is the space the colours are blended in, and the derived program turns blending off with smoothness 0, so every color mode looked the same",
+      "program": "search filter, synth\n\nnoise()\n  .tetraColorArray(smoothness: 1)\n  .write(o0)\n\nrender(o0)\n"
+    },
     "filter/texture": {
       "why": "a surface texture reads as a surface only when there is a picture printed on it, not a flat fill",
       "program": "search filter, synth\n\nnoise(seed: 5, octaves: 4, ridges: true, colorMode: rgb, speed: 0)\n  .grade(preset: sepia)\n  .texture(mode: canvas, alpha: 0.9, scale: 1.6, intensity: 70)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "mixer/shadow": {
+      "why": "the derived program casts the shadow from a mono image, where red, green and blue are the same channel, so the source channel choice changed nothing",
+      "program": "search mixer, synth\n\nnoise(scaleX: 100, scaleY: 100)\n  .write(o0)\n\nnoise(ridges: true, colorMode: mono)\n  .shadow(tex: read(o0), maskSource: sourceB)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "mixer/uvRemap": {
+      "why": "the derived program remaps a pattern that only varies along one axis, with coordinates that never leave the frame, so neither the channel pair nor the wrap mode changed anything",
+      "program": "search mixer, synth\n\nnoise(seed: 7, scaleX: 30, scaleY: 30)\n  .write(o0)\n\nnoise(colorMode: rgb)\n  .uvRemap(tex: read(o0), scale: 200, offset: 0.5)\n  .write(o1)\n\nrender(o1)\n"
     },
     "points/attractor": {
       "why": "pointsRender viewMode was emitted as raw integer 1 instead of the enum choice ortho matching the prose",
@@ -79,6 +99,46 @@
     "points/buddhabrot": {
       "why": "upstream defaultProgram passed numeric 512 instead of enum choice x512 to pointsEmit",
       "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: x512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "render/renderCubemap3d": {
+      "why": "the derived program ends the chain in render3d(), which redraws the volume and discards the cube map this effect draws, so the page showed render3d() and none of its controls did anything",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x64)\n  .renderCubemap3d()\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "render/renderCubemapSurface": {
+      "why": "the derived program ends the chain in render3d(), which redraws the volume and discards the cube map this effect draws, so the page showed render3d() instead",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x64)\n  .renderCubemapSurface()\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "synth/cellularAutomata": {
+      "why": "the input texture only seeds the automaton in proportion to its weight, and the derived program leaves the weight at 0, so choosing a texture changed nothing",
+      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\ncellularAutomata(tex: read(o0), weight: 50)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "synth/mandala": {
+      "why": "the spiral wave animation swings the twist, and the derived program has no twist to swing",
+      "program": "search synth\n\nmandala(twist: 30)\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "synth/mnca": {
+      "why": "the input texture only seeds the automaton in proportion to its weight, and the derived program leaves the weight at 0, so choosing a texture changed nothing",
+      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\nmnca(tex: read(o0), weight: 50)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "synth/navierStokes": {
+      "why": "smoothing filters the upscale from a zoomed simulation, and at the derived program's zoom of x1 there is no upscale to smooth",
+      "program": "search synth\n\nnoise(\n  type: hermite,\n  ridges: true,\n  speed: 30,\n  colorMode: mono\n)\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  zoom: x2,\n  dyeDecay: 98,\n  inputForce: 0.5,\n  inputIntensity: 10\n)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "synth/reactionDiffusion": {
+      "why": "the input texture only steers the reaction through a source that reads it, in proportion to its weight; the derived program reads no texture and leaves the weight at 0, so choosing a texture or a source changed nothing",
+      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\nreactionDiffusion(tex: read(o0), sourceF: sliderInput, weight: 50)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "synth/subdivide": {
+      "why": "the input texture only shows through in proportion to inputMix, and the derived program leaves it at 0; wrap only shows where a cell's shape differs from the frame's, which needs binary splits",
+      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\nsubdivide(tex: read(o0), mode: binary, inputMix: 50)\n  .write(o1)\n\nrender(o1)\n"
+    },
+    "synth3d/cellularAutomata3d": {
+      "why": "the derived program gives the automaton no source volume and a weight of 0, so choosing a source volume or geometry changed nothing",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\ncellularAutomata3d(ruleIndex: diamoeba, source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n"
+    },
+    "synth3d/reactionDiffusion3d": {
+      "why": "the source volume only steers the reaction in proportion to its weight, and the derived program leaves the weight at 0, so choosing a source volume or geometry changed nothing",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\nreactionDiffusion3d(source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n"
     }
   }
 }
