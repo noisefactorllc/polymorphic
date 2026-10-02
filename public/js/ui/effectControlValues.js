@@ -129,6 +129,27 @@ function valueOf(param, values, globals) {
     return value
 }
 
+/**
+ * A step's parameter values in the form `ui.enabledBy` conditions are written
+ * in. Member conditions name enum paths (`{ in: ['oscType.noise1d'] }`), but
+ * after a compile program state holds the enum's number, so members are
+ * resolved to their full path first.
+ * @param {Record<string, *>} values - Raw values from program state
+ * @param {Record<string, object>} globals - The effect's parameter specs
+ * @param {(path: string) => object|null} lookupEnum - Resolves an enum path
+ * @returns {Record<string, *>}
+ */
+export function gateValues(values, globals, lookupEnum) {
+    const out = { ...values }
+    for (const [name, spec] of Object.entries(globals || {})) {
+        if (spec?.type !== 'member' || out[name] === undefined) continue
+        const enumPath = memberEnumPath(spec)
+        const path = memberPathFor(memberEntries(lookupEnum(enumPath), enumPath), out[name])
+        if (path) out[name] = path
+    }
+    return out
+}
+
 function same(a, b) {
     if (a === b) return true
     if (a === null || a === undefined || b === null || b === undefined) return false

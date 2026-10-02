@@ -19,7 +19,7 @@
  * @module ui/effectControls
  */
 
-import { isEnabled, memberEnumPath, memberEntries, memberPathFor, resourceName, volumeSizeOwner } from './effectControlValues.js'
+import { gateValues, isEnabled, memberEnumPath, memberEntries, memberPathFor, resourceName, volumeSizeOwner } from './effectControlValues.js'
 
 const STYLES_ID = 'effect-controls-panel-styles'
 
@@ -555,8 +555,9 @@ class EffectControls extends HTMLElement {
     _updateGates() {
         const globals = this._effectDef?.globals
         if (!this._gatedGroups.size || !globals) return
-        const values = {}
-        for (const [name, spec] of Object.entries(globals)) values[name] = this._readValue(name, spec)
+        const raw = {}
+        for (const [name, spec] of Object.entries(globals)) raw[name] = this._readValue(name, spec)
+        const values = gateValues(raw, globals, path => lookupEnum(this._enums, path))
         for (const { group, enabledBy } of this._gatedGroups.values()) {
             const enabled = isEnabled(enabledBy, values, globals)
             group.inert = !enabled
@@ -659,6 +660,10 @@ class EffectControls extends HTMLElement {
         } finally {
             this._applyingFromState = false
         }
+        // A parameter read only when the effect's state is reseeded (a spawn
+        // layout, a seed) shows nothing until it is; reseed it now.
+        const reset = this._effectDef?.globals?.resetState
+        if (spec?.ui?.resetOnChange && reset?.ui?.control === 'button') this._pulse('resetState', reset)
         this._updateGates()
         this.dispatchEvent(new CustomEvent('paramchange', {
             bubbles: true,
@@ -840,7 +845,7 @@ class EffectControls extends HTMLElement {
         select.addEventListener('change', () => {
             const raw = select.value
             const parsed = parseChoiceValue(raw, spec)
-            this._commitChoice(paramName, parsed, spec)
+            this._commitValue(paramName, parsed, spec)
         })
 
         return {
@@ -866,7 +871,7 @@ class EffectControls extends HTMLElement {
 
         select.addEventListener('change', () => {
             const v = parseInt(select.value, 10)
-            this._commitChoice(paramName, v, spec)
+            this._commitValue(paramName, v, spec)
         })
 
         return {
@@ -885,7 +890,7 @@ class EffectControls extends HTMLElement {
         // The full enum path, as the engine's own UI writes it: the DSL
         // writer emits a member value verbatim.
         select.addEventListener('change', () => {
-            this._commitChoice(paramName, select.value, spec)
+            this._commitValue(paramName, select.value, spec)
         })
 
         return {
@@ -900,7 +905,7 @@ class EffectControls extends HTMLElement {
         select.setOptions(opts.map(o => ({ value: String(o), text: String(o) })))
         select.value = String(value ?? spec.default ?? '')
         select.addEventListener('change', () => {
-            this._commitChoice(paramName, select.value, spec)
+            this._commitValue(paramName, select.value, spec)
         })
         return {
             element: select,
@@ -913,7 +918,7 @@ class EffectControls extends HTMLElement {
         select.setOptions(options.map(o => ({ value: o, text: o })))
         select.value = resourceName(value) || options[0] || ''
         select.addEventListener('change', () => {
-            this._commitChoice(paramName, select.value)
+            this._commitValue(paramName, select.value)
             // Which surface, volume or geometry a pass reads is part of the
             // compiled graph, not a uniform, so a live write cannot rebind
             // it. Both hosts already answer this event with a recompile.
@@ -974,18 +979,6 @@ class EffectControls extends HTMLElement {
         const set = (v) => { for (const p of targets) p.uniforms[name] = v }
         set(true)
         requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => set(false))))
-    }
-
-    /**
-     * Commit a choice from a dropdown. On an effect that keeps simulation
-     * state, a different choice restarts it: a spawn layout, a seed source or
-     * a rule only shows from a fresh start, and that is what a recompile of
-     * the program would show.
-     */
-    _commitChoice(paramName, value, spec) {
-        this._commitValue(paramName, value, spec)
-        const reset = this._effectDef?.globals?.resetState
-        if (reset?.ui?.control === 'button') this._pulse('resetState', reset)
     }
 
     _buildUnsupported(spec) {

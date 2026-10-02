@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
 import {
+    gateValues,
     isEnabled,
     memberEnumPath,
     memberEntries,
@@ -70,6 +71,18 @@ test('isEnabled compares resource parameters by name', () => {
     assert.strictEqual(isEnabled(gate, { tex: { kind: 'output', name: 'none' } }, globals), false)
     assert.strictEqual(isEnabled(gate, { tex: { kind: 'output', name: 'o0' } }, globals), true)
     assert.strictEqual(isEnabled(gate, { tex: 'o2' }, globals), true)
+})
+
+test('a member gate matches whether state holds the number or the path', () => {
+    // osc2d: seed is enabled for oscType in [noise1d, noise2d]
+    const globals = { oscType: { type: 'member', enum: 'oscType' }, seed: { type: 'int' } }
+    const enums = { oscType: { sine: 0, noise1d: 5, noise2d: { value: 6 } } }
+    const gate = { param: 'oscType', in: ['oscType.noise1d', 'oscType.noise2d'] }
+    const lookup = path => enums[path] || null
+    assert.strictEqual(isEnabled(gate, gateValues({ oscType: 5 }, globals, lookup), globals), true)
+    assert.strictEqual(isEnabled(gate, gateValues({ oscType: 6 }, globals, lookup), globals), true)
+    assert.strictEqual(isEnabled(gate, gateValues({ oscType: 'oscType.noise1d' }, globals, lookup), globals), true)
+    assert.strictEqual(isEnabled(gate, gateValues({ oscType: 0 }, globals, lookup), globals), false)
 })
 
 // noise3d(volumeSize: x64).palette3d().render3d().write(o0)
