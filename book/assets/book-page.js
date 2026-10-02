@@ -179,6 +179,7 @@ function wireProgramStateToEditor() {
         } finally {
             suppressDslReact = false
         }
+        refreshText(next)
     })
 
     // Parameters that change the shader itself cannot be pushed as a uniform.
@@ -190,6 +191,19 @@ function wireProgramStateToEditor() {
         hotReloadTimer = null
         compile()
     })
+}
+
+/**
+ * Text overlays are rasterized by the host, not by a shader, so a control
+ * edit to a text parameter has to redraw them. A newly chosen font is loaded
+ * first, as compile() does, or it would rasterize in a fallback face.
+ */
+function refreshText(dsl) {
+    preloadFontsForDsl(dsl)
+        .catch(err => console.warn('[book] font preload failed:', err))
+        .then(() => {
+            if (editor.value === dsl) renderer?.refreshTextTextures(dsl)
+        })
 }
 
 /* ------------------------------------------------------------------ *

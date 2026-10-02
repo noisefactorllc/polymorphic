@@ -266,6 +266,23 @@ export class PolymorphicRenderer {
     }
 
     /**
+     * Re-rasterize the text overlays from a program whose parameters changed
+     * without a recompile. Text is drawn here, by the host, rather than in a
+     * shader, so a control-panel edit to `font`, `justify`, `size` or any other
+     * text parameter reaches the screen only through this. Callers wait for
+     * the program's fonts first, as compile() does.
+     * @param {string} dsl - The program as it now stands
+     */
+    refreshTextTextures(dsl) {
+        if (!this._renderer._pipeline) return
+        const engineDsl = this._imageTools ? this._imageTools.stripMediaUrls(dsl) : dsl
+        this._lastAllTextParams = this._extractTextEffects(engineDsl)
+        for (const { params, stepIndex } of this._lastAllTextParams) {
+            this._renderTextTexture(params, stepIndex)
+        }
+    }
+
+    /**
      * Resolve once the pipeline backend is ready to accept texture uploads.
      *
      * The engine assigns `_pipeline` (and its backend) synchronously inside the

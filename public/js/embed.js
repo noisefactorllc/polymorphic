@@ -2001,6 +2001,14 @@ function setupProgramState() {
             suppressDslReact = false
         }
         publishLocalDsl('program-state')
+
+        // Text overlays are rasterized here, not by a shader, so a panel edit
+        // to a text parameter has to redraw them, in its newly chosen font.
+        preloadFontsForDsl(editorDsl)
+            .catch(err => console.warn('[Polymorphic] font preload failed:', err))
+            .then(() => {
+                if (dslEditor.value === editorDsl) renderer?.refreshTextTextures(editorDsl)
+            })
     })
 
     // For `define` params (those that affect shader compilation), ProgramState

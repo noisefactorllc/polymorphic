@@ -19,6 +19,7 @@ function harness() {
     const timers = []
     const compiles = []
     const published = []
+    const textRefreshes = []
     const editor = { value: 'old' }
     const state = { text: 'old', handlers: {}, fromDsl(text) { this.text = text },
         toDsl() { return this.text + ':parameter' }, on(event, fn) { this.handlers[event] = fn } }
@@ -27,7 +28,7 @@ function harness() {
             const gate = deferred()
             compiles.push({ text, ...gate })
             return gate.promise
-        } }, ProgramState: function () { return state }, programState: state,
+        }, refreshTextTextures: text => textRefreshes.push(text) }, ProgramState: function () { return state }, programState: state,
         suppressDslReact: false, hotReloadTimeout: null, _compileInFlight: false,
         preloadFontsForDsl: async () => {}, refreshControlsPanelAfterDslChange() {},
         showCompilerError() {}, hideCompilerError() {}, outputPicker: { setDsl: async () => {} },
@@ -42,7 +43,7 @@ function harness() {
     ].join('\n'), context)
     context.setupProgramState()
     context.syncProgramStateFromDsl('old')
-    return { context, editor, state, timers, compiles, published }
+    return { context, editor, state, timers, compiles, published, textRefreshes }
 }
 
 test('a remote edit arriving during compilation is compiled after the running edit', async () => {
@@ -111,6 +112,13 @@ test('controls can publish consecutive parameter edits for the current compiled 
     h.state.handlers.change()
     assert.equal(h.editor.value, 'old:parameter:parameter')
     assert.equal(h.published.length, 2)
+})
+
+test('a controls change redraws text overlays from the program it wrote', async () => {
+    const h = harness()
+    h.state.handlers.change()
+    await flush()
+    assert.deepEqual(h.textRefreshes, ['old:parameter'])
 })
 
 test('a failed compile releases the queue so the next draft can recover', async () => {
