@@ -8,12 +8,22 @@
  * of an effect, and synth/cell has a parameter *labelled* "cell smooth", so a
  * naive check resolved the stale name twice over and passed. Both holes are
  * pinned here.
+ *
+ * The program-level cases pin argument precision the same way: a value of the
+ * wrong type (`text(text: 42)`), an unknown argument, a positional argument
+ * matched to the signature order, and `media()` — which the book gives no
+ * page but a program may still call — checked against the engine's extracted
+ * signature. A page whose arguments drift from the compiler's signature must
+ * fail here, not reach readers as code that does not run.
  */
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildIndex, checkParagraph, checkProgram, extractCalls, parseNamedArgs } from '../../scripts/check-book-params.mjs'
+import { buildIndex, checkParagraph, checkProgram, extractCalls, parseCallArgs, parseNamedArgs } from '../../scripts/check-book-params.mjs'
+import { readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /** A miniature engine, shaped like book/data/effects.json. */
 const data = {
@@ -37,7 +47,31 @@ const data = {
         {
             id: 'render/pointsRender',
             func: 'pointsRender',
-            params: [{ name: 'viewMode', label: 'view mode', choices: ['flat', 'ortho'] }],
+            params: [{ name: 'viewMode', label: 'view mode', type: 'int', choices: ['flat', 'ortho'] }],
+        },
+        // text() and media(), shaped like the engine's filter/text and
+        // synth/media: free-form string parameters with no choices, numeric
+        // parameters, and — for media — an alias the engine resolves to its
+        // declared global.
+        {
+            id: 'filter/text',
+            func: 'text',
+            params: [
+                { name: 'text', label: 'text', type: 'string', choices: null },
+                { name: 'font', label: 'font', type: 'string', choices: ['serif', 'mono'] },
+                { name: 'size', label: 'size', type: 'float', choices: null },
+            ],
+        },
+        {
+            id: 'synth/media',
+            func: 'media',
+            params: [
+                { name: 'position', label: 'position', type: 'int', choices: ['midCenter', 'topRight'] },
+                { name: 'scaleAmt', label: 'scale %', type: 'float', choices: null },
+                { name: 'bgColor', label: 'bg color', type: 'color', choices: null },
+                { name: 'bgAlpha', label: 'bg opacity', type: 'float', choices: null },
+            ],
+            aliases: { backgroundColor: 'bgColor' },
         },
     ],
 }
@@ -169,4 +203,95 @@ test('extractCalls handles strings with parens and line comments without cutting
     assert.equal(calls[3].name, 'render')
 })
 
+test('parseCallArgs keeps positional and named arguments in source order', () => {
+    const args = parseCallArgs('"hello", font: serif, 0.2, size: 0.4')
+    assert.deepEqual(args, [
+        { name: null, value: '"hello"' },
+        { name: 'font', value: 'serif' },
+        { name: null, value: '0.2' },
+        { name: 'size', value: '0.4' },
+    ])
+})
+
+test('a number passed to text()\'s string parameter fails', () => {
+    const fails = checkProg('text(text: 42).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].call, 'text')
+    assert.equal(fails[0].param, 'text')
+    assert.equal(fails[0].value, '42')
+    assert.match(fails[0].why, /expects a string/)
+})
+
+test('a string passed to a float parameter fails', () => {
+    const fails = checkProg('text(size: "big").write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'size')
+    assert.equal(fails[0].value, '"big"')
+    assert.match(fails[0].why, /expects a number/)
+})
+
+test('an unknown argument on text() fails', () => {
+    const fails = checkProg('text(wibble: 1).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'wibble')
+    assert.match(fails[0].why, /"wibble" is not a parameter of text\(\)/)
+})
+
+test('a valid text() call resolves', () => {
+    assert.deepEqual(checkProg('text(text: "hello", font: serif, size: 0.2).write(o0)\nrender(o0)'), [])
+    // The engine writes a bare identifier for a string value that reads as
+    // one, and a quoted literal otherwise.
+    assert.deepEqual(checkProg('text(font: "serif", text: """two\nlines""").write(o0)\nrender(o0)'), [])
+})
+
+test('positional arguments are matched to the signature order', () => {
+    // The engine's filter/text signature: text, font, size.
+    assert.deepEqual(checkProg('text("hello").write(o0)\nrender(o0)'), [])
+    assert.deepEqual(checkProg('text("hello", serif, 0.2).write(o0)\nrender(o0)'), [])
+    // A positional argument still gets its parameter's type check...
+    const typeMismatch = checkProg('text(42).write(o0)\nrender(o0)')
+    assert.equal(typeMismatch.length, 1)
+    assert.equal(typeMismatch[0].param, 'text')
+    assert.match(typeMismatch[0].why, /expects a string/)
+    // ...and too many positional arguments is an unknown argument.
+    const overflow = checkProg('text("a", serif, 0.1, "extra").write(o0)\nrender(o0)')
+    assert.equal(overflow.length, 1)
+    assert.match(overflow[0].why, /exceeds the 3 parameter\(s\) of text\(\)/)
+})
+
+test('a media() argument the engine does not accept fails', () => {
+    const fails = checkProg('media(src: "x").write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].call, 'media')
+    assert.equal(fails[0].param, 'src')
+    assert.match(fails[0].why, /"src" is not a parameter of media\(\)/)
+})
+
+test('a valid media() call resolves, including its alias and app-owned url', () => {
+    assert.deepEqual(checkProg('media(position: midCenter, scaleAmt: 100).write(o0)\nrender(o0)'), [])
+    assert.deepEqual(checkProg('media(backgroundColor: #ff0000, bgAlpha: 1).write(o0)\nrender(o0)'), [])
+    // url is not an engine parameter — the engine rejects it at compile — but
+    // the app strips it before compiling (dslSanitize.js), so it still runs.
+    assert.deepEqual(checkProg('media(url: "https://example.com/x.png").write(o0)\nrender(o0)'), [])
+    // A url is carried as a string, not a number.
+    const badUrl = checkProg('media(url: 42).write(o0)\nrender(o0)')
+    assert.equal(badUrl.length, 1)
+    assert.match(badUrl[0].why, /"url" is not a parameter of media\(\)/)
+})
+
+test('the committed engine signatures for text() and media() resolve against the book index', () => {
+    const book = JSON.parse(readFileSync(join(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'), 'book', 'data', 'effects.json'), 'utf8'))
+    const bookIndex = buildIndex(book)
+    assert.equal(bookIndex.funcs.has('text'), true, 'filter/text missing from the book index')
+    assert.equal(bookIndex.funcs.has('media'), true, 'the excluded synth/media signature is missing from the book index')
+    const program = (call) => `${call}.write(o0)\nrender(o0)`
+    assert.deepEqual(checkProgram(program('text(text: "hello", font: serif, size: 0.2)'), null, bookIndex), [])
+    assert.deepEqual(checkProgram(program('media(position: midCenter, scaleAmt: 100)'), null, bookIndex), [])
+    const mediaUnknown = checkProgram(program('media(orientation: topRight)'), null, bookIndex)
+    assert.equal(mediaUnknown.length, 1)
+    assert.match(mediaUnknown[0].why, /"orientation" is not a parameter of media\(\)/)
+    const textNumber = checkProgram(program('text(text: 42)'), null, bookIndex)
+    assert.equal(textNumber.length, 1)
+    assert.match(textNumber[0].why, /expects a string/)
+})
 

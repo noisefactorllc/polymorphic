@@ -41,6 +41,16 @@
  * Reads book/data/effects.json, which is extracted from the engine by
  * scripts/extract-book-data.mjs, so the check is always against the shipped
  * definitions rather than a second copy of them maintained by hand.
+ *
+ * Demonstration programs get the same treatment, argument by argument: an
+ * argument's name must be a parameter of the effect it is passed to, its
+ * value must match that parameter's type (a string literal for `text()`, a
+ * number for a float parameter, and so on — `read(...)`, `read3d(...)`,
+ * `palette.*` and the output buffers stay acceptable as dynamic forms),
+ * positional arguments are matched to the signature order, and effects the
+ * book gives no page but a program may still call (media() above all, whose
+ * signature the extraction carries in `excludedEffects`) are checked against
+ * their engine definition rather than waved through.
  */
 
 import { readFile, readdir } from 'node:fs/promises'
@@ -123,6 +133,26 @@ export function buildIndex(data) {
         // than overwrite, so a cross reference resolves against all of them.
         const prior = vocabulary.get(effect.func)
         vocabulary.set(effect.func, prior ? new Set([...prior, ...words]) : words)
+    }
+
+    // Effects the book deliberately gives no page (book/curation.json's
+    // excludes) still have a real signature, extracted alongside the rest
+    // into data.excludedEffects. A demonstration program may call them —
+    // media() above all — so they are indexed for argument checking exactly
+    // like page effects. `url` joins media's vocabulary: it is not an engine
+    // parameter (the engine rejects it at compile), it is an argument the
+    // app owns and strips before compiling — see
+    // public/js/noisemaker/dslSanitize.js — so prose describing
+    // `media(url: "...")` must still resolve.
+    for (const effect of data.excludedEffects || []) {
+        byId.set(effect.id, effect)
+        funcs.add(effect.func)
+        effectsByFunc.set(effect.func, [effect])
+
+        const words = new Set()
+        for (const param of effect.params || []) words.add(param.name)
+        if (effect.func === 'media') words.add('url')
+        vocabulary.set(effect.func, words)
     }
     return { byId, funcs, vocabulary, effectsByFunc }
 }
@@ -246,8 +276,8 @@ export function extractCalls(dsl) {
     return calls
 }
 
-/** Split argument string on top-level commas, extracting named arguments. */
-export function parseNamedArgs(argsStr) {
+/** Split argument string on top-level commas. */
+function splitArgs(argsStr) {
     const args = []
     let depth = 0
     let current = ''
@@ -300,15 +330,91 @@ export function parseNamedArgs(argsStr) {
         }
     }
     if (current.trim()) args.push(current.trim())
+    return args
+}
 
-    const named = []
-    for (const arg of args) {
-        const m = arg.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([\s\S]*)$/)
-        if (m) {
-            named.push({ name: m[1], value: m[2].trim() })
-        }
+/**
+ * Parse an argument string into its arguments in source order. An argument is
+ * named when it is written `name: value`; otherwise it is positional and gets
+ * a null name, so the caller can match it against the signature order.
+ */
+export function parseCallArgs(argsStr) {
+    const namedPattern = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([\s\S]*)$/
+    return splitArgs(argsStr).map(arg => {
+        const m = arg.match(namedPattern)
+        if (m) return { name: m[1], value: m[2].trim() }
+        return { name: null, value: arg }
+    })
+}
+
+/** Split argument string on top-level commas, extracting named arguments. */
+export function parseNamedArgs(argsStr) {
+    return parseCallArgs(argsStr).filter(arg => arg.name !== null)
+}
+
+/**
+ * The value forms every parameter accepts no matter its type: a reference the
+ * checker cannot resolve a literal type for, read from elsewhere in the
+ * pipeline (`read(...)`, `read3d(...)`, a palette reference, an output
+ * buffer).
+ */
+function isDynamic(value) {
+    return value.startsWith('read(') ||
+        value.startsWith('read3d(') ||
+        value.startsWith('palette.') ||
+        /^o\d+$/.test(value)
+}
+
+/** A string literal, single or triple quoted, in either quote character. */
+function isQuotedString(value) {
+    const triple = value.slice(0, 3)
+    if (triple === '"""' || triple === "'''") return value.endsWith(triple) && value.length >= 6
+    const q = value[0]
+    if (q === '"' || q === "'") return value.length >= 2 && value.endsWith(q)
+    return false
+}
+
+const NUMBER = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/
+const BARE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+const ENUM_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+
+/**
+ * What the engine's `formatValue` will write for a value of each parameter
+ * type, and therefore what a hand-written demonstration program may pass.
+ * Numeric parameters accept a (possibly negative) literal or one of the
+ * dynamic forms the checker already accepts (`read(...)`, `read3d(...)`, a
+ * palette reference, an output buffer); string parameters receive string
+ * literals, written quoted unless the value reads as a bare identifier or an
+ * enum path, exactly as the engine writes them back; booleans are
+ * `true`/`false`; colors a bare or quoted `#rgb`/`#rrggbb` (+alpha) hex;
+ * vectors `vecN(...)`. Anything outside the form the engine emits for that
+ * type is a mismatch the compiler will reject or silently misread.
+ */
+export function valueMatchesType(value, pDef) {
+    switch (pDef.type) {
+        case 'string': return isQuotedString(value) || BARE_IDENTIFIER.test(value) || ENUM_PATH.test(value)
+        case 'float':
+        case 'int': return isDynamic(value) || NUMBER.test(value)
+        case 'boolean': return value === 'true' || value === 'false'
+        case 'color': return HEX_COLOR.test(value) || isQuotedString(value)
+        case 'vec2': return isDynamic(value) || /^vec2\s*\(/.test(value) || /^\[[^[\]]*\]$/.test(value)
+        case 'vec3': return isDynamic(value) || /^vec3\s*\(/.test(value) || /^\[[^[\]]*\]$/.test(value) || HEX_COLOR.test(value)
+        // surface / volume / geometry / member / mat3 and types the checker
+        // does not model yet are left unchecked rather than guessed at: the
+        // dynamic forms above cover how the book writes them.
+        default: return true
     }
-    return named
+}
+
+const TYPE_EXPECTATION = {
+    string: 'a string',
+    float: 'a number',
+    int: 'a number',
+    boolean: 'true or false',
+    color: 'a color (#rrggbb)',
+    vec2: 'vec2(...)',
+    vec3: 'vec3(...)',
 }
 
 /**
@@ -342,33 +448,77 @@ export function checkProgram(program, effect, index) {
                 paramDefs.set(p.name, p)
             }
         }
+        // The engine still resolves a param alias to its declared global
+        // (with a deprecation warning), so an alias is checked as the
+        // parameter it stands for. Registered in a second pass: an alias may
+        // name a param later in the definition order than another alias.
+        for (const def of effectDefs) {
+            for (const [alias, target] of Object.entries(def.aliases || {})) {
+                if (paramDefs.has(target)) paramDefs.set(alias, paramDefs.get(target))
+            }
+        }
+        // Signature order for positional arguments: the engine's globals, in
+        // definition order, which is the order the extracted params carry.
+        const signature = [...new Set(effectDefs.flatMap(def => (def.params || []).map(p => p.name)))]
 
-        const namedArgs = parseNamedArgs(call.argsStr)
-        for (const arg of namedArgs) {
-            if (!paramDefs.has(arg.name)) {
+        const args = parseCallArgs(call.argsStr)
+        let positionalIndex = 0
+        for (const arg of args) {
+            let paramName = arg.name
+            if (arg.name === null) {
+                // Positional argument, matched to the signature order.
+                paramName = signature[positionalIndex]
+                positionalIndex++
+                if (paramName === undefined) {
+                    failures.push({
+                        call: call.name,
+                        param: null,
+                        value: arg.value,
+                        why: `positional argument "${arg.value}" exceeds the ${signature.length} parameter(s) of ${call.name}()`
+                    })
+                    continue
+                }
+            }
+
+            if (!paramDefs.has(paramName)) {
+                // media()'s url is not an engine parameter — the engine
+                // rejects it at compile — but the app owns it and strips it
+                // before compiling (public/js/noisemaker/dslSanitize.js), so
+                // a program carrying it still runs.
+                if (call.name === 'media' && paramName === 'url' && isQuotedString(arg.value)) continue
                 failures.push({
                     call: call.name,
-                    param: arg.name,
+                    param: paramName,
                     value: arg.value,
-                    why: `"${arg.name}" is not a parameter of ${call.name}()`
+                    why: `"${paramName}" is not a parameter of ${call.name}()`
                 })
                 continue
             }
 
-            const pDef = paramDefs.get(arg.name)
+            const pDef = paramDefs.get(paramName)
             if (pDef.choices && pDef.choices.length > 0) {
-                const isDynamic = arg.value.startsWith('read(') ||
-                    arg.value.startsWith('read3d(') ||
-                    arg.value.startsWith('palette.') ||
-                    /^o\d+$/.test(arg.value)
-                if (!isDynamic && !pDef.choices.includes(arg.value)) {
+                // A string-typed choice may also be written as a quoted
+                // literal of the choice name.
+                const quotedChoice = pDef.type === 'string' && isQuotedString(arg.value) &&
+                    pDef.choices.includes(arg.value.slice(1, -1))
+                if (!isDynamic(arg.value) && !quotedChoice && !pDef.choices.includes(arg.value)) {
                     failures.push({
                         call: call.name,
-                        param: arg.name,
+                        param: paramName,
                         value: arg.value,
-                        why: `"${arg.value}" is not a valid choice for ${call.name}(${arg.name}: ...); choices: [${pDef.choices.join(', ')}]`
+                        why: `"${arg.value}" is not a valid choice for ${call.name}(${paramName}: ...); choices: [${pDef.choices.join(', ')}]`
                     })
                 }
+                continue
+            }
+
+            if (!valueMatchesType(arg.value, pDef)) {
+                failures.push({
+                    call: call.name,
+                    param: paramName,
+                    value: arg.value,
+                    why: `"${arg.value}" is not a valid value for ${call.name}(${paramName}: ...); ${paramName} expects ${TYPE_EXPECTATION[pDef.type] || `a value of type ${pDef.type}`}`
+                })
             }
         }
     }
@@ -436,7 +586,7 @@ async function main() {
             const text = await readFile(join(CONTENT, chapter, file), 'utf8')
             for (const paragraph of paragraphs(text)) {
                 for (const token of checkParagraph(paragraph, effect, index)) {
-                    const owners = data.effects
+                    const owners = [...data.effects, ...(data.excludedEffects || [])]
                         .filter(e => (e.params || []).some(p => p.name === token))
                         .map(e => e.id)
                     failures.push({

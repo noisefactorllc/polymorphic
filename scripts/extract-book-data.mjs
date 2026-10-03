@@ -435,6 +435,7 @@ async function main() {
     const usedOverrides = new Set()
 
     const effects = []
+    const excludedEffects = []
     const skipped = []
 
     for (const id of ids) {
@@ -453,9 +454,19 @@ async function main() {
         }
 
         // Editorial exclusions from book/curation.json: effects that cannot
-        // show anything on a page nobody is standing in front of.
+        // show anything on a page nobody is standing in front of. Their
+        // signature is still emitted (excludedEffects below): the book never
+        // gives them a page, but a demonstration program may still call them,
+        // and scripts/check-book-params.mjs validates those calls against the
+        // engine's own definition rather than a second hand-maintained copy.
         if (excluded[id]) {
             skipped.push(`${id} (excluded: ${excluded[id]})`)
+            excludedEffects.push({
+                id,
+                func: instance.func || name,
+                params: publicParams(instance),
+                aliases: instance.paramAliases ?? null,
+            })
             continue
         }
 
@@ -497,6 +508,7 @@ async function main() {
         generator: 'scripts/extract-book-data.mjs',
         chapters,
         effects,
+        excludedEffects,
     }, null, 2) + '\n'
 
     await mkdir(dirname(OUT), { recursive: true })

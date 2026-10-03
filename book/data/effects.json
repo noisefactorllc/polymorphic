@@ -16198,5 +16198,4796 @@
         }
       ]
     }
+  ],
+  "excludedEffects": [
+    {
+      "id": "render/meshLoader",
+      "func": "meshLoader",
+      "params": [],
+      "aliases": null
+    },
+    {
+      "id": "render/meshRender",
+      "func": "meshRender",
+      "params": [
+        {
+          "name": "scale",
+          "label": "mesh scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.01,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "offsetX",
+          "label": "mesh offset x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "offsetY",
+          "label": "mesh offset y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "offsetZ",
+          "label": "mesh offset z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "rotateX",
+          "label": "rotate x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "rotateY",
+          "label": "rotate y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "rotateZ",
+          "label": "rotate z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "viewScale",
+          "label": "zoom",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.1,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "posX",
+          "label": "position x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -10,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "posY",
+          "label": "position y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -10,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "lightDirection",
+          "label": "direction",
+          "type": "vec3",
+          "control": "vector3",
+          "default": [
+            0.5,
+            0.7,
+            0.5
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "diffuseColor",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "diffuseIntensity",
+          "label": "intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.7,
+          "min": 0,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "specularColor",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "specularIntensity",
+          "label": "intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.3,
+          "min": 0,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "shininess",
+          "label": "shininess",
+          "type": "float",
+          "control": "slider",
+          "default": 32,
+          "min": 1,
+          "max": 256,
+          "choices": null
+        },
+        {
+          "name": "ambientColor",
+          "label": "ambient color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "rimIntensity",
+          "label": "rim intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.15,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "rimPower",
+          "label": "rim power",
+          "type": "float",
+          "control": "slider",
+          "default": 3,
+          "min": 0.5,
+          "max": 8,
+          "choices": null
+        },
+        {
+          "name": "meshColor",
+          "label": "base color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "bg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.1,
+            0.1,
+            0.15
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "bg opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "wireframe",
+          "label": "render mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "solid",
+            "wireframe"
+          ]
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth/media",
+      "func": "media",
+      "params": [
+        {
+          "name": "position",
+          "label": "position",
+          "type": "int",
+          "control": "dropdown",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "choices": [
+            "topLeft",
+            "topCenter",
+            "topRight",
+            "midLeft",
+            "midCenter",
+            "midRight",
+            "bottomLeft",
+            "bottomCenter",
+            "bottomRight"
+          ]
+        },
+        {
+          "name": "tiling",
+          "label": "tiling",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "none",
+            "horizAndVert",
+            "horizOnly",
+            "vertOnly"
+          ]
+        },
+        {
+          "name": "flip",
+          "label": "flip/mirror",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "none",
+            "all",
+            "horizontal",
+            "vertical",
+            "mirrorLtoR",
+            "mirrorRtoL",
+            "mirrorUtoD",
+            "mirrorDtoU",
+            "mirrorLtoRUtoD",
+            "mirrorLtoRDtoU",
+            "mirrorRtoLUtoD",
+            "mirrorRtoLDtoU"
+          ]
+        },
+        {
+          "name": "scaleAmt",
+          "label": "scale %",
+          "type": "float",
+          "control": "slider",
+          "default": 100,
+          "min": 25,
+          "max": 400,
+          "choices": null
+        },
+        {
+          "name": "rotation",
+          "label": "rotate",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "offsetX",
+          "label": "offset x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "offsetY",
+          "label": "offset y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "bg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "bg opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "imageSize",
+          "label": "imageSize",
+          "type": "vec2",
+          "control": null,
+          "default": [
+            1024,
+            1024
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      ],
+      "aliases": {
+        "backgroundColor": "bgColor",
+        "backgroundOpacity": "bgAlpha"
+      }
+    },
+    {
+      "id": "synth/remap",
+      "func": "remap",
+      "params": [
+        {
+          "name": "zoneCount",
+          "label": "zone count",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "background",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "background alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "smoothEdge",
+          "label": "edge smoothing",
+          "type": "float",
+          "control": "slider",
+          "default": 0.04,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone0_tex",
+          "label": "zone 1 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone0_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone0_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone0_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_tex",
+          "label": "zone 2 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone1_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone1_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone1_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_tex",
+          "label": "zone 3 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone2_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone2_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone2_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_tex",
+          "label": "zone 4 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone3_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone3_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone3_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_tex",
+          "label": "zone 5 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone4_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone4_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone4_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_tex",
+          "label": "zone 6 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone5_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone5_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone5_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_tex",
+          "label": "zone 7 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone6_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone6_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone6_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_tex",
+          "label": "zone 8 source",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_count",
+          "label": "vertices",
+          "type": "int",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 64,
+          "choices": null
+        },
+        {
+          "name": "zone7_alpha",
+          "label": "alpha",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "zone7_bounds",
+          "label": "bounds",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v0",
+          "label": "verts 0–1",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v1",
+          "label": "verts 2–3",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v2",
+          "label": "verts 4–5",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v3",
+          "label": "verts 6–7",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v4",
+          "label": "verts 8–9",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v5",
+          "label": "verts 10–11",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v6",
+          "label": "verts 12–13",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v7",
+          "label": "verts 14–15",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v8",
+          "label": "verts 16–17",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v9",
+          "label": "verts 18–19",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v10",
+          "label": "verts 20–21",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v11",
+          "label": "verts 22–23",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v12",
+          "label": "verts 24–25",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v13",
+          "label": "verts 26–27",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v14",
+          "label": "verts 28–29",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v15",
+          "label": "verts 30–31",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v16",
+          "label": "verts 32–33",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v17",
+          "label": "verts 34–35",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v18",
+          "label": "verts 36–37",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v19",
+          "label": "verts 38–39",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v20",
+          "label": "verts 40–41",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v21",
+          "label": "verts 42–43",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v22",
+          "label": "verts 44–45",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v23",
+          "label": "verts 46–47",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v24",
+          "label": "verts 48–49",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v25",
+          "label": "verts 50–51",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v26",
+          "label": "verts 52–53",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v27",
+          "label": "verts 54–55",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v28",
+          "label": "verts 56–57",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v29",
+          "label": "verts 58–59",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v30",
+          "label": "verts 60–61",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "zone7_v31",
+          "label": "verts 62–63",
+          "type": "vec4",
+          "control": "slider",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth/roll",
+      "func": "roll",
+      "params": [
+        {
+          "name": "color",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            1,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "gain",
+          "label": "gain",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.1,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "speed",
+          "label": "speed",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.5,
+          "max": 5,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth/scope",
+      "func": "scope",
+      "params": [
+        {
+          "name": "color",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            1,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "thickness",
+          "label": "thickness",
+          "type": "float",
+          "control": "slider",
+          "default": 2,
+          "min": 0.5,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "gain",
+          "label": "gain",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.1,
+          "max": 5,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth/spectrum",
+      "func": "spectrum",
+      "params": [
+        {
+          "name": "color",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            1,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "thickness",
+          "label": "thickness",
+          "type": "float",
+          "control": "slider",
+          "default": 2,
+          "min": 0.5,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "gain",
+          "label": "gain",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.1,
+          "max": 5,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    }
   ]
 }
