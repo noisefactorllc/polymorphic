@@ -122,8 +122,14 @@ test('native read failure clears active state and permits a new source', async (
     await page.evaluate(() => window.audio.disable())
 })
 
-for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts ${backend} renderer bytes while audio and video share the grant`, async ({ page }) => {
-    test.slow()
+async function runNativeReceiverTest(page, backend, viewport = null) {
+    if (viewport) {
+        // The app floors CSS×DPR for the canvas buffer, so an odd CSS
+        // viewport yields an odd frame geometry. The compressed H.264 path
+        // cannot serve that size; the output must start through the RGBA
+        // export-queue fallback and still deliver real receiver bytes.
+        await page.setViewportSize(viewport)
+    }
     await page.route('**/js/sync/bundle.js', route => route.fulfill({
         contentType: 'text/javascript',
         body: `export * from '/js/sync/sdk/0.3.3/browser/index.js';
@@ -186,6 +192,16 @@ for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts ${back
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
     expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)
     expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
+}
+
+for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts ${backend} renderer bytes while audio and video share the grant`, async ({ page }) => {
+    test.slow()
+    await runNativeReceiverTest(page, backend)
+})
+
+for (const backend of ['webgl2', 'webgpu']) test(`native receiver accepts odd ${backend} frame geometry through the fallback queue`, async ({ page }) => {
+    test.slow()
+    await runNativeReceiverTest(page, backend, { width: 1281, height: 723 })
 })
 
 test('a failed native input keeps its selected identity and the enable button permits retry', async ({ page }) => {
