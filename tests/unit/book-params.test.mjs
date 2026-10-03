@@ -239,9 +239,20 @@ test('an unknown argument on text() fails', () => {
 
 test('a valid text() call resolves', () => {
     assert.deepEqual(checkProg('text(text: "hello", font: serif, size: 0.2).write(o0)\nrender(o0)'), [])
-    // The engine writes a bare identifier for a string value that reads as
-    // one, and a quoted literal otherwise.
+    // The engine always writes string values quoted; a bare word passes only
+    // as an enum choice of the parameter, which font's choices allow.
     assert.deepEqual(checkProg('text(font: "serif", text: """two\nlines""").write(o0)\nrender(o0)'), [])
+})
+
+test('a bare identifier passed to a string parameter with no choices fails', () => {
+    // The engine writes its string values quoted: text(text: hello) is not
+    // something it would hand back, and a free-form call must not slip past
+    // as a bare word.
+    const fails = checkProg('text(text: hello).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'text')
+    assert.equal(fails[0].value, 'hello')
+    assert.match(fails[0].why, /expects a string/)
 })
 
 test('positional arguments are matched to the signature order', () => {

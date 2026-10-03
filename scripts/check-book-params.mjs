@@ -375,8 +375,6 @@ function isQuotedString(value) {
 }
 
 const NUMBER = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/
-const BARE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
-const ENUM_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 
 /**
@@ -384,16 +382,17 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
  * type, and therefore what a hand-written demonstration program may pass.
  * Numeric parameters accept a (possibly negative) literal or one of the
  * dynamic forms the checker already accepts (`read(...)`, `read3d(...)`, a
- * palette reference, an output buffer); string parameters receive string
- * literals, written quoted unless the value reads as a bare identifier or an
- * enum path, exactly as the engine writes them back; booleans are
- * `true`/`false`; colors a bare or quoted `#rgb`/`#rrggbb` (+alpha) hex;
- * vectors `vecN(...)`. Anything outside the form the engine emits for that
- * type is a mismatch the compiler will reject or silently misread.
+ * palette reference, an output buffer); a string parameter receives a string
+ * literal — the engine always writes its string values quoted, so a bare
+ * word passes only as an enum choice of the parameter, which the choices
+ * branch above already checks; booleans are `true`/`false`; colors a bare or
+ * quoted `#rgb`/`#rrggbb` (+alpha) hex; vectors `vecN(...)`. Anything outside
+ * the form the engine emits for that type is a mismatch the compiler will
+ * reject or silently misread.
  */
 export function valueMatchesType(value, pDef) {
     switch (pDef.type) {
-        case 'string': return isQuotedString(value) || BARE_IDENTIFIER.test(value) || ENUM_PATH.test(value)
+        case 'string': return isQuotedString(value)
         case 'float':
         case 'int': return isDynamic(value) || NUMBER.test(value)
         case 'boolean': return value === 'true' || value === 'false'
