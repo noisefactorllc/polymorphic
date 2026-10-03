@@ -58,7 +58,7 @@ export function createSyncAudioInput({
             const discover = async () => {
                 client = new Client({ token: credential.token })
                 const welcome = await client.connect()
-                if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.available && provider.selected))
+                if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.direction === 'receive' && provider.available && provider.selected))
                     throw new Error('Update Sync to a version that supports audio input')
                 return client.listAudioSources()
             }
@@ -113,7 +113,7 @@ export function createSyncAudioInput({
         try {
             client = new Client({ token: credential.token })
             const welcome = await client.connect()
-            if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.available && provider.selected)) {
+            if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.direction === 'receive' && provider.available && provider.selected)) {
                 if (generation === discoveryGeneration) devices = devices.map(device => ({ ...device, connected: false }))
                 return getSyncAudioDevices()
             }

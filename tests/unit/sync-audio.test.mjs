@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { createSyncAudioInput, syncAudioBufferFrames } from '../../public/js/sync/audioInput.js'
 import { createSyncCredentialStore } from '../../public/js/sync/credentials.js'
 
-const welcome = { capabilities: { providers: [{ id: 'audio', available: true, selected: true }] } }
+const welcome = { capabilities: { providers: [{ id: 'audio', direction: 'receive', available: true, selected: true }] } }
 const sources = [{ id: 'interface', name: 'Studio interface', channelCount: 8, sampleRate: 48000 }]
 
 test('native audio discovery pairs only on explicit connect and shares the resulting grant', async () => {
@@ -51,6 +51,30 @@ test('audio consent upgrade rotates video grant once and failed refresh marks so
     unavailable = true
     assert.equal((await audio.refreshSyncAudioDevices())[0].connected, false)
     assert.equal(pairs, 1)
+})
+
+test('an audio provider without the receive direction is not an audio input', async () => {
+    const credentials = createSyncCredentialStore()
+    credentials.publish('grant')
+    const calls = []
+    class Client {
+        constructor({ token } = {}) { calls.push(['client', token]) }
+        async connect() {
+            return { capabilities: { providers: [
+                { id: 'audio', direction: 'send', available: true, selected: true }
+            ] } }
+        }
+        async listAudioSources() { calls.push(['list']); return sources }
+        close() { calls.push(['close']) }
+    }
+    const audio = createSyncAudioInput({ Client, credentialStore: credentials })
+    await assert.rejects(audio.connectSyncAudio(),
+        /Update Sync to a version that supports audio input/)
+    const refreshed = await audio.refreshSyncAudioDevices()
+    assert.deepEqual(refreshed, [])
+    assert.equal(calls.filter(c => c[0] === 'list').length, 0,
+        'a send-direction audio provider must never reach listAudioSources()')
+    assert.equal(audio.getSyncAudioDevices().length, 0)
 })
 
 test('abort closes a native client while opening and rejects late completion', async () => {
