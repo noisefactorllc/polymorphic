@@ -124,7 +124,11 @@ export function inferStep(raw) {
     if (dot < 0) return 1
     const decimals = raw.length - dot - 1
     if (decimals === 0) return 1
-    return Math.pow(10, -decimals)
+    // 10 ** n is exact for small integer n and IEEE division is correctly
+    // rounded, so this stays byte-stable across engines; Math.pow(10, -n)
+    // is an implementation approximation and drifted 1 ulp low on Node 22
+    // (0.00009999999999999999), breaking strictEqual against the literal.
+    return 1 / 10 ** decimals
 }
 
 /**
