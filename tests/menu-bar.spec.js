@@ -451,61 +451,109 @@ test('theme switching preserves contrast across menu dropdowns and modals', asyn
     const dropdownPanel = page.locator('#viewMenuTitle ~ .hf-menubar-panel')
     const firstItem = dropdownPanel.locator('.hf-menu-item').first()
 
-    // Contrast the way the user sees it. Menu panels and the shortcuts modal
-    // paint translucent surfaces (color(srgb ... / 0.92) panels, rgba(...,0.6)
-    // overlays, color-mix(..., transparent) tints), so a computed color's own
-    // luminance is not what reaches the eye: every measured color is
-    // alpha-composited over the backdrop actually painted beneath it — the
-    // ancestor chain's backgrounds up to the first opaque one (the white CSS
-    // canvas default beyond that) — before the WCAG ratio is computed.
-    const contrastRatioOf = (locator) => locator.evaluate(el => {
-        const ctx = document.createElement('canvas')
-        ctx.width = ctx.height = 1
-        const gl = ctx.getContext('2d', { willReadFrequently: true })
-        // sRGB [r,g,b,a] of a computed color string; the canvas readback
-        // resolves oklch()/color()/color-mix(...) exactly as painted.
-        const parse = (value) => {
-            gl.clearRect(0, 0, 1, 1)
-            gl.fillStyle = value
-            gl.fillRect(0, 0, 1, 1)
-            return [...gl.getImageData(0, 0, 1, 1).data]
-        }
-        const over = (top, bottom) => {
-            // Straight-alpha composite, premultiplied then normalized: a
-            // translucent lower layer is weighted by its own alpha.
-            const a = top[3] / 255
-            const outA = a + (bottom[3] / 255) * (1 - a)
-            if (!outA) return [0, 0, 0, 0]
-            const mix = (t, b) => Math.round((t * a + b * (bottom[3] / 255) * (1 - a)) / outA)
-            return [
-                mix(top[0], bottom[0]), mix(top[1], bottom[1]), mix(top[2], bottom[2]),
-                Math.round(outA * 255),
-            ]
-        }
-        let backdrop = [0, 0, 0, 0]
-        for (let node = el.parentElement; node && backdrop[3] < 255; node = node.parentElement) {
-            const bg = parse(window.getComputedStyle(node).backgroundColor)
-            // Ancestors paint beneath what is already accumulated.
-            if (bg[3] > 0) backdrop = over(backdrop, bg)
-        }
-        if (backdrop[3] < 255) {
-            // No opaque ancestor background: beneath the document the CSS
-            // canvas default (white) is the remaining backdrop.
-            backdrop = over(backdrop, [255, 255, 255, 255])
-        }
-        const bg = over(parse(window.getComputedStyle(el).backgroundColor), backdrop)
-        const text = over(parse(window.getComputedStyle(el).color), bg)
-        const luminance = ([r, g, b]) => {
-            const [lr, lg, lb] = [r, g, b].map(v => {
-                const s = v / 255
-                return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
-            })
-            return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
-        }
-        const l1 = Math.max(luminance(text), luminance(bg))
-        const l2 = Math.min(luminance(text), luminance(bg))
-        return (l1 + 0.05) / (l2 + 0.05)
+    // Contrast the way the user sees it, measured against the RENDERED
+    // backdrop. The menu panel and shortcuts overlay are translucent
+    // (color-mix(..., transparent) surfaces) with backdrop-filter blur over a
+    // full-viewport animated WebGL canvas, so computed-style background
+    // chains cannot represent what is actually painted. For each measured
+    // element: its own and its descendants' glyph colors are hidden inline,
+    // the element is screenshot-sampled, and the modal color of its rendered
+    // pixels is the backdrop a user sees beneath the text. The foreground is
+    // the element's computed color (canvas-parsed to sRGB), alpha-composited
+    // over that backdrop before the WCAG ratio is computed.
+    const textColorOf = (locator) => locator.evaluate(el => {
+        const c = document.createElement('canvas')
+        c.width = c.height = 1
+        const g = c.getContext('2d', { willReadFrequently: true })
+        // sRGB [r,g,b,a] of the computed color; the canvas readback resolves
+        // oklch()/color()/color-mix(...) exactly as painted.
+        g.clearRect(0, 0, 1, 1)
+        g.fillStyle = window.getComputedStyle(el).color
+        g.fillRect(0, 0, 1, 1)
+        return [...g.getImageData(0, 0, 1, 1).data]
     })
+
+    const backdropColorOf = async (locator) => {
+        // Checked items paint a ✓ glyph from a stylesheet rule, which inline
+        // styles cannot reach; the appended rule outranks it (same
+        // specificity, later in the cascade).
+        const glyphNeutralizer = await page.addStyleTag({
+            content: '#menu .hf-menubar-panel .view-item::before { color: transparent }',
+        })
+        try {
+            await locator.evaluate(el => {
+                for (const node of [el, ...el.querySelectorAll('*')]) {
+                    node.dataset.contrastSavedColor = node.style.color
+                    node.style.color = 'transparent'
+                }
+            })
+            const shot = await locator.screenshot({ animations: 'disabled' })
+            return await page.evaluate(async (png) => {
+                const img = new Image()
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve
+                    img.onerror = reject
+                    img.src = `data:image/png;base64,${png}`
+                })
+                const c = document.createElement('canvas')
+                c.width = img.width
+                c.height = img.height
+                const g = c.getContext('2d', { willReadFrequently: true })
+                g.drawImage(img, 0, 0)
+                const px = g.getImageData(0, 0, img.width, img.height).data
+                // Modal (channel-quantized) color of the rendered pixels: the
+                // translucent surface over its blurred backdrop is
+                // near-uniform across the box, so the mode rejects stray
+                // antialiasing and border pixels.
+                const counts = new Map()
+                for (let i = 0; i < px.length; i += 4) {
+                    const key = `${px[i] & ~3},${px[i + 1] & ~3},${px[i + 2] & ~3}`
+                    counts.set(key, (counts.get(key) || 0) + 1)
+                }
+                let bestKey = null
+                let bestN = 0
+                for (const [k, n] of counts) {
+                    if (n > bestN) { bestKey = k; bestN = n }
+                }
+                // Rendered screenshots are opaque.
+                return [...bestKey.split(',').map(Number), 255]
+            }, shot.toString('base64'))
+        } finally {
+            await locator.evaluate(el => {
+                for (const node of [el, ...el.querySelectorAll('*')]) {
+                    node.style.color = node.dataset.contrastSavedColor
+                    delete node.dataset.contrastSavedColor
+                }
+            })
+            await glyphNeutralizer.evaluate(el => el.remove())
+        }
+    }
+
+    // Straight-alpha composite of the text over the backdrop (premultiplied,
+    // normalized), then the WCAG ratio.
+    const over = (top, bottom) => {
+        const a = top[3] / 255
+        const outA = a + (bottom[3] / 255) * (1 - a)
+        if (!outA) return [0, 0, 0]
+        const mix = (t, b) => Math.round((t * a + b * (bottom[3] / 255) * (1 - a)) / outA)
+        return [mix(top[0], bottom[0]), mix(top[1], bottom[1]), mix(top[2], bottom[2])]
+    }
+    const luminance = ([r, g, b]) => {
+        const [lr, lg, lb] = [r, g, b].map(v => {
+            const s = v / 255
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+        })
+        return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
+    }
+    const contrastOf = async (locator) => {
+        // Read the text color before any glyph hiding happens.
+        const textColor = await textColorOf(locator)
+        const backdrop = await backdropColorOf(locator)
+        const fg = over(textColor, backdrop)
+        const l1 = Math.max(luminance(fg), luminance(backdrop))
+        const l2 = Math.min(luminance(fg), luminance(backdrop))
+        return (l1 + 0.05) / (l2 + 0.05)
+    }
 
     // Theme tokens and panel entrance animations resolve across animation
     // frames; wait until the computed styles stop changing instead of
@@ -535,7 +583,7 @@ test('theme switching preserves contrast across menu dropdowns and modals', asyn
     const darkItem = await sampleStyles(firstItem)
     const darkPanelShadow = await dropdownPanel.evaluate(el => window.getComputedStyle(el).boxShadow)
     expect(darkPanelShadow).not.toBe('none')
-    expect(await contrastRatioOf(firstItem)).toBeGreaterThan(4.5)
+    expect(await contrastOf(firstItem)).toBeGreaterThan(4.5)
 
     // 2. Light theme. The app exposes no theme toggle UI, so the html
     // attribute is the theme control; the dropdown is closed first and
@@ -553,16 +601,19 @@ test('theme switching preserves contrast across menu dropdowns and modals', asyn
     // background or accent is exactly the stale-surface regression.
     expect(lightPanel.background).not.toBe(darkPanel.background)
     expect(lightItem.color).not.toBe(darkItem.color)
-    expect(await contrastRatioOf(firstItem)).toBeGreaterThan(4.5)
+    expect(await contrastOf(firstItem)).toBeGreaterThan(4.5)
 
     // 3. Open shortcuts dialog under light theme and verify contrast
     await page.evaluate(() => document.getElementById('viewMenuItem-shortcuts').click())
     const shortcutsModal = page.locator('.shortcuts-modal')
     await expect(shortcutsModal).toBeVisible()
+    // The overlay fades in behind the modal; both must settle before the
+    // backdrop pixels are sampled.
     expect(await awaitStableStyles(shortcutsModal, ['opacity', 'backgroundColor'])).toBe(true)
-    expect(await contrastRatioOf(shortcutsModal.locator('.shortcuts-title'))).toBeGreaterThan(4.5)
-    expect(await contrastRatioOf(shortcutsModal.locator('.shortcut-desc').first())).toBeGreaterThan(4.5)
-    expect(await contrastRatioOf(shortcutsModal.locator('kbd').first())).toBeGreaterThan(4.5)
+    expect(await awaitStableStyles(page.locator('.shortcuts-overlay'), ['opacity'])).toBe(true)
+    expect(await contrastOf(shortcutsModal.locator('.shortcuts-title'))).toBeGreaterThan(4.5)
+    expect(await contrastOf(shortcutsModal.locator('.shortcut-desc').first())).toBeGreaterThan(4.5)
+    expect(await contrastOf(shortcutsModal.locator('kbd').first())).toBeGreaterThan(4.5)
 
     // Close dialog
     await page.locator('.shortcuts-close').click()
