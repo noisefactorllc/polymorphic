@@ -356,7 +356,6 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
             paddingTop: cs.paddingTop,
             paddingRight: cs.paddingRight,
             borderRadius: cs.borderRadius,
-            backgroundColor: cs.backgroundColor,
             width: cs.width,
             height: cs.height,
         }
@@ -366,13 +365,27 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     expect(activeBtnStyle.borderRadius).toBe('6px')
     expect(activeBtnStyle.width).toBe('28px')
     expect(activeBtnStyle.height).toBe('28px')
-    expect(activeBtnStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
-    expect(activeBtnStyle.backgroundColor).not.toBe('transparent')
+
+    // The active pull's background comes from color-mix(..., transparent), which
+    // headless Chromium serializes as oklab(...) or color(...) depending on
+    // where the 0.15s background transition stands when it is sampled, so the
+    // background cannot be asserted as an exact rgba string. Resolve the
+    // computed color's alpha channel on a canvas instead: the active toggle
+    // must show a visible tint, and after toggling off the background must be
+    // fully transparent again.
+    const backgroundAlpha = (locator) => locator.evaluate(el => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const ctx = canvas.getContext('2d')
+        ctx.clearRect(0, 0, 1, 1)
+        ctx.fillStyle = window.getComputedStyle(el).backgroundColor
+        ctx.fillRect(0, 0, 1, 1)
+        return ctx.getImageData(0, 0, 1, 1).data[3]
+    })
+    await expect.poll(() => backgroundAlpha(page.locator('#perf-toggle-btn'))).toBeGreaterThan(0)
 
     await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
-    await expect.poll(async () => {
-        return page.locator('#perf-toggle-btn').evaluate(el => window.getComputedStyle(el).backgroundColor)
-    }).toBe('rgba(0, 0, 0, 0)')
+    await expect.poll(() => backgroundAlpha(page.locator('#perf-toggle-btn'))).toBe(0)
 
     // record button flips recorder state (canvas captureStream)
     await page.evaluate(() => document.getElementById('record-toggle-btn').click())
