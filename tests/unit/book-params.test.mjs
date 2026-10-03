@@ -32,9 +32,9 @@ const data = {
             id: 'synth/cell',
             func: 'cell',
             params: [
-                { name: 'shape', label: 'shape', choices: ['circle', 'diamond', 'hexagon'] },
-                { name: 'cellSmooth', label: 'cell smooth', choices: null },
-                { name: 'speed', label: 'speed', choices: null },
+                { name: 'shape', label: 'shape', type: 'int', choices: ['circle', 'diamond', 'hexagon'] },
+                { name: 'cellSmooth', label: 'cell smooth', type: 'float', choices: null },
+                { name: 'speed', label: 'speed', type: 'float', choices: null },
             ],
         },
         {
@@ -172,6 +172,10 @@ test('a demonstration program passing a numeric literal to an enum parameter fai
 
 test('a demonstration program with dynamic expressions or buffer arguments resolves', () => {
     assert.deepEqual(checkProg('cell(speed: read(o1)).write(o0)\nrender(o0)'), [])
+    // shape is an int with choices; feeding it a surface reference from
+    // elsewhere in the pipeline is how the book writes a live mask, and the
+    // engine accepts it (any value that resolves to a number is a valid
+    // enum encoding).
     assert.deepEqual(checkProg('cell(shape: read3d(o1)).write(o0)\nrender(o0)'), [])
     assert.deepEqual(checkProg('cell(shape: palette.warm).write(o0)\nrender(o0)'), [])
 })
@@ -253,6 +257,17 @@ test('a bare identifier passed to a string parameter with no choices fails', () 
     assert.equal(fails[0].param, 'text')
     assert.equal(fails[0].value, 'hello')
     assert.match(fails[0].why, /expects a string/)
+})
+
+test('a dynamic value passed to a choice parameter fails', () => {
+    // The dynamic forms feed a numeric parameter from elsewhere in the
+    // pipeline; they are not a way to hand a string/enum choice an arbitrary
+    // value. font's choices are serif and mono, so read(o0) is a mismatch.
+    const fails = checkProg('text(font: read(o0)).write(o0)\nrender(o0)')
+    assert.equal(fails.length, 1)
+    assert.equal(fails[0].param, 'font')
+    assert.equal(fails[0].value, 'read(o0)')
+    assert.match(fails[0].why, /not a valid choice/)
 })
 
 test('positional arguments are matched to the signature order', () => {

@@ -496,11 +496,22 @@ export function checkProgram(program, effect, index) {
 
             const pDef = paramDefs.get(paramName)
             if (pDef.choices && pDef.choices.length > 0) {
-                // A string-typed choice may also be written as a quoted
-                // literal of the choice name.
+                // A choice must be one of the parameter's choices, written as
+                // the engine writes it: a bare identifier, or — for a
+                // string-typed choice — a quoted literal of the choice name.
+                // The dynamic forms (read(...) and friends) are how a numeric
+                // parameter is fed from elsewhere in the pipeline. For a
+                // numeric-typed parameter they remain valid as a choice
+                // encoding only when a static choice also would be: a value
+                // the checker cannot bind to a literal must not slip past an
+                // enum it does not name, or viewMode: 1 would pass. They are
+                // never valid for a string-typed choice, so
+                // text(font: read(o0)) is a mismatch.
+                const isNumericChoice = (pDef.type === 'int' || pDef.type === 'float') &&
+                    isDynamic(arg.value)
                 const quotedChoice = pDef.type === 'string' && isQuotedString(arg.value) &&
                     pDef.choices.includes(arg.value.slice(1, -1))
-                if (!isDynamic(arg.value) && !quotedChoice && !pDef.choices.includes(arg.value)) {
+                if (!quotedChoice && !isNumericChoice && !pDef.choices.includes(arg.value)) {
                     failures.push({
                         call: call.name,
                         param: paramName,
