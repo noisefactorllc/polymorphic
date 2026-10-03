@@ -731,6 +731,21 @@ describe('SyncOutputController sender start', () => {
         }
     })
 
+    test('validates the canvas descriptor before the renderer-capability check', async () => {
+        const fixture = await connectedFixture({
+            renderer: {},
+            getCanvas: () => ({})
+        })
+
+        await assert.rejects(fixture.controller.start('Polymorphic'), (error) => {
+            assert.equal(error.code, 'SYNC_RENDERER_UNAVAILABLE')
+            assert.equal(error.message, 'Renderer output dimensions are unavailable')
+            return true
+        })
+        assert.equal(fixture.controller.state.status, 'error')
+        assert.equal(fixture.clientCloseCalls, 1)
+    })
+
     test('creates a three-slot queue, sender, and renderer sink before reporting sending', async () => {
         const senderPending = deferred()
         const sender = senderFixture({
