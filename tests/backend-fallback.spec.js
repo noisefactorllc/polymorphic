@@ -41,15 +41,28 @@ test('shows informative toast when WebGPU is requested via URL but browser falls
 
   const url = `/?backend=webgpu&dsl=${encodeURIComponent(SKETCH)}`
   await page.goto(url)
-  await waitForApp(page)
 
-  const backend = await page.evaluate(() => window.__poly.backend)
-  const toast = page.locator('.polymorphic-toast')
+  // The toast dismisses itself after ~4 seconds, so sequential expect
+  // roundtrips can outlive it on a slow host. Read the backend, the toast's
+  // presence, text and status role in one in-page evaluation while the toast
+  // is shown; this still fails when the toast is missing, has different text
+  // or lacks role="status".
+  const observed = await (await page.waitForFunction(() => {
+    if (!window.__poly || !window.__poly.backend) return null
+    const toast = document.querySelector('.polymorphic-toast')
+    if (!toast) return null
+    return {
+      backend: window.__poly.backend,
+      text: toast.textContent,
+      role: toast.getAttribute('role')
+    }
+  }, null, { timeout: 30000 })).jsonValue()
 
-  expect(backend).toBe('webgl2')
-  await expect(toast).toBeVisible()
-  await expect(toast).toHaveText('WebGPU is not supported by this browser; falling back to WebGL2')
-  await expect(toast).toHaveAttribute('role', 'status')
+  expect(observed).toEqual({
+    backend: 'webgl2',
+    text: 'WebGPU is not supported by this browser; falling back to WebGL2',
+    role: 'status'
+  })
 })
 
 test('does not show fallback toast when default WebGL2 backend is loaded', async ({ page }) => {
@@ -106,14 +119,25 @@ test('cleans up stored backend preference and notifies user when stored WebGPU f
   })
 
   await page.reload()
-  await waitForApp(page)
 
-  const backend = await page.evaluate(() => window.__poly.backend)
-  const toast = page.locator('.polymorphic-toast')
+  // Same auto-dismiss timing applies here, so read the backend, the toast's
+  // presence, text and status role in one in-page evaluation.
+  const observed = await (await page.waitForFunction(() => {
+    if (!window.__poly || !window.__poly.backend) return null
+    const toast = document.querySelector('.polymorphic-toast')
+    if (!toast) return null
+    return {
+      backend: window.__poly.backend,
+      text: toast.textContent,
+      role: toast.getAttribute('role')
+    }
+  }, null, { timeout: 30000 })).jsonValue()
 
-  expect(backend).toBe('webgl2')
-  await expect(toast).toBeVisible()
-  await expect(toast).toHaveText('WebGPU is not supported by this browser; falling back to WebGL2')
+  expect(observed).toEqual({
+    backend: 'webgl2',
+    text: 'WebGPU is not supported by this browser; falling back to WebGL2',
+    role: 'status'
+  })
   const stored = await page.evaluate(() => localStorage.getItem('polymorphic-backend'))
   expect(stored).toBeNull()
 })
