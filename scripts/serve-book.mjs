@@ -99,6 +99,11 @@ if (isMain) {
         res.writeHead(200, {
             'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream',
             'cache-control': 'no-store',
+            // The Sync developer contract requires the top-level application to
+            // delegate loopback-network: without this header the browser denies
+            // the SDK's permissions query and Sync output dead-ends as "denied"
+            // even when the companion is reachable.
+            'permissions-policy': 'loopback-network=(self)',
         })
         const stream = createReadStream(file)
         // The file can vanish between the stat above and the open (e.g. a

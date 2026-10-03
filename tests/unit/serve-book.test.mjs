@@ -80,6 +80,9 @@ test('the live server answers a malformed escape with 404 and stays up', async (
         // The malformed request must not have taken the server down.
         const ok = await fetch(`${base}/`)
         assert.equal(ok.status, 200)
+        // The Sync developer contract requires the top-level application to
+        // delegate loopback-network so the SDK's permission query can succeed.
+        assert.equal(ok.headers.get('permissions-policy'), 'loopback-network=(self)')
 
         // And it still answers normally afterwards.
         const again = await fetch(`${base}/%`)

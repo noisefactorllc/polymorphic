@@ -37,6 +37,19 @@ export function supportsH264CanvasOutput(welcome) {
             provider.direction === 'send' && provider.available && provider.selected) === true
 }
 
+/**
+ * The Sync v1 frame protocol rejects H.264 access units whose pixel
+ * dimensions are odd, so a canvas buffer that is an odd number of pixels
+ * wide or tall cannot use the compressed path. The RGBA export-queue path
+ * serves those sizes, so the output controller must fall back to it instead
+ * of building a sender that fails on its first encoded frame.
+ */
+export function supportsH264FrameGeometry(descriptor) {
+    return Number.isSafeInteger(descriptor?.width) && descriptor.width > 0 &&
+        Number.isSafeInteger(descriptor?.height) && descriptor.height > 0 &&
+        descriptor.width % 2 === 0 && descriptor.height % 2 === 0
+}
+
 export class SyncH264CanvasSender {
     static async create({ client, name, canvas, descriptor, clock = performance, logger = globalThis.console }) {
         if (typeof client?.createH264StreamSender !== 'function') {

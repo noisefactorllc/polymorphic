@@ -2521,6 +2521,125 @@ describe('SyncOutputController bounded recovery', () => {
         assert.equal(fixture.controller.state.status, 'error')
         assert.equal(fixture.timers.timeouts.size, 0, 'no retry may be scheduled')
     })
+
+    test('an odd-sized canvas falls back to the renderer export queue instead of the compressed sender', async () => {
+        const original = {
+            encoder: globalThis.VideoEncoder,
+            frame: globalThis.VideoFrame,
+            stream: globalThis.WebSocketStream,
+            create: SyncH264CanvasSender.create
+        }
+        let compressedCreates = 0
+        try {
+            globalThis.VideoEncoder = class VideoEncoder {}
+            globalThis.VideoFrame = class VideoFrame {}
+            globalThis.WebSocketStream = class WebSocketStream {}
+            SyncH264CanvasSender.create = async () => {
+                compressedCreates++
+                throw new Error('odd canvas dimensions must not build the compressed sender')
+            }
+            const queues = []
+            // A viewport of 1281 CSS pixels floored by device pixel ratio is an
+            // ordinary odd canvas buffer; the Sync v1 protocol rejects odd
+            // H.264 access units, so start must take the RGBA path.
+            const canvas = { width: 1281, height: 720 }
+            const renderer = {
+                pipeline: {},
+                createFrameExportQueue(options) {
+                    queues.push(options)
+                    return { close() {} }
+                },
+                addSink: (sink) => () => sink.close()
+            }
+            const fixture = await connectedFixture({
+                renderer,
+                getCanvas: () => canvas,
+                welcomeVersion: '0.2.87'
+            })
+
+            await fixture.controller.start('Odd viewport')
+
+            assert.equal(fixture.controller.state.status, 'sending')
+            assert.equal(compressedCreates, 0)
+            assert.deepEqual(queues, [{ slots: 3 }])
+            assert.deepEqual(
+                fixture.events.filter((event) => Array.isArray(event) && event[0] === 'createSender').length,
+                1,
+                'the fallback sender must be created through the SDK client'
+            )
+        } finally {
+            globalThis.VideoEncoder = original.encoder
+            globalThis.VideoFrame = original.frame
+            globalThis.WebSocketStream = original.stream
+            SyncH264CanvasSender.create = original.create
+        }
+    })
+
+    test('recovery rebuilds through the renderer export queue when the live geometry is odd', async () => {
+        const original = {
+            encoder: globalThis.VideoEncoder,
+            frame: globalThis.VideoFrame,
+            stream: globalThis.WebSocketStream,
+            create: SyncH264CanvasSender.create
+        }
+        let compressedCreates = 0
+        const initial = senderFixture()
+        const replacement = senderFixture()
+        try {
+            globalThis.VideoEncoder = class VideoEncoder {}
+            globalThis.VideoFrame = class VideoFrame {}
+            globalThis.WebSocketStream = class WebSocketStream {}
+            SyncH264CanvasSender.create = async () => {
+                compressedCreates++
+                return initial.sender
+            }
+            const queues = []
+            const canvas = { width: 1280, height: 720 }
+            const renderer = {
+                pipeline: {},
+                createFrameExportQueue(options) {
+                    queues.push(options)
+                    return { close() {} }
+                },
+                addSink: (sink) => () => sink.close()
+            }
+            const probe = recoveryProbe({ available: true, health: readyHealth() })
+            const connection = recoveryConnection({
+                sender: replacement.sender,
+                connect: async () => ({ ...readyWelcome(), version: '0.2.87' })
+            })
+            const fixture = await connectedFixture({
+                renderer,
+                getCanvas: () => canvas,
+                sender: initial.sender,
+                recoveryClients: [probe, connection],
+                welcomeVersion: '0.2.87'
+            })
+            await fixture.controller.start('Even start')
+            assert.equal(compressedCreates, 1)
+            assert.equal(queues.length, 0)
+
+            // The sender dies first; the operator resizes to an odd buffer
+            // while the controller is already recovering.
+            initial.completion.reject(senderLoss(1013, 'inbound_budget_exhausted'))
+            await flushMicrotasks()
+            assert.equal(fixture.controller.state.status, 'recovering')
+
+            canvas.width = 1281
+            fixture.timers.fireTimeout(250)
+            await flushMicrotasks(12)
+
+            assert.equal(fixture.controller.state.status, 'sending')
+            assert.equal(fixture.controller.state.width, 1281)
+            assert.equal(compressedCreates, 1, 'recovery must not rebuild the compressed sender for odd geometry')
+            assert.deepEqual(queues, [{ slots: 3 }])
+        } finally {
+            globalThis.VideoEncoder = original.encoder
+            globalThis.VideoFrame = original.frame
+            globalThis.WebSocketStream = original.stream
+            SyncH264CanvasSender.create = original.create
+        }
+    })
 })
 
 describe('SyncOutputController app attachment', () => {

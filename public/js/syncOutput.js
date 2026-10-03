@@ -1,6 +1,6 @@
 import { SyncBridgeClient } from './sync/bundle.js'
 import { syncCredentialStore } from './sync/credentials.js'
-import { SyncH264CanvasSender, supportsH264CanvasOutput } from './syncH264CanvasSender.js'
+import { SyncH264CanvasSender, supportsH264CanvasOutput, supportsH264FrameGeometry } from './syncH264CanvasSender.js'
 
 const MAX_SENDER_NAME_BYTES = 64
 const RGBA8_BYTES_PER_PIXEL = 4
@@ -709,7 +709,12 @@ export class SyncOutputController {
             if (!this._client || !this._welcome) {
                 throw outputError('SYNC_NOT_CONNECTED', 'Connect Sync before starting an output')
             }
-            const compressed = supportsH264CanvasOutput(this._welcome)
+            const liveCanvas = this._getCanvas()
+            const descriptor = this._readDescriptor(liveCanvas)
+            // An odd canvas buffer cannot carry H.264 access units, so the
+            // compressed path is only selectable for even frame geometry; the
+            // renderer export queue serves every size.
+            const compressed = supportsH264CanvasOutput(this._welcome) && supportsH264FrameGeometry(descriptor)
             if (typeof this._renderer?.addSink !== 'function' ||
                 (!compressed && typeof this._renderer?.createFrameExportQueue !== 'function')) {
                 throw outputError(
@@ -728,8 +733,6 @@ export class SyncOutputController {
                 throw outputError('SYNC_CLIENT_INVALID', 'Sync client cannot create senders')
             }
 
-            const liveCanvas = this._getCanvas()
-            const descriptor = this._readDescriptor(liveCanvas)
             this._setState({
                 status: 'starting',
                 available: true,
@@ -1135,7 +1138,7 @@ export class SyncOutputController {
             this._assertRecoveryProvider(welcome, context.providerIds)
             context = this._adoptRecoveryRendererIdentity(context)
 
-            if (supportsH264CanvasOutput(welcome)) {
+            if (supportsH264CanvasOutput(welcome) && supportsH264FrameGeometry(context.descriptor)) {
                 resources.sender = await SyncH264CanvasSender.create({
                     client: resources.client, name: context.senderName,
                     canvas: context.canvas, descriptor: context.descriptor, clock: this._clock,
