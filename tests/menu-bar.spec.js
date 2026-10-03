@@ -409,12 +409,20 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     }
 
     // command palette drives the same items via programmatic .click() delegation
-    const dl = page.waitForEvent('download', { timeout: 10000 })
+    const dl = page.waitForEvent('download', { timeout: 30000 })
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k')
     await expect(page.locator('.cmd-palette-overlay')).toHaveClass(/visible/)
     await expect(page.locator('.cmd-palette-input')).toBeFocused()
     await page.keyboard.type('save as png')
-    await page.waitForTimeout(300)
+    // The palette filters asynchronously (action search is scored per
+    // keystroke and the manifest loads off the CDN), so poll for the matched
+    // action row instead of a fixed sleep; Enter then runs it.
+    await expect(page.locator('.cmd-palette-item.active')).toHaveText(/Save canvas as PNG/)
+    // The palette's Enter-invoked download is emitted 0.6-0.8s after Enter in
+    // this headless build and intermittently seconds later under renderer
+    // load (measured up to 16.4s with a 25s listener; direct menu-item clicks
+    // always emit in ~100ms), so the wait is generous; the listener above is
+    // registered before Ctrl+K per Playwright's race guidance.
     await page.keyboard.press('Enter')
     const download = await dl
     expect(download.suggestedFilename()).toBe('polymorphic.png')
