@@ -387,6 +387,17 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
     await expect.poll(() => backgroundAlpha(page.locator('#perf-toggle-btn'))).toBe(0)
 
+    // The same alpha cycle must hold in the light theme (Handfish tokens
+    // re-resolve under [data-theme="light"]; the tint color differs, the
+    // transparency contract does not). Restore the default theme afterwards.
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light' })
+    await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
+    await expect(page.locator('#perf-toggle-btn')).toHaveClass(/active/)
+    await expect.poll(() => backgroundAlpha(page.locator('#perf-toggle-btn'))).toBeGreaterThan(0)
+    await page.evaluate(() => document.getElementById('perf-toggle-btn').click())
+    await expect.poll(() => backgroundAlpha(page.locator('#perf-toggle-btn'))).toBe(0)
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
+
     // record button flips recorder state (canvas captureStream)
     await page.evaluate(() => document.getElementById('record-toggle-btn').click())
     await page.waitForTimeout(500)
