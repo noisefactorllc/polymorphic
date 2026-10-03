@@ -15,7 +15,7 @@
     "check:params": "node scripts/check-book-params.mjs"
   },
   "author": "Noise Factor",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "playwright": "^1.60.0",

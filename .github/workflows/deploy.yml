@@ -1,77 +1,72 @@
 name: Deploy
 
+# Successful main CI dispatches an exact source SHA to scaffold. This public
+# repository has no server credentials; scaffold builds and deploys both the
+# app and the book.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'public/**'
-      - 'book/**'
-      - 'scripts/**'
-      - 'package*.json'
-      - '.github/workflows/deploy.yml'
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
 
 concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  group: deploy-main
+  cancel-in-progress: false
 
 jobs:
-  build:
+  trigger-scaffold-release:
+    name: Dispatch scaffold static-site-release
     runs-on: ubuntu-latest
-
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-
-      - name: Classify documentation changes
-        id: changes
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - name: Require product checks for the source SHA
+        id: product-checks
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
-          base: ${{ github.event.before || github.ref }}
-          filters: |
-            documentation:
-              - '{*.md,*.rst,*.adoc,docs/**,book/**}'
+          script: |
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: context.payload.workflow_run.id,
+              filter: 'latest', per_page: 100
+            });
+            const required = ['Install', 'Build', 'Unit tests'];
+            const ran = required.every(name => jobs.some(job =>
+              job.name === 'ci' && job.steps?.some(step =>
+                step.name === name && step.conclusion === 'success'
+              )
+            ));
+            const { data: branch } = await github.rest.repos.getBranch({
+              ...context.repo, branch: 'main'
+            });
+            const current = branch.commit.sha === context.payload.workflow_run.head_sha;
+            core.setOutput('release', String(ran && current));
 
-      - name: Generate deployment metadata
-        run: |
-          GIT_HASH=$(git rev-parse HEAD)
-          DEPLOY_DATE=$(date -u +"%s")
-          printf '{\n  "git_hash": "%s",\n  "date": %s\n}\n' "$GIT_HASH" "$DEPLOY_DATE" > "$GITHUB_WORKSPACE/public/deployment-meta.json"
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - name: Mint scaffold GitHub App token
+        if: steps.product-checks.outputs.release == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          node-version: '22'
+          client-id: Iv23liy6T6BW0BXuZRzx
+          private-key: ${{ secrets.EHSRE_APP_PRIVATE_KEY }}
+          owner: noisefactorllc
+          repositories: scaffold
 
-      # Renders The Book of Polymorphic DSL from committed data and prose into
-      # dist/book/. Offline: no shader CDN, no engine import, and no install
-      # either, since the script imports nothing but node builtins. A missing
-      # prose file fails here rather than shipping a page with nothing on it.
-      - name: Build the book
+      - name: Dispatch verified source SHA
+        if: steps.product-checks.outputs.release == 'true'
         env:
-          POLYMORPHIC_LINT_DOCUMENTATION: ${{ steps.changes.outputs.documentation }}
-        run: npm run build
-
-      - name: Set up SSH
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "${{ secrets.SCAFFOLD_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan ${{ secrets.SCAFFOLD_SERVER_IP }} >> ~/.ssh/known_hosts 2>/dev/null
-
-      # Two independent rsyncs into one document root. The app ships from
-      # public/; the book ships from dist/book/ and is never inside public/ (see
-      # scripts/build-book.mjs). --exclude=/book/ keeps the app's --delete from
-      # sweeping away the book it does not know about, so neither deploy can
-      # blank the other and re-running either is a no-op.
-      - name: Deploy app to scaffold
-        run: |
-          rsync -avz --delete --exclude=/book/ \
-            public/ \
-            deploy@${{ secrets.SCAFFOLD_SERVER_IP }}:~/sites/polymorphic.noisedeck.app/content/
-
-      - name: Deploy book to scaffold
-        run: |
-          rsync -avz --delete \
-            dist/book/ \
-            deploy@${{ secrets.SCAFFOLD_SERVER_IP }}:~/sites/polymorphic.noisedeck.app/content/book/
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          gh workflow run static-site-release.yml \
+            --repo noisefactorllc/scaffold --ref main \
+            -f site=polymorphic -f sha="$SOURCE_SHA" -f require_latest=true
+          echo "Dispatched Polymorphic release for $SOURCE_SHA"

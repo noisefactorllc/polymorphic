@@ -9,13 +9,32 @@ the hero: code renders to a full-page WebGL2/WebGPU surface you edit live.
 1. Start the development server:
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
 2. Open http://localhost:3000 in your browser.
 
-(`npm start` and `npm run dev` both serve `public/` on port 3000.)
+(`npm start` and `npm run dev` both serve the app and book on port 3000.)
+
+### Self-hosting
+
+Use Node.js 22 or newer. `npm start` builds the book and serves the app and
+book together for local use. To serve the site from another static web server,
+run `npm ci && npm run build`, publish `public/` at the web root, and publish
+`dist/book/` at `/book/`. Serve JavaScript modules with a JavaScript MIME type.
+HTTPS is needed for browser permissions such as camera, microphone, and screen
+capture outside localhost.
+
+The core editor loads Noisemaker shaders, Handfish, and fonts from Noise Factor
+CDNs, so this is an online self-hosted installation. Those assets allow other
+web origins. Sharing, Noisedeck handoff, community feeds, and optional Seance
+features use Noise Factor services; they are separate from running the editor.
+Sync input and output features require a local Sync installation.
+
+The `desktop/` wrapper is used for Noise Factor's separately distributed
+desktop build. It depends on `@nf/desktop-shell` from the private scaffold
+repository and is not part of the self-hosted web setup.
 
 ## Features
 
@@ -149,3 +168,13 @@ repository for:
 
 Built on [Noisemaker](https://noisemaker.app) shader technology by
 [Noise Factor](https://noisefactor.io).
+
+The bundled JSZip and Marked libraries retain their own notices in
+[Third-Party Libraries](public/js/lib/THIRD_PARTY.md). The bundled Sync browser
+SDK is from [Sync](https://github.com/noisefactorllc/sync), also MIT licensed.
+
+## License
+
+Polymorphic's repository source and book are released under the
+[MIT License](LICENSE). The separately distributed desktop application includes
+components with separate license terms.

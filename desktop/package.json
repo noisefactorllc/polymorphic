@@ -2,6 +2,7 @@
   "name": "polymorphic-desktop",
   "version": "0.11.0",
   "private": true,
+  "license": "MIT",
   "main": "main.js",
   "description": "Polymorphic desktop wrapper (uses @nf/desktop-shell).",
   "scripts": {
