@@ -447,72 +447,122 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
 test('theme switching preserves contrast across menu dropdowns and modals', async ({ page }) => {
     await boot(page, { dsl: BOOT_DSL })
 
-    // Open view menu dropdown
-    await page.locator('#viewMenuTitle').click()
+    const viewTrigger = page.locator('#viewMenuTitle')
     const dropdownPanel = page.locator('#viewMenuTitle ~ .hf-menubar-panel')
-    await expect(dropdownPanel).toBeVisible()
+    const firstItem = dropdownPanel.locator('.hf-menu-item').first()
 
-    const getContrastRatio = (lum1, lum2) => {
-        const l1 = Math.max(lum1, lum2)
-        const l2 = Math.min(lum1, lum2)
-        return (l1 + 0.05) / (l2 + 0.05)
-    }
-
-    const getLuminanceOf = async (locatorOrHandle, property) => {
-        return locatorOrHandle.evaluate((el, prop) => {
-            const canvas = document.createElement('canvas')
-            canvas.width = 1
-            canvas.height = 1
-            const ctx = canvas.getContext('2d', { willReadFrequently: true })
-            ctx.fillStyle = window.getComputedStyle(el)[prop]
-            ctx.fillRect(0, 0, 1, 1)
-            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
-            const [rs, gs, bs] = [r, g, b].map(v => {
+    // Contrast the way the user sees it. Menu panels and the shortcuts modal
+    // paint translucent surfaces (color(srgb ... / 0.92) panels, rgba(...,0.6)
+    // overlays, color-mix(..., transparent) tints), so a computed color's own
+    // luminance is not what reaches the eye: every measured color is
+    // alpha-composited over the backdrop actually painted beneath it — the
+    // ancestor chain's backgrounds up to the first opaque one (the white CSS
+    // canvas default beyond that) — before the WCAG ratio is computed.
+    const contrastRatioOf = (locator) => locator.evaluate(el => {
+        const ctx = document.createElement('canvas')
+        ctx.width = ctx.height = 1
+        const gl = ctx.getContext('2d', { willReadFrequently: true })
+        // sRGB [r,g,b,a] of a computed color string; the canvas readback
+        // resolves oklch()/color()/color-mix(...) exactly as painted.
+        const parse = (value) => {
+            gl.clearRect(0, 0, 1, 1)
+            gl.fillStyle = value
+            gl.fillRect(0, 0, 1, 1)
+            return [...gl.getImageData(0, 0, 1, 1).data]
+        }
+        const over = (top, bottom) => {
+            // Straight-alpha composite, premultiplied then normalized: a
+            // translucent lower layer is weighted by its own alpha.
+            const a = top[3] / 255
+            const outA = a + (bottom[3] / 255) * (1 - a)
+            if (!outA) return [0, 0, 0, 0]
+            const mix = (t, b) => Math.round((t * a + b * (bottom[3] / 255) * (1 - a)) / outA)
+            return [
+                mix(top[0], bottom[0]), mix(top[1], bottom[1]), mix(top[2], bottom[2]),
+                Math.round(outA * 255),
+            ]
+        }
+        let backdrop = [0, 0, 0, 0]
+        for (let node = el.parentElement; node && backdrop[3] < 255; node = node.parentElement) {
+            const bg = parse(window.getComputedStyle(node).backgroundColor)
+            // Ancestors paint beneath what is already accumulated.
+            if (bg[3] > 0) backdrop = over(backdrop, bg)
+        }
+        if (backdrop[3] < 255) {
+            // No opaque ancestor background: beneath the document the CSS
+            // canvas default (white) is the remaining backdrop.
+            backdrop = over(backdrop, [255, 255, 255, 255])
+        }
+        const bg = over(parse(window.getComputedStyle(el).backgroundColor), backdrop)
+        const text = over(parse(window.getComputedStyle(el).color), bg)
+        const luminance = ([r, g, b]) => {
+            const [lr, lg, lb] = [r, g, b].map(v => {
                 const s = v / 255
                 return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
             })
-            return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
-        }, property)
-    }
+            return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
+        }
+        const l1 = Math.max(luminance(text), luminance(bg))
+        const l2 = Math.min(luminance(text), luminance(bg))
+        return (l1 + 0.05) / (l2 + 0.05)
+    })
 
-    // 1. Verify dark theme dropdown contrast
+    // Theme tokens and panel entrance animations resolve across animation
+    // frames; wait until the computed styles stop changing instead of
+    // sleeping a fixed delay.
+    const awaitStableStyles = (locator, props) => locator.evaluate(async (el, props) => {
+        const read = () => props.map(p => window.getComputedStyle(el)[p]).join('|')
+        let prev = read()
+        for (let i = 0; i < 120; i++) {
+            await new Promise(resolve => requestAnimationFrame(resolve))
+            const next = read()
+            if (next === prev) return true
+            prev = next
+        }
+        return false
+    }, props)
+
+    const sampleStyles = (locator) => locator.evaluate(el => {
+        const cs = window.getComputedStyle(el)
+        return { background: cs.backgroundColor, color: cs.color }
+    })
+
+    // 1. Dark theme: dropdown items stay readable over the translucent panel
+    await viewTrigger.click()
+    await expect(dropdownPanel).toBeVisible()
+    expect(await awaitStableStyles(dropdownPanel, ['opacity', 'backgroundColor'])).toBe(true)
+    const darkPanel = await sampleStyles(dropdownPanel)
+    const darkItem = await sampleStyles(firstItem)
     const darkPanelShadow = await dropdownPanel.evaluate(el => window.getComputedStyle(el).boxShadow)
     expect(darkPanelShadow).not.toBe('none')
-    const darkBgLum = await getLuminanceOf(dropdownPanel, 'backgroundColor')
-    const darkItemLum = await getLuminanceOf(dropdownPanel.locator('.hf-menu-item').first(), 'color')
-    const darkRatio = getContrastRatio(darkBgLum, darkItemLum)
-    expect(darkRatio).toBeGreaterThan(4.5)
+    expect(await contrastRatioOf(firstItem)).toBeGreaterThan(4.5)
 
-    // 2. Switch to light theme
+    // 2. Light theme. The app exposes no theme toggle UI, so the html
+    // attribute is the theme control; the dropdown is closed first and
+    // reopened after the change so every surface re-resolves its tokens (a
+    // panel left open was seen to keep the stale dark accent). Colors settle
+    // on computed styles.
+    await page.evaluate(() => document.getElementById('menu').closeAll())
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light' })
-    await page.waitForTimeout(200)
-
-    const lightBgLum = await getLuminanceOf(dropdownPanel, 'backgroundColor')
-    const lightItemLum = await getLuminanceOf(dropdownPanel.locator('.hf-menu-item').first(), 'color')
-    const lightRatio = getContrastRatio(lightBgLum, lightItemLum)
-    expect(lightRatio).toBeGreaterThan(4.5)
-
-
+    await viewTrigger.click()
+    await expect(dropdownPanel).toBeVisible()
+    expect(await awaitStableStyles(dropdownPanel, ['opacity', 'backgroundColor'])).toBe(true)
+    const lightPanel = await sampleStyles(dropdownPanel)
+    const lightItem = await sampleStyles(firstItem)
+    // The reopened panel must re-resolve its tokens: keeping the dark theme's
+    // background or accent is exactly the stale-surface regression.
+    expect(lightPanel.background).not.toBe(darkPanel.background)
+    expect(lightItem.color).not.toBe(darkItem.color)
+    expect(await contrastRatioOf(firstItem)).toBeGreaterThan(4.5)
 
     // 3. Open shortcuts dialog under light theme and verify contrast
     await page.evaluate(() => document.getElementById('viewMenuItem-shortcuts').click())
     const shortcutsModal = page.locator('.shortcuts-modal')
     await expect(shortcutsModal).toBeVisible()
-
-    const modalBgLum = await getLuminanceOf(shortcutsModal, 'backgroundColor')
-    const titleLum = await getLuminanceOf(shortcutsModal.locator('.shortcuts-title'), 'color')
-    const descLum = await getLuminanceOf(shortcutsModal.locator('.shortcut-desc').first(), 'color')
-    const kbdBgLum = await getLuminanceOf(shortcutsModal.locator('kbd').first(), 'backgroundColor')
-    const kbdColorLum = await getLuminanceOf(shortcutsModal.locator('kbd').first(), 'color')
-
-    const modalTitleRatio = getContrastRatio(modalBgLum, titleLum)
-    expect(modalTitleRatio).toBeGreaterThan(4.5)
-
-    const modalDescRatio = getContrastRatio(modalBgLum, descLum)
-    expect(modalDescRatio).toBeGreaterThan(4.5)
-
-    const kbdRatio = getContrastRatio(kbdBgLum, kbdColorLum)
-    expect(kbdRatio).toBeGreaterThan(4.5)
+    expect(await awaitStableStyles(shortcutsModal, ['opacity', 'backgroundColor'])).toBe(true)
+    expect(await contrastRatioOf(shortcutsModal.locator('.shortcuts-title'))).toBeGreaterThan(4.5)
+    expect(await contrastRatioOf(shortcutsModal.locator('.shortcut-desc').first())).toBeGreaterThan(4.5)
+    expect(await contrastRatioOf(shortcutsModal.locator('kbd').first())).toBeGreaterThan(4.5)
 
     // Close dialog
     await page.locator('.shortcuts-close').click()
