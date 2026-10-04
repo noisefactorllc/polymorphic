@@ -8,22 +8,47 @@ import path from 'node:path'
 
 const defaultDaemon = path.resolve(__dirname, '../../sync/build/sync_audio_test_server')
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
+// All default to the standard local serve-book endpoint; overrides exist for
+// sandboxes that can only bind a restricted loopback port range.
+const daemonOrigin = process.env.SYNC_TEST_ORIGIN || 'http://localhost:3017'
+const daemonPort = process.env.SYNC_TEST_PORT
+const audioStatePath = process.env.AUDIO_STATE_PATH
+    ? path.resolve(process.env.AUDIO_STATE_PATH)
+    : path.resolve('../noisemaker/shaders/src/runtime/external-input.js')
 
 export function installNativeAudioDaemon() {
     let daemon = null
     let endpoint = null
     test.beforeAll(async () => {
         test.skip(!daemonPath || !fs.existsSync(daemonPath), 'Set SYNC_AUDIO_TEST_SERVER to the native Sync audio fixture')
-        daemon = spawn(daemonPath, ['--test-origin', 'http://localhost:3017', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
+        daemon = spawn(daemonPath, [
+            ...(daemonPort ? ['--port', daemonPort] : []),
+            '--test-origin', daemonOrigin, '--test-receiver',
+        ], { stdio: ['ignore', 'pipe', 'pipe'] })
         endpoint = await new Promise((resolve, reject) => {
-            let output = ''
-            const timer = setTimeout(() => reject(new Error('Audio daemon startup timed out')), 5000)
+            // The daemon logs non-JSON operational lines (e.g. a bind
+            // fallback notice) before its endpoint line, so scan each line
+            // for the endpoint JSON instead of parsing the first one.
+            let buffer = ''
+            const timer = setTimeout(() => reject(new Error('Audio daemon startup timed out')), 10000)
             daemon.once('error', reject)
             daemon.stdout.on('data', chunk => {
-                output += chunk
-                if (!output.includes('\n')) return
-                clearTimeout(timer)
-                resolve(`http://127.0.0.1:${JSON.parse(output.split('\n')[0]).port}`)
+                buffer += chunk
+                let index
+                while ((index = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, index)
+                    buffer = buffer.slice(index + 1)
+                    try {
+                        const parsed = JSON.parse(line)
+                        if (parsed && Number.isFinite(parsed.port)) {
+                            clearTimeout(timer)
+                            resolve(`http://127.0.0.1:${parsed.port}`)
+                            return
+                        }
+                    } catch {
+                        // Not the endpoint line yet.
+                    }
+                }
             })
         })
     })
@@ -48,7 +73,7 @@ export function createSetup(getEndpoint) {
         }))
         // The same engine AudioState used by the products, served locally for isolation.
         await page.route('**/__audio-state.js', route => route.fulfill({
-            path: path.resolve('../noisemaker/shaders/src/runtime/external-input.js'), contentType: 'text/javascript'
+            path: audioStatePath, contentType: 'text/javascript'
         }))
         await page.goto(fullApp ? '/?dsl=' + encodeURIComponent('search synth\nperlin().write(o0)\nrender(o0)') + '&backend=' + backend : '/sync-audio-test-empty.html')
         await page.evaluate(() => {

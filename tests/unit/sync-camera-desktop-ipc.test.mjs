@@ -14,7 +14,24 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const shellLib = resolve(root, '../scaffold/apps/desktop-shell/lib/sync-camera-shm.js')
 
 const require = createRequire(import.meta.url)
-const mod = existsSync(shellLib) ? require(shellLib) : null
+// Some environments stage sibling checkouts as unreadable stubs, where even
+// stat() succeeds but the loader cannot open the file. Only such
+// availability failures may fall back to a skip; a loadable-but-broken
+// library must still fail the suite.
+let mod = null
+let skipReason = null
+if (existsSync(shellLib)) {
+    try {
+        mod = require(shellLib)
+    } catch (error) {
+        const unavailable = (error.code === 'EACCES' || error.code === 'EPERM') ||
+            (error.code === 'MODULE_NOT_FOUND' && String(error.message).includes(shellLib))
+        if (unavailable) skipReason = `scaffold desktop-shell library not readable here (${error.code})`
+        else throw error
+    }
+} else {
+    skipReason = 'scaffold desktop-shell checkout not present'
+}
 const { wireSyncCameraIpc, SyncCameraShmReader, SYNC_MAGIC, SYNC_VERSION, FRAME_RING_SLOTS,
     CANVAS_WIDTH, CANVAS_HEIGHT, FRAME_SLOT_BYTES, HEADER_BYTES } = mod || {}
 
@@ -101,8 +118,9 @@ function fakeWebContents() {
     return contents
 }
 
-test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent consumers and cleans up', async () => {
-    if (!mod) return // No sibling desktop-shell checkout; the native specs cover the product side.
+test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent consumers and cleans up',
+    { skip: skipReason || false }, async () => {
+    if (!mod) return // Skipped through the option above with its reason.
     const fs = await import('node:fs')
     const os = await import('node:os')
     const path = await import('node:path')

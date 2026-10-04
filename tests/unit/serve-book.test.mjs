@@ -57,15 +57,35 @@ test('query strings are ignored and encoding is honored', () => {
     assert.equal(resolvePath('/book/index.html?x=%2'), join(BOOK, 'index.html'))
 })
 
-test('the live server answers a malformed escape with 404 and stays up', async () => {
-    const port = await new Promise((res, rej) => {
+// Some environments only permit loopback binds on a narrow port range. When
+// the OS refuses an ephemeral bind, fall back to that range instead of
+// skipping the live-server checks; the checks themselves are unchanged.
+async function pickPort() {
+    const tryListen = port => new Promise((res, rej) => {
         const probe = createServer()
-        probe.listen(0, '127.0.0.1', () => {
+        probe.listen(port, '127.0.0.1', () => {
             const { port } = probe.address()
             probe.close(() => res(port))
         })
         probe.on('error', rej)
     })
+    try {
+        return await tryListen(0)
+    } catch (error) {
+        if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error
+    }
+    for (let port = 43117; port <= 43126; port++) {
+        try {
+            return await tryListen(port)
+        } catch (error) {
+            if (error.code !== 'EADDRINUSE' && error.code !== 'EPERM' && error.code !== 'EACCES') throw error
+        }
+    }
+    throw new Error('No bindable loopback port for the serve-book live check')
+}
+
+test('the live server answers a malformed escape with 404 and stays up', async () => {
+    const port = await pickPort()
 
     const child = spawn(process.execPath, [join(REPO, 'scripts', 'serve-book.mjs'), String(port)], {
         stdio: 'ignore',
