@@ -130,11 +130,40 @@ export function createNativeReceiverTest(setup, getEndpoint) {
         await setup(page, true, backend)
         expect(await page.evaluate(() => window.__poly.renderer.backend)).toBe(backend)
         await page.evaluate(() => window.__poly.liveInputsPanel.open())
-        await page.click('[data-id=sync-audio-connect]')
-        await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+        // The daemon enforces a 1 s control-hello deadline on every new control
+        // connection. On a CPU-saturated headless page (SwiftShader WebGL2 boot
+        // at odd viewports) the SDK's hello can land after that deadline, the
+        // daemon closes the socket (1008), and the panel surfaces
+        // "control connection closed" for an explicit retry — the same retry
+        // the enable button offers after a failed native input. Retry that one
+        // lifecycle close a bounded number of times; every other status must
+        // still reach the expected text within its own wait.
+        for (let attempt = 0; ; attempt++) {
+            await page.click('[data-id=sync-audio-connect]')
+            try {
+                await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+                break
+            } catch (error) {
+                const status = await page.locator('[data-id=sync-audio-status]').textContent()
+                if (attempt === 2 || status !== 'control connection closed') throw error
+            }
+        }
         await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_2')
-        await page.click('[data-id=audio-toggle]')
-        await expect(page.locator('[data-id=audio-toggle]')).toHaveText('disable')
+        // The enable attempt opens its own control connection, so the same
+        // hello deadline can abort it; the panel then reports the failure and
+        // leaves the button on "enable" for an explicit retry. Retry that one
+        // lifecycle close a bounded number of times; any other failure is
+        // surfaced as-is.
+        for (let attempt = 0; ; attempt++) {
+            await page.click('[data-id=audio-toggle]')
+            try {
+                await expect(page.locator('[data-id=audio-toggle]')).toHaveText('disable')
+                break
+            } catch (error) {
+                const status = await page.locator('[data-id=audio-status]').textContent()
+                if (attempt === 2 || !status.includes('control connection closed')) throw error
+            }
+        }
         await page.evaluate(async () => {
             const sync = await import('/js/sync/audioInput.js')
             await sync.connectSyncAudio()
@@ -153,7 +182,15 @@ export function createNativeReceiverTest(setup, getEndpoint) {
                 accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
         })
         try {
-            await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 }).toBe(true)
+            // The window must span one full product recovery cycle: the daemon's
+            // 2 s incomplete-frame deadline can close the sender data stream on
+            // a saturated page, the controller then recovers with its 250 ms /
+            // 1 s / 4 s backoff, and the replacement sender needs two fresh
+            // frames before the receiver accepts bytes. 15 s measured as too
+            // tight for exactly that legitimate cycle on SwiftShader WebGL2;
+            // the acceptance itself (receiver checksum match, zero rejects,
+            // zero failures) is unchanged.
+            await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 45_000 }).toBe(true)
         } catch (error) {
             error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
             throw error
