@@ -22,10 +22,10 @@ import { chromium } from 'playwright'
 // complete when Dawn runs over ANGLE Vulkan. --use-angle=vulkan changes WebGL
 // rasterization for every test in the run (SVG-in-canvas specs regress), so the
 // Vulkan stack applies only to the webgpu receiver spec through its own
-// project. On Linux without a system Vulkan driver (and without an
-// operator-provided ICD) that project runs over the SwiftShader driver bundled
-// with Chromium; with a system ICD the real driver is kept and the flag stays
-// inert.
+// project, and the general project keeps the launch arguments it always had.
+// On Linux without a system Vulkan driver (and without an operator-provided
+// ICD) that project runs over the SwiftShader driver bundled with Chromium;
+// with a system driver the default WebGPU path already serves the webgpu spec.
 function systemVulkanIcdPresent() {
     for (const dir of ['/usr/share/vulkan/icd.d', '/etc/vulkan/icd.d']) {
         try {
@@ -46,10 +46,10 @@ if (process.platform === 'linux' && !systemIcd && !operatorIcd) {
 const softwareVulkan = operatorIcd || Boolean(bundledIcd)
 const baseArgs = process.platform === 'darwin'
   ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist']
-  : ['--enable-unsafe-swiftshader', '--enable-unsafe-webgpu']
+  : ['--enable-unsafe-swiftshader']
 const vulkanArgs = process.platform === 'darwin'
   ? baseArgs
-  : [...baseArgs, '--enable-features=Vulkan', '--use-angle=vulkan', '--disable-gpu-sandbox']
+  : [...baseArgs, '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan', '--disable-gpu-sandbox']
 
 export default defineConfig({
   testDir: './tests',
