@@ -1031,6 +1031,21 @@ function showCanvas() {
     refreshMenuBar()
 }
 
+// Whether the canvas is up and the render loop is running. A boot compile
+// failure deliberately skips showCanvas()/renderer.start() — there is no
+// compiled program to draw — but everything else about the app must come up,
+// and the next successful compile (hot reload, scene load, remote edit, …)
+// has to start the loop. All of those paths funnel through recompileShader,
+// which calls this on success; on a normally-booted page it is a no-op.
+let renderLoopStarted = false
+
+function ensureRenderLoopStarted() {
+    if (renderLoopStarted) return
+    renderLoopStarted = true
+    showCanvas()
+    renderer.start()
+}
+
 async function publishLocalDsl(source) {
     try {
         await onlineAdapter?.updateLocalText(source)
@@ -1632,6 +1647,9 @@ async function recompileShader(overrideDsl) {
             // next draft fails; programStateDsl prevents rewriting its text.
             syncProgramStateFromDsl(dsl)
             refreshControlsPanelAfterDslChange(dsl)
+            // A boot that failed to compile reaches its first success here:
+            // bring the canvas up and start the loop (no-op once running).
+            ensureRenderLoopStarted()
         }
         if (superseded()) return { success: false, superseded: true }
         return result
@@ -2404,25 +2422,34 @@ async function startShader() {
         // Compile the DSL program
         const result = await renderer.compile(dsl)
 
-        if (!result.success) {
-            showError(`Shader error: ${result.error}`)
-            return
+        if (result.success) {
+            // Initialize ProgramState from the compiled DSL
+            syncProgramStateFromDsl(dsl)
+
+            // Show canvas and start rendering
+            ensureRenderLoopStarted()
+        } else {
+            // A broken boot program (?dsl= or ?code=) must land in the same
+            // recoverable state as a hot-reload compile failure: the app stays
+            // alive, the error surfaces through the recoverable compiler-error
+            // banner (not the terminal #error dead end), and the next
+            // successful compile — hot reload, scene load, remote edit — starts
+            // the canvas and loop via recompileShader. A ?code= visitor who
+            // merely followed a link could never recover from the dead end.
+            loadingEl.classList.remove('visible')
+            showCompilerError(result.error)
         }
 
-        // Initialize ProgramState from the compiled DSL
-        syncProgramStateFromDsl(dsl)
-
-        // Show canvas and start rendering
-        showCanvas()
-        renderer.start()
-
-        // Store original DSL and populate editor
+        // Store original DSL and populate editor — with the broken program too,
+        // so the editor shows what failed and fixing it recovers the app.
         originalDsl = dsl
         if (dslEditor) {
             dslEditor.value = dsl
         }
 
-        outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+        if (result.success) {
+            outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+        }
 
         await joinOnlineSessionFromUrlIfPresent()
 

@@ -31,7 +31,11 @@ function harness() {
         }, refreshTextTextures: text => textRefreshes.push(text) }, ProgramState: function () { return state }, programState: state,
         suppressDslReact: false, hotReloadTimeout: null, _compileInFlight: false,
         preloadFontsForDsl: async () => {}, refreshControlsPanelAfterDslChange() {},
-        showCompilerError() {}, hideCompilerError() {}, outputPicker: { setDsl: async () => {} },
+        showCompilerError() {}, hideCompilerError() {},
+        // recompileShader brings the canvas/loop up on a boot-failure page's
+        // first success; the DOM app shell is out of scope for this harness.
+        ensureRenderLoopStarted() {},
+        outputPicker: { setDsl: async () => {} },
         restoreMediaUrls: (_before, after) => after, publishLocalDsl: s => published.push(s),
         setTimeout: fn => { timers.push(fn); return timers.length }, clearTimeout() {},
     })
