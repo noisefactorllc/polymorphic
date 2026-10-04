@@ -103,3 +103,31 @@ test('scene save reports empty editor feedback', async () => {
     )
 })
 
+test('boot-seeded editor focus does not defeat bare-digit scene recall', async () => {
+    const src = await fs.readFile(EMBED_JS_PATH, 'utf8')
+    // showCanvas seeds the editor focus instead of a bare focus() call, so the
+    // boot auto-focus can be told apart from genuine user interaction.
+    assert.match(
+        src,
+        /function showCanvas\(\)[\s\S]{0,600}?seedBootEditorFocus\(\)/,
+        'showCanvas must focus the editor through seedBootEditorFocus'
+    )
+    // The recall suppression treats an untouched boot-seeded focus as
+    // not-typing: a bare digit right after boot recalls its scene.
+    assert.match(
+        src,
+        /el\.isContentEditable \|\| el\.closest\?\.\('code-editor'\)\)\)\s*\{[\s\S]{0,600}?if \(!bootFocusSeed\) return/,
+        'bare-digit recall must treat a boot-seeded focus as not-typing'
+    )
+    // Real interaction ends the seed so genuine typing keeps its suppression.
+    assert.match(
+        src,
+        /\/\^Digit\[1-9\]\$\/\.test\(e\.code \|\| ''\)[\s\S]{0,200}?endBootFocusSeed\(\)/,
+        'any non-bare-digit keypress must end the boot focus seed'
+    )
+    assert.match(
+        src,
+        /addEventListener\('pointerdown', endBootFocusSeed/,
+        'pointer interaction must end the boot focus seed'
+    )
+})

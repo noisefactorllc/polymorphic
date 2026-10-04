@@ -1013,6 +1013,31 @@ function showLoading() {
 }
 
 /**
+ * Boot-seeded editor focus vs. bare-digit scene recall. showCanvas() focuses
+ * the editor before the user has interacted so live coders can type right
+ * after boot, but that seed must not look like typing to the scene shortcuts:
+ * until the user actually interacts — pointer down, or any key other than a
+ * bare scene digit — a bare digit recalls its scene instead of inserting
+ * itself into the program. The seed never weakens genuine typing suppression:
+ * the first real interaction ends it and the editor behaves as before.
+ */
+let userInteracted = false
+let bootFocusSeed = false
+
+function seedBootEditorFocus() {
+    if (!dslEditor) return
+    dslEditor.focus()
+    if (!userInteracted) {
+        bootFocusSeed = true
+    }
+}
+
+function endBootFocusSeed() {
+    userInteracted = true
+    bootFocusSeed = false
+}
+
+/**
  * Hide loading and show canvas
  */
 function showCanvas() {
@@ -1023,9 +1048,7 @@ function showCanvas() {
     if (codeToggleBtn) {
         codeToggleBtn.classList.add('active')
     }
-    if (dslEditor) {
-        dslEditor.focus()
-    }
+    seedBootEditorFocus()
 
     isPlaying = true
     refreshMenuBar()
@@ -2502,6 +2525,12 @@ function setupMenuBar() {
 
     // Snapshot history shortcuts (Cmd/Ctrl+Alt+Left/Right)
     document.addEventListener('keydown', (e) => {
+        // Any keypress other than a bare scene digit ends the boot focus seed
+        // (see seedBootEditorFocus): from then on, digits headed for the
+        // editor are genuine typing again.
+        if (!/^Digit[1-9]$/.test(e.code || '') || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+            endBootFocusSeed()
+        }
         const mod = e.metaKey || e.ctrlKey
         if (mod && e.altKey) {
             if (e.key === 'ArrowLeft') {
@@ -2600,7 +2629,15 @@ function setupMenuBar() {
                 // host and contenteditable too so this stays correct if that changes.
                 const el = e.target
                 if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ||
-                           el.isContentEditable || el.closest?.('code-editor'))) return
+                           el.isContentEditable || el.closest?.('code-editor'))) {
+                    // The editor is focused, but a boot-seeded focus the user
+                    // has never interacted with is not typing: right after
+                    // boot a bare digit recalls its scene rather than editing
+                    // the program. Any real interaction has already ended the
+                    // seed (see endBootFocusSeed), so this cannot swallow a
+                    // digit the user meant for the editor.
+                    if (!bootFocusSeed) return
+                }
                 const dsl = scenes.load(slot)
                 if (dsl) renderer.images = scenes.images(slot)
                 if (dsl && dslEditor) {
@@ -2615,6 +2652,8 @@ function setupMenuBar() {
             }
         }
     })
+    // Pointer interaction ends the boot focus seed too (see endBootFocusSeed).
+    document.addEventListener('pointerdown', endBootFocusSeed, { capture: true })
     gallery.init({
         onLoad: (example) => {
             if (!dslEditor) return
