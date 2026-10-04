@@ -13,6 +13,7 @@ import { dslTokenizer, CodeEditor } from 'handfish'
 import { PolymorphicRenderer } from '/js/noisemaker/renderer.js'
 import { ProgramState, getEffect } from '/js/noisemaker/bundle.js'
 import { preloadFontsForDsl } from '/js/fontLoader.js'
+import { safeNavigationUrl } from '/js/safeUrl.js'
 import { restoreMediaUrls } from '/js/noisemaker/dslSanitize.js'
 import { getEffectCallSites } from '/js/ui/effectClickResolver.js'
 import '/js/ui/codeEditor.js' // injects Polymorphic's editor styling; registers nothing
@@ -93,7 +94,8 @@ function clearError() {
 /** Keep tear-off pointing at whatever is in the editor right now. */
 function syncTearOff() {
     const dsl = editor.value || page.program
-    tearLink.href = `${page.polymorphic}?dsl=${encodeURIComponent(dsl)}`
+    const target = safeNavigationUrl(page.polymorphic, window.location.href)
+    if (target) tearLink.href = `${target}?dsl=${encodeURIComponent(dsl)}`
 }
 
 async function compile() {
@@ -321,12 +323,16 @@ function installKeyboardNav() {
     document.addEventListener('keydown', (e) => {
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
         if (isEditing()) return
+        const go = (url) => {
+            const target = safeNavigationUrl(url, window.location.href)
+            if (target) window.location.href = target
+        }
         if (e.key === 'ArrowLeft' && page.nav.prev) {
-            window.location.href = page.nav.prev
+            go(page.nav.prev)
         } else if (e.key === 'ArrowRight' && page.nav.next) {
-            window.location.href = page.nav.next
+            go(page.nav.next)
         } else if (e.key === 'Escape') {
-            window.location.href = page.nav.index
+            go(page.nav.index)
         }
     })
 }

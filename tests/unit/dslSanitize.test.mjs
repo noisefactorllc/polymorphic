@@ -91,3 +91,12 @@ test('strip then restore round-trips the original url', () => {
     const restored = restoreMediaUrls(original, stripped)
     assert.ok(/url:\s*"data:image\/png;base64,iVBOR,x\(y\)=="/.test(restored))
 })
+
+// ---- backtracking safety ----
+
+test('an unterminated media( with a long non-paren run stays linear', () => {
+    const start = Date.now()
+    const hostile = 'media(' + "'".repeat(60000)
+    assert.strictEqual(stripMediaUrlArg(hostile), hostile)
+    assert.ok(Date.now() - start < 2000, 'media-call matching must not backtrack exponentially')
+})

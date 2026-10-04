@@ -60,9 +60,9 @@ export function switchOutputSurface(dsl, idx) {
     }
 
     // Check for general render(...) directive (supports nested parens like render(read(o0)))
-    const generalRenderPattern = /(?:^|\n)([ \t]*)render\s*\((?:[^()]+|\([^()]*\))*\)/
+    const generalRenderPattern = /(?:^|\n)([ \t]*)render\s*\((?:[^()]|\([^()]*\))*\)/
     if (generalRenderPattern.test(dsl)) {
-        return dsl.replace(/(?:^|\n)([ \t]*)render\s*\((?:[^()]+|\([^()]*\))*\)/g, (match, indent) => {
+        return dsl.replace(/(?:^|\n)([ \t]*)render\s*\((?:[^()]|\([^()]*\))*\)/g, (match, indent) => {
             const prefix = match.startsWith('\n') ? '\n' : ''
             return `${prefix}${indent}render(o${idx})`
         })

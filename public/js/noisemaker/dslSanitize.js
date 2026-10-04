@@ -15,7 +15,7 @@
  */
 
 // A single media(...) call, capturing its argument list. Global for replace().
-const MEDIA_CALL = /\bmedia\s*\(((?:[^()]*|\([^()]*\))*)\)/gi
+const MEDIA_CALL = /\bmedia\s*\(((?:[^()]|\([^()]*\))*)\)/gi
 // A url:"..." / url:'...' argument (non-global; used with match/test only).
 const URL_ARG = /\burl\s*:\s*("[^"]*"|'[^']*')/i
 

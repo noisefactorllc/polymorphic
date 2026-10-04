@@ -117,3 +117,10 @@ test('outputPicker styles strictly use Handfish design tokens with zero raw hex 
     // Zero !important
     assert.doesNotMatch(stylesMatch, /!important/, 'Styles must not contain !important')
 })
+
+test('switchOutputSurface stays linear on an unterminated render( with a long run', () => {
+    const start = Date.now()
+    const hostile = 'render(' + "'".repeat(60000)
+    switchOutputSurface(hostile, 1)
+    assert.ok(Date.now() - start < 2000, 'render() matching must not backtrack exponentially')
+})
