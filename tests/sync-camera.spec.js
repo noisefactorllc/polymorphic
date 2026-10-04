@@ -5,7 +5,7 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
     await page.goto('/?dsl=' + encodeURIComponent(dsl))
     await page.waitForFunction(() => window.__poly?.renderer && window.__poly?.liveInputsPanel?._panel)
     await page.evaluate(async () => {
-        const state = window.cameraTest = { starts: 0, stops: 0, tracks: [], devices: [] }
+        const state = window.cameraTest = { starts: 0, stops: 0, tracks: [], devices: [], sequence: 0, uploads: [], buffer: new Uint8Array(16) }
         window.electronAPI = { syncCamera: {
             isAvailable: async () => true,
             subscribe(callback) { state.starts++; state.deliver = callback; return () => { state.stops++ } }
@@ -27,8 +27,19 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
         const panel = window.__poly.liveInputsPanel
         panel.open()
         await panel._refreshCameras()
-        state.frame = timestamp => state.deliver({ presentationTimeUs: timestamp, width: 2, height: 2,
-            buffer: new Uint8Array([0,0,255,255,0,0,255,255,0,0,255,255,0,0,255,255]).buffer })
+        const upload = panel._uploadMediaFrame.bind(panel)
+        panel._uploadMediaFrame = async frame => {
+            const bytes = new Uint8Array(16)
+            await frame.copyTo(bytes)
+            state.uploads.push([...bytes.slice(0, 4)])
+            return upload(frame)
+        }
+        state.frame = (timestamp, color = 'red') => {
+            const pixel = color === 'red' ? [0, 0, 255, 255] : [0, 255, 0, 255]
+            for (let offset = 0; offset < state.buffer.length; offset += 4) state.buffer.set(pixel, offset)
+            state.deliver({ sequence: ++state.sequence, presentationTimeUs: timestamp,
+                width: 2, height: 2, buffer: state.buffer })
+        }
         state.sample = () => {
             const canvas = document.createElement('canvas')
             canvas.width = canvas.height = 1
@@ -58,8 +69,9 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
     await page.click('[data-source=webcam]')
     await expect.poll(() => page.evaluate(() => window.cameraTest.starts)).toBe(1)
     await expect.poll(() => page.evaluate(() => window.__poly.renderer.mediaStepIndex), { timeout: 15000 }).toBeGreaterThan(0)
-    await page.evaluate(() => { window.cameraTest.frame(1000); window.cameraTest.frame(2000) })
-    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([255, 0, 0, 255])
+    await page.evaluate(() => { window.cameraTest.frame(1000, 'red'); window.cameraTest.frame(1000, 'green') })
+    await expect.poll(() => page.evaluate(() => window.cameraTest.uploads)).toEqual([[0, 0, 255, 255], [0, 255, 0, 255]])
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
     await page.evaluate(() => window.cameraTest.frame(100))
     await expect(page.locator('[data-id=source-status]')).toContainText('Select webcam to retry')
     expect(await page.evaluate(() => window.cameraTest.tracks[0].readyState)).toBe('ended')

@@ -236,6 +236,70 @@ test('useNativeShm streams frames via subscriber without MediaStreamTrackProcess
     assert.equal(uploads[1].closes, 1)
 })
 
+test('native sequence identifies distinct frames even when presentation times match', bounded, async () => {
+    class MockVideoFrame {
+        constructor(buffer, options) {
+            this.buffer = buffer
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+            this.timestamp = options.timestamp
+        }
+        close() {}
+    }
+    globalThis.VideoFrame = MockVideoFrame
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    let deliver
+    const uploads = [], errors = []
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { deliver = callback; return () => {} },
+        isCurrent: () => true,
+        upload: frame => { uploads.push(frame.buffer); return { width: frame.width, height: frame.height } },
+        onError: error => errors.push(error)
+    })
+    const frame = (sequence, presentationTimeUs) => ({
+        sequence, presentationTimeUs, width: 2, height: 2,
+        buffer: Uint8Array.of(sequence).buffer
+    })
+    deliver(frame(1, 1000))
+    deliver(frame(1, 2000)) // Replay: must not replace the first identity.
+    deliver(frame(2, 1000)) // New frame: equal timestamp is valid.
+    owner.consume()
+    await Promise.resolve()
+    owner.consume()
+    assert.deepEqual(uploads.map(buffer => new Uint8Array(buffer)[0]), [1, 2])
+    assert.deepEqual(errors, [])
+    await owner.stop()
+})
+
+test('native sequence regression fails instead of replaying an older frame', bounded, async () => {
+    class MockVideoFrame {
+        constructor(_buffer, options) {
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+        }
+        close() {}
+    }
+    globalThis.VideoFrame = MockVideoFrame
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    let deliver
+    const errors = []
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { deliver = callback; return () => {} },
+        isCurrent: () => true,
+        upload: frame => ({ width: frame.width, height: frame.height }),
+        onError: error => errors.push(error)
+    })
+    const frame = sequence => ({ sequence, presentationTimeUs: 1000,
+        width: 2, height: 2, buffer: new ArrayBuffer(16) })
+    deliver(frame(2))
+    deliver(frame(1))
+    assert.equal(owner.active, false)
+    assert.match(errors[0]?.message || '', /sequence/)
+    await owner.stop()
+})
+
 test('useNativeShm enforces timestamp watermark and reports error on regression', bounded, async () => {
     class MockVideoFrame {
         constructor(buffer, options) {
