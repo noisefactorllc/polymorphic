@@ -84,16 +84,22 @@ test('fixing the program in the editor recovers the app without a page reload', 
   // Marker to prove the recovery happens in the same JS context — no reload.
   await page.evaluate(() => { window.__noReloadMarker = 'same-page' })
 
+  const recoveryStartedAt = Date.now()
   await setEditorText(page, SKETCH)
 
-  // Within the hot-reload window (500ms debounce + compile) the canvas becomes
-  // visible and the loop starts.
+  // Recovery must land within the hot-reload window: the 500ms edit debounce
+  // plus bounded compile time for this small sketch. Lower bound proves the
+  // recovery went through the debounce (a faster "recovery" would be a reload
+  // or a stale path, contradicting the same-page marker).
   await page.waitForFunction(
     () => document.getElementById('canvas')?.classList.contains('visible') &&
       window.__poly?.renderer?.isRunning === true,
     null,
     { timeout: 30000 }
   )
+  const recoveryMs = Date.now() - recoveryStartedAt
+  expect(recoveryMs, `recovery took ${recoveryMs}ms; must pass through the 500ms debounce`).toBeGreaterThanOrEqual(500)
+  expect(recoveryMs, `recovery took ${recoveryMs}ms; must land within the 500ms debounce + compile window`).toBeLessThan(6000)
 
   const state = await appState(page)
   expect(state.compilerErrorVisible, 'boot compiler-error banner is cleared after the fix').toBe(false)
