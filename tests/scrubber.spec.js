@@ -131,6 +131,94 @@ test('scrubber guards text selection with user-select: none during Alt-drag', as
     expect(releasedState.hasTooltip).toBe(false)
 })
 
+test('block evaluation after a scrub evaluates the surrounding block, not the scrubbed literal', async ({ page }) => {
+    await page.goto(PAGE_URL)
+    await waitForApp(page)
+
+    const editor = page.locator('#dsl-editor')
+    await expect(editor).toBeVisible()
+
+    // Calculate position of literal "75"
+    const coords = await page.evaluate(() => {
+        const ed = document.getElementById('dsl-editor')
+        const ta = ed.getTextarea()
+        const idx = ta.value.indexOf('75')
+        const span75 = Array.from(ed.querySelectorAll('*')).find(el => el.textContent === '75' || el.textContent === '75,')
+        const spanRect = span75 ? span75.getBoundingClientRect() : null
+        if (spanRect && spanRect.width > 0) {
+            return { x: spanRect.x + spanRect.width / 2, y: spanRect.y + spanRect.height / 2 }
+        }
+        const cs = getComputedStyle(ta)
+        const lineH = parseFloat(cs.lineHeight) || 24
+        const charW = parseFloat(cs.fontSize) * 0.6
+        const before = ta.value.slice(0, idx)
+        const lineNum = (before.match(/\n/g) || []).length
+        const lastNL = before.lastIndexOf('\n')
+        const colNum = idx - lastNL - 1
+        const r = ta.getBoundingClientRect()
+        const padTop = parseFloat(cs.paddingTop) || 0
+        const padLeft = parseFloat(cs.paddingLeft) || 0
+        return {
+            x: r.x + padLeft + colNum * charW + 4,
+            y: r.y + padTop + lineNum * lineH + lineH / 2,
+        }
+    })
+
+    const consoleWarnings = []
+    page.on('console', msg => {
+        if (msg.type() === 'warning') consoleWarnings.push(msg.text())
+    })
+
+    // Alt+drag the scale literal (75 -> 95)
+    await page.mouse.move(coords.x, coords.y)
+    await page.keyboard.down('Alt')
+    await page.mouse.down()
+    await page.mouse.move(coords.x + 20, coords.y, { steps: 5 })
+    await page.waitForTimeout(50)
+
+    // While dragging, the scrubber seeds a selection over the literal (it may
+    // read collapsed while the textarea is unfocused; it materializes on
+    // focus, which is exactly the leak the fix removes).
+    const duringScrub = await page.evaluate(() => {
+        const ta = document.getElementById('dsl-editor').getTextarea()
+        return { start: ta.selectionStart, end: ta.selectionEnd, value: ta.value }
+    })
+    expect(duringScrub.value).toContain('scale: 95')
+
+    await page.mouse.up()
+    await page.keyboard.up('Alt')
+    await page.waitForTimeout(100)
+
+    // (1) Releasing the scrub must leave no active selection behind
+    const afterScrub = await page.evaluate(() => {
+        const ta = document.getElementById('dsl-editor').getTextarea()
+        return { start: ta.selectionStart, end: ta.selectionEnd }
+    })
+    expect(afterScrub.start).toBe(afterScrub.end)
+
+    // (2) Block evaluation after the scrub evaluates the surrounding block
+    await page.evaluate(() => document.getElementById('dsl-editor').getTextarea().focus())
+    await page.keyboard.press('Alt+Enter')
+    await page.waitForTimeout(1000)
+
+    expect(consoleWarnings).not.toEqual(
+        expect.arrayContaining([expect.stringContaining('Block eval failed')]),
+    )
+    await expect(page.locator('#compiler-error')).toBeHidden()
+
+    // Control: an explicit selection still wins over the block, proving the
+    // block-eval path above actually ran selection-free.
+    await page.evaluate(() => {
+        const ta = document.getElementById('dsl-editor').getTextarea()
+        const i = ta.value.indexOf('scale: 95')
+        ta.focus()
+        ta.setSelectionRange(i, i + 'scale: 95'.length)
+    })
+    await page.keyboard.press('Alt+Enter')
+    await expect(page.locator('#compiler-error')).toBeVisible({ timeout: 15000 })
+    expect(consoleWarnings.some(t => t.includes('Block eval failed'))).toBe(true)
+})
+
 test('scrubber fine-tunes with Shift and displays modifier rate badge in tooltip', async ({ page }) => {
     await page.goto(PAGE_URL)
     await waitForApp(page)

@@ -9,6 +9,7 @@ import {
     findParamContext,
     resolveParamBounds,
 } from '../../public/js/ui/scrubber.js'
+import { getSelectionOrBlock } from '../../public/js/ui/editorActions.js'
 
 function createMockEditor(initialText = 'noise(scale: 80).write(o0)') {
     const listeners = new Map()
@@ -458,6 +459,94 @@ test('resolveParamBounds resolves built-in boundaries and respects custom provid
     // Custom provider option
     const customProvider = (f, p) => (f === 'custom' && p === 'zoom' ? { min: 0.1, max: 10, isInt: false } : null)
     assert.deepEqual(resolveParamBounds('custom', 'zoom', customProvider), { min: 0.1, max: 10, isInt: false })
+})
+
+test('releasing a scrub collapses the selection so block evaluation sees the surrounding block', () => {
+    const mock = createMockEditor('noise(scale: 80).write(o0)')
+    const prevDoc = globalThis.document
+    const prevWindow = globalThis.window
+
+    const docListeners = new Map()
+
+    globalThis.document = {
+        documentElement: { clientWidth: 900 },
+        body: {
+            classList: { add() {}, remove() {}, contains() { return false } },
+            appendChild() {},
+        },
+        getElementById() { return null },
+        createElement() {
+            return {
+                style: {},
+                offsetWidth: 180,
+                offsetHeight: 44,
+                classList: { add() {}, remove() {} },
+                querySelector() { return { textContent: '' } },
+                remove() {},
+            }
+        },
+        caretPositionFromPoint() {
+            return { offsetNode: mock.textarea, offset: 14 }
+        },
+        addEventListener(type, fn) {
+            if (!docListeners.has(type)) docListeners.set(type, [])
+            docListeners.get(type).push(fn)
+        },
+        removeEventListener(type, fn) {
+            const list = docListeners.get(type) || []
+            const idx = list.indexOf(fn)
+            if (idx >= 0) list.splice(idx, 1)
+        },
+    }
+
+    globalThis.window = {
+        innerHeight: 550,
+        getSelection() { return { removeAllRanges() {} } },
+    }
+
+    let ended = false
+    const detach = attachScrubber(mock.editor, {
+        onScrubEnd: () => { ended = true },
+    })
+
+    try {
+        const pointerDownFn = mock.listeners.get('pointerdown')?.[0]
+        const pointerMoveFn = mock.listeners.get('pointermove')?.[0]
+        const pointerUpFn = mock.listeners.get('pointerup')?.[0]
+
+        // Start scrub on the literal 80 (offsets 13-15)
+        pointerDownFn({
+            pointerType: 'mouse',
+            button: 0,
+            altKey: true,
+            clientX: 100,
+            clientY: 100,
+            pointerId: 1,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+        })
+
+        // Drag 20px right: 80 -> 100, scrubber seeds a selection over the literal
+        pointerMoveFn({ clientX: 120, clientY: 100, altKey: true })
+        assert.equal(mock.textarea.value, 'noise(scale: 100).write(o0)')
+        assert.equal(mock.textarea.selectionStart, 13)
+        assert.equal(mock.textarea.selectionEnd, 16)
+
+        // Release: the seeded selection must collapse, not span the literal
+        pointerUpFn({ pointerId: 1 })
+        assert.ok(ended, 'onScrubEnd should have been invoked')
+        assert.equal(mock.textarea.selectionStart, mock.textarea.selectionEnd,
+            'no active selection may remain after the scrub is released')
+
+        // Selection-based block evaluation must now resolve the block
+        const sel = getSelectionOrBlock(mock.editor)
+        assert.ok(sel, 'block selection should resolve')
+        assert.equal(sel.text, 'noise(scale: 100).write(o0)')
+    } finally {
+        detach()
+        globalThis.document = prevDoc
+        globalThis.window = prevWindow
+    }
 })
 
 test('smooth dragging eliminates jump when Shift modifier is pressed mid-drag', () => {

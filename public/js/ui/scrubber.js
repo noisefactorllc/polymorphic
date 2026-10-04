@@ -526,6 +526,14 @@ export function attachScrubber(editor, options = {}) {
         if (!scrubbing) return
         scrubbing = false
         activeBounds = null
+        // Collapse the selection the scrub seeded while dragging. Leaving it
+        // spanning the literal makes selection-based consumers (block
+        // evaluation) act on the bare number instead of the surrounding block.
+        try {
+            const caret = range ? range.start : ta.selectionStart
+            ta.selectionStart = caret
+            ta.selectionEnd = caret
+        } catch { /* ignore */ }
         removeUserSelectGuard()
         if (tooltip) {
             tooltip.remove()
