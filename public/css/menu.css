@@ -415,39 +415,6 @@
     font-size: 24px;
 }
 
-/* Tooltip styles */
-.tooltip {
-    position: relative;
-}
-
-.tooltip::before {
-    content: attr(data-title);
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--hf-bg-surface, var(--hf-color-2));
-    color: var(--hf-text-bright, var(--hf-color-7));
-    padding: var(--hf-space-1, 4px) var(--hf-space-2, 8px);
-    border: 1px solid var(--hf-border-subtle, var(--hf-border));
-    border-radius: var(--hf-radius-sm, 4px);
-    box-shadow: var(--hf-shadow-md);
-    font-family: var(--hf-font-family, 'Nunito', 'Nunito Block');
-    font-size: var(--hf-size-xs, 11px);
-    font-weight: var(--hf-weight-medium, 500);
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity var(--hf-transition, 0.15s ease), visibility var(--hf-transition, 0.15s ease);
-    pointer-events: none;
-    z-index: var(--hf-z-tooltip, 9999);
-}
-
-.tooltip:hover::before {
-    opacity: 1;
-    visibility: visible;
-}
-
 /* Responsive - small screens */
 @media (max-width: 768px) {
     #menu .hf-menubar {

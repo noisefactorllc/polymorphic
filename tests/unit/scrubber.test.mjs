@@ -74,6 +74,7 @@ test('scrubbing applies user-select: none and scrubber-active to editor and text
     const docListeners = new Map()
 
     globalThis.document = {
+        documentElement: { clientWidth: 900 },
         body: {
             classList: {
                 add(c) { bodyClassList.add(c) },
@@ -86,6 +87,8 @@ test('scrubbing applies user-select: none and scrubber-active to editor and text
         createElement() {
             return {
                 style: {},
+                offsetWidth: 180,
+                offsetHeight: 44,
                 classList: { add() {}, remove() {} },
                 querySelector() { return { textContent: '' } },
                 remove() {},
@@ -106,6 +109,7 @@ test('scrubbing applies user-select: none and scrubber-active to editor and text
     }
 
     globalThis.window = {
+        innerHeight: 550,
         getSelection() {
             return { removeAllRanges() {} }
         },
@@ -180,6 +184,7 @@ test('scrubbing can be cancelled with Escape, restoring original text and removi
     const docListeners = new Map()
 
     globalThis.document = {
+        documentElement: { clientWidth: 900 },
         body: {
             classList: {
                 add(c) { bodyClassList.add(c) },
@@ -192,6 +197,8 @@ test('scrubbing can be cancelled with Escape, restoring original text and removi
         createElement() {
             return {
                 style: {},
+                offsetWidth: 180,
+                offsetHeight: 44,
                 classList: { add() {}, remove() {} },
                 querySelector() { return { textContent: '' } },
                 remove() {},
@@ -212,6 +219,7 @@ test('scrubbing can be cancelled with Escape, restoring original text and removi
     }
 
     globalThis.window = {
+        innerHeight: 550,
         getSelection() {
             return { removeAllRanges() {} }
         },
@@ -461,6 +469,7 @@ test('smooth dragging eliminates jump when Shift modifier is pressed mid-drag', 
     const docListeners = new Map()
 
     globalThis.document = {
+        documentElement: { clientWidth: 900 },
         body: {
             classList: {
                 add(c) { bodyClassList.add(c) },
@@ -473,6 +482,8 @@ test('smooth dragging eliminates jump when Shift modifier is pressed mid-drag', 
         createElement() {
             return {
                 style: {},
+                offsetWidth: 180,
+                offsetHeight: 44,
                 classList: { add() {}, remove() {} },
                 querySelector() { return { textContent: '' } },
                 remove() {},
@@ -493,6 +504,7 @@ test('smooth dragging eliminates jump when Shift modifier is pressed mid-drag', 
     }
 
     globalThis.window = {
+        innerHeight: 550,
         getSelection() { return { removeAllRanges() {} } },
     }
 
@@ -546,6 +558,7 @@ test('boundary clamping prevents out-of-range values and reverses immediately wi
     const docListeners = new Map()
 
     globalThis.document = {
+        documentElement: { clientWidth: 900 },
         body: {
             classList: {
                 add(c) { bodyClassList.add(c) },
@@ -558,6 +571,8 @@ test('boundary clamping prevents out-of-range values and reverses immediately wi
         createElement() {
             return {
                 style: {},
+                offsetWidth: 180,
+                offsetHeight: 44,
                 classList: { add() {}, remove() {} },
                 querySelector() { return { textContent: '' } },
                 remove() {},
@@ -579,6 +594,7 @@ test('boundary clamping prevents out-of-range values and reverses immediately wi
     }
 
     globalThis.window = {
+        innerHeight: 550,
         getSelection() { return { removeAllRanges() {} } },
     }
 
@@ -632,6 +648,8 @@ test('tooltip reflects fine, ultra-fine, and coarse modifier states and boundary
     let createdTooltip = null
     const tooltipMock = {
         style: {},
+        offsetWidth: 180,
+        offsetHeight: 44,
         className: '',
         innerHTML: '',
         querySelector(sel) {
@@ -643,6 +661,7 @@ test('tooltip reflects fine, ultra-fine, and coarse modifier states and boundary
     }
 
     globalThis.document = {
+        documentElement: { clientWidth: 900 },
         body: {
             classList: {
                 add(c) { bodyClassList.add(c) },
@@ -671,6 +690,7 @@ test('tooltip reflects fine, ultra-fine, and coarse modifier states and boundary
     }
 
     globalThis.window = {
+        innerHeight: 550,
         getSelection() { return { removeAllRanges() {} } },
     }
 

@@ -143,14 +143,11 @@ test('public/css/menu.css chrome gradient anchors are fixed directional endpoint
     assert.doesNotMatch(css, /--ui-chrome-shadow-color:\s*var\(--hf-/)
 })
 
-test('public/css/menu.css tooltip uses Handfish design tokens', () => {
+test('Polymorphic delegates tooltips to Handfish without a competing CSS tooltip', () => {
     const css = readCss('menu.css')
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-bg-surface/)
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-text-bright/)
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-border-subtle/)
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-radius-sm/)
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-shadow-md/)
-    assert.match(css, /\.tooltip::before[\s\S]*?var\(--hf-z-tooltip/)
+    assert.doesNotMatch(css, /\.tooltip::before/)
+    const embed = fs.readFileSync(new URL('../../public/js/embed.js', import.meta.url), 'utf8')
+    assert.match(embed, /initializeTooltips\(\)/)
 })
 
 test('public/css/sync.css uses Handfish tokens for dialog variables and backdrop', () => {

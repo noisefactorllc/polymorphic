@@ -279,3 +279,45 @@ test('scrubber clamps parameter bounds with zero turnaround lag', async ({ page 
     await page.keyboard.up('Alt')
 })
 
+
+test('scrubber tooltip stays inside the viewport when dragged to its edges', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 550 })
+    await page.goto(PAGE_URL)
+    await waitForApp(page)
+
+    const coords = await page.evaluate(() => {
+        const ed = document.getElementById('dsl-editor')
+        const span = [...ed.querySelectorAll('*')].find(el => el.textContent === '75' || el.textContent === '75,')
+        const rect = span.getBoundingClientRect()
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    })
+    await page.mouse.move(coords.x, coords.y)
+    await page.keyboard.down('Alt')
+    await page.mouse.down()
+    await expect(page.locator('.scrubber-tooltip')).toBeVisible()
+
+    for (const point of [{ x: 898, y: 548 }, { x: 2, y: 2 }]) {
+        await page.mouse.move(point.x, point.y)
+        const bounds = await page.locator('.scrubber-tooltip').evaluate(el => {
+            const rect = el.getBoundingClientRect()
+            return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight }
+        })
+        expect(bounds.left, JSON.stringify(point)).toBeGreaterThanOrEqual(0)
+        expect(bounds.top, JSON.stringify(point)).toBeGreaterThanOrEqual(0)
+        expect(bounds.right, JSON.stringify(point)).toBeLessThanOrEqual(bounds.width)
+        expect(bounds.bottom, JSON.stringify(point)).toBeLessThanOrEqual(bounds.height)
+    }
+
+    await page.setViewportSize({ width: 320, height: 240 })
+    const resizedBounds = await page.locator('.scrubber-tooltip').evaluate(el => {
+        const rect = el.getBoundingClientRect()
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight }
+    })
+    expect(resizedBounds.left).toBeGreaterThanOrEqual(0)
+    expect(resizedBounds.top).toBeGreaterThanOrEqual(0)
+    expect(resizedBounds.right).toBeLessThanOrEqual(resizedBounds.width)
+    expect(resizedBounds.bottom).toBeLessThanOrEqual(resizedBounds.height)
+
+    await page.mouse.up()
+    await page.keyboard.up('Alt')
+})

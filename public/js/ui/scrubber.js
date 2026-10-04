@@ -49,6 +49,9 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLES_ID)) {
             font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block', monospace);
             font-size: var(--hf-size-sm, 0.75rem);
             pointer-events: none;
+            box-sizing: border-box;
+            overflow-wrap: anywhere;
+            overflow: hidden;
             z-index: 5500;
             box-shadow: var(--hf-shadow-lg);
             transition: opacity 0.1s;
@@ -373,8 +376,25 @@ export function attachScrubber(editor, options = {}) {
                 hintEl.textContent = `shift = fine · ${MOD_LABEL} = coarse · shift+${MOD_LABEL} = ultra-fine`
             }
         }
-        tooltip.style.left = (x + 12) + 'px'
-        tooltip.style.top = (y - 36) + 'px'
+        positionTooltip(x, y)
+    }
+
+    function positionTooltip(x, y) {
+        if (!tooltip) return
+        const margin = 8
+        const gap = 12
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth
+        const viewportHeight = window.innerHeight
+        tooltip.style.maxWidth = `${Math.max(0, viewportWidth - 2 * margin)}px`
+        tooltip.style.maxHeight = `${Math.max(0, viewportHeight - 2 * margin)}px`
+        const width = tooltip.offsetWidth
+        const height = tooltip.offsetHeight
+        const right = x + gap
+        const left = right + width <= viewportWidth - margin ? right : x - gap - width
+        const above = y - gap - height
+        const top = above >= margin ? above : y + gap
+        tooltip.style.left = `${Math.min(Math.max(left, margin), viewportWidth - margin - width)}px`
+        tooltip.style.top = `${Math.min(Math.max(top, margin), viewportHeight - margin - height)}px`
     }
 
     function engageScrub(e, lit) {
@@ -567,6 +587,13 @@ export function attachScrubber(editor, options = {}) {
         }
     }
 
+    function onResize() {
+        if (tooltip && lastPointerX != null && lastPointerY != null) {
+            positionTooltip(lastPointerX, lastPointerY)
+        }
+    }
+
+    window.addEventListener?.('resize', onResize)
     ta.addEventListener('pointermove', onPointerMove)
     ta.addEventListener('pointerdown', onPointerDown)
     ta.addEventListener('pointerup', onPointerUp)
@@ -578,6 +605,7 @@ export function attachScrubber(editor, options = {}) {
     }
 
     return function detach() {
+        window.removeEventListener?.('resize', onResize)
         removeUserSelectGuard()
         ta.removeEventListener('pointermove', onPointerMove)
         ta.removeEventListener('pointerdown', onPointerDown)

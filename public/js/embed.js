@@ -7,11 +7,12 @@
 
 const APP_VERSION = '0.11'
 
-import { AboutDialog, dslTokenizer, initEscapeHandler, formatShortcut, hasOpenEscapeables } from 'handfish'
+import { AboutDialog, dslTokenizer, initEscapeHandler, initializeTooltips, formatShortcut, hasOpenEscapeables } from 'handfish'
 
 // One global Escape handler for handfish components (menu bar, dialogs).
 // Required once per app by the handfish escape-stack contract.
 initEscapeHandler()
+initializeTooltips()
 import { PolymorphicRenderer } from './noisemaker/renderer.js'
 import { ProgramState, getEffect } from './noisemaker/bundle.js'
 import { restoreMediaUrls } from './noisemaker/dslSanitize.js'
