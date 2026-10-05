@@ -26,6 +26,10 @@ export class SnapshotHistory {
         this._lastSaved = null // dedupe consecutive identical pushes
         this._suppress = false // when true, don't auto-snapshot (used during nav)
         this._listeners = []
+        this._held = false     // when true, writes to storage wait (see holdWritesUntil)
+        this._unsaved = false  // a write is waiting for the hold to end
+        this._ordered = Promise.resolve() // snapshots recorded by pushInOrder
+        this._ordering = 0     // how many of them are not recorded yet
         this._load()
     }
 
@@ -49,6 +53,52 @@ export class SnapshotHistory {
         this._lastSaved = dsl
         this._save()
         this._notify()
+    }
+
+    /**
+     * Add a snapshot after every snapshot added before it by this method, so
+     * entries are recorded in the order they were made. `prepare`, when given,
+     * resolves with the entry to record for `dsl` (a program with its images
+     * stored, for example); a snapshot whose `prepare` fails is not recorded.
+     * With nothing pending and nothing to prepare, the snapshot is recorded at
+     * once.
+     * @param {string} dsl
+     * @param {(dsl: string) => Promise<string>} [prepare]
+     * @returns {Promise<void>} settles when this snapshot is recorded or dropped
+     */
+    pushInOrder(dsl, prepare) {
+        if (!prepare && this._ordering === 0) {
+            this.push(dsl)
+            return Promise.resolve()
+        }
+        this._ordering++
+        this._ordered = this._ordered
+            .then(() => prepare ? prepare(dsl) : dsl)
+            .then(
+                entry => this.push(entry),
+                err => console.warn('[SnapshotHistory] Snapshot not recorded; it could not be prepared:', err)
+            )
+            .finally(() => { this._ordering-- })
+        return this._ordered
+    }
+
+    /**
+     * Keep history in memory only, and neither write nor prune stored history,
+     * until `ready` settles; then write it once. Programs, scenes and history
+     * saved before images had their own storage can fill localStorage until
+     * their images move out, and pruning before then would drop entries whose
+     * images have not moved yet.
+     * @param {Promise<unknown>} ready
+     */
+    holdWritesUntil(ready) {
+        this._held = true
+        Promise.resolve(ready).catch(() => {}).then(() => {
+            this._held = false
+            if (this._unsaved) {
+                this._unsaved = false
+                this._save()
+            }
+        })
     }
 
     /**
@@ -117,6 +167,10 @@ export class SnapshotHistory {
 
     _save() {
         if (!this._storage) return
+        if (this._held) {
+            this._unsaved = true
+            return
+        }
         try {
             this._storage.setItem(STORAGE_KEY, JSON.stringify({ entries: this._entries, cursor: this._cursor }))
         } catch (err) {
@@ -150,7 +204,7 @@ export class SnapshotHistory {
      * @returns {boolean} True if entries were evicted.
      */
     prune(targetCount = 10) {
-        if (this._entries.length <= targetCount) return false
+        if (this._held || this._entries.length <= targetCount) return false
         const prevEntries = this._entries
         const prevCursor = this._cursor
         const currentItem = this._cursor >= 0 ? this._entries[this._cursor] : null

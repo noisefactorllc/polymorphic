@@ -23,7 +23,7 @@ import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { programs } from './programs.js'
-import { storeImageFile, getProgramImage, hasImageText, storeImageText, storeDslImages, migrateProgramImages } from './programImages.js'
+import { storeImageFile, getProgramImage, hasImageText, storeImageText, storeDslImages, migrateProgramImages, programImagesMigrated } from './programImages.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
@@ -2111,16 +2111,11 @@ function stampUrl(dsl) {
  * localStorage. A program that carries an image as base64 text (pasted, or
  * from an older link) is recorded with the image stored in IndexedDB and named
  * by reference; when the image cannot be stored, the program is not recorded.
+ * Programs are recorded in the order they compiled, so a later program never
+ * lands before one whose image is still being stored.
  */
 function pushSnapshot(dsl) {
-    if (!hasImageText(dsl)) {
-        snapshotHistory.push(dsl)
-        return
-    }
-    storeImageText(dsl).then(
-        stored => snapshotHistory.push(stored),
-        err => console.warn('[Polymorphic] Snapshot not recorded; its image could not be stored:', err)
-    )
+    snapshotHistory.pushInOrder(dsl, hasImageText(dsl) ? storeImageText : undefined)
 }
 
 /**
@@ -2572,7 +2567,10 @@ function setupMenuBar() {
                 const dsl = dslEditor?.value || ''
                 if (dsl.trim()) {
                     // Images first: a saved scene must never name an image that is not stored.
-                    storeDslImages(dsl, renderer?.images).then(stored => {
+                    // On a full localStorage there is room only once older entries'
+                    // images have moved out, which starts at page load.
+                    storeDslImages(dsl, renderer?.images).then(async stored => {
+                        await programImagesMigrated()
                         const res = scenes.save(slot, stored)
                         if (res && res.success === false) {
                             if (res.quotaExceeded) {
@@ -2824,9 +2822,11 @@ function init() {
 
     // Programs, scenes and snapshot history saved before images had their own
     // storage hold them as base64 text in localStorage. Move the bytes to
-    // IndexedDB; non-blocking.
+    // IndexedDB; non-blocking. Saves wait for it, and history holds its
+    // writes, and so any pruning, until it has freed the space.
     migrateProgramImages([programs, scenes, snapshotHistory])
         .catch(err => console.error('Failed to move program images:', err))
+    snapshotHistory.holdWritesUntil(programImagesMigrated())
 
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()

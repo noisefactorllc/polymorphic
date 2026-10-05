@@ -322,6 +322,123 @@ test('a full localStorage is freed on load, and an image program saves and reloa
   expect(await storageChars(page)).toBeLessThan(20_000)
 })
 
+/**
+ * Hold every image write the app commits until window.__releaseWrites() is
+ * called. window.__heldWrites counts the writes held.
+ */
+async function holdImageWrites(page) {
+  await page.addInitScript(() => {
+    window.__heldWrites = 0
+    const released = new Promise(resolve => { window.__releaseWrites = resolve })
+    const transaction = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = function (names, mode, options) {
+      const tx = transaction.call(this, names, mode, options)
+      if (mode === 'readwrite') {
+        Object.defineProperty(tx, 'oncomplete', {
+          configurable: true,
+          set(handler) {
+            window.__heldWrites++
+            tx.addEventListener('complete', event => released.then(() => handler.call(tx, event)))
+          },
+        })
+      }
+      return tx
+    }
+  })
+}
+
+const historyEntries = async page => JSON.parse((await storedText(page))['polymorphic-snapshot-history']).entries.map(entry => entry.dsl)
+
+test('saves made while a full localStorage is being freed wait for the space, and history loses nothing', async ({ page }) => {
+  test.setTimeout(180000)
+  await holdImageWrites(page)
+  const big = [0, 1, 2, 3].map(() => png([0, 0, 0], { width: 600, height: 600, noiseRows: 510 }))
+  const seed = legacySeed({ big })
+  expect(await seedStorage(page, seed)).toBe('QuotaExceededError')
+  // Fill what is left, so that any save needs the space the move frees.
+  await page.evaluate(() => {
+    let size = 0
+    for (let step = 1 << 22; step >= 1; step >>= 1) {
+      try {
+        localStorage.setItem('filler', 'x'.repeat(size + step))
+        size += step
+      } catch { /* Too big; try a smaller step. */ }
+    }
+  })
+
+  await boot(page, PLAIN)
+  // The move is waiting on its first image write, and has freed nothing yet.
+  await expect.poll(() => page.evaluate(() => window.__heldWrites)).toBeGreaterThan(0)
+  // A history entry, a scene save and a program save.
+  await showColor(page, OTHER, MAGENTA_PIXEL)
+  await page.keyboard.press('Control+Shift+Digit5')
+  await page.evaluate(async () => (await import('/js/programModal.js')).openProgramModal('save'))
+  await page.fill('#programNameInput', 'Saved while moving')
+  await page.click('#programSaveBtn')
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 250)))
+  expect(await storedText(page)).toEqual(seed)
+
+  await page.evaluate(() => window.__releaseWrites())
+  await expect.poll(async () => {
+    const stored = await storedText(page)
+    return [JSON.parse(stored['polymorphic-programs'])['Saved while moving']?.dsl, JSON.parse(stored['polymorphic-scenes'])[5]]
+  }, { timeout: 30000 }).toEqual([OTHER, OTHER])
+  await expect.poll(() => historyEntries(page), { timeout: 30000 }).toEqual([
+    program(`image:${digest(big[3])}`),
+    program(`image:${digest(RED)}`),
+    PLAIN,
+    OTHER,
+  ])
+  expect(Object.values(await storedText(page)).join('\n')).not.toContain('data:image')
+  await page.evaluate(() => localStorage.removeItem('filler'))
+  expect(await storageChars(page)).toBeLessThan(20_000)
+  expect(await storedImageDigest(page, digest(big[3]))).toEqual({ size: big[3].length, id: digest(big[3]) })
+})
+
+test('history records programs in the order they compiled while an image is still being stored', async ({ page }) => {
+  test.setTimeout(120000)
+  await holdImageWrites(page)
+  await boot(page, PLAIN)
+  // An older link's program, with the image as text: recording it stores the image first.
+  await showColor(page, program(text(RED)), RED_PIXEL)
+  await expect.poll(() => page.evaluate(() => window.__heldWrites)).toBe(1)
+  await showColor(page, OTHER, MAGENTA_PIXEL)
+  await page.evaluate(() => window.__releaseWrites())
+  await expect.poll(async () => (await historyEntries(page)).slice(-2)).toEqual([program(`image:${digest(RED)}`), OTHER])
+  // Compiling the same image text again does not store it again.
+  await showColor(page, program(text(RED)), RED_PIXEL)
+  await expect.poll(async () => (await historyEntries(page)).at(-1)).toBe(program(`image:${digest(RED)}`))
+  expect(await page.evaluate(() => window.__heldWrites)).toBe(1)
+})
+
+test('dropping, saving and loading an image work without crypto.subtle, as over plain HTTP', async ({ page }) => {
+  test.setTimeout(120000)
+  await page.addInitScript(() => Object.defineProperty(Crypto.prototype, 'subtle', { get: () => undefined, configurable: true }))
+  await boot(page, PLAIN)
+  expect(await page.evaluate(() => typeof window.crypto.subtle)).toBe('undefined')
+  await dropImage(page, RED, 'red.png')
+  const reference = `image:${digest(RED)}`
+  await expect.poll(() => editorText(page)).toContain(reference)
+  expect(await storedImage(page, digest(RED))).toEqual({ type: 'image/png', bytes: Array.from(RED) })
+  await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
+  await expect.poll(async () => (await storedText(page))['polymorphic-snapshot-history']).toContain(reference)
+  await page.keyboard.press('Control+Shift+Digit2')
+  await expect(page.locator('.polymorphic-toast')).toHaveText('Saved scene 2')
+  await saveProgram(page, 'Red over HTTP')
+  // An older link's program, with the image as text.
+  await showColor(page, program(text(GREEN)), GREEN_PIXEL)
+  await expect.poll(async () => (await historyEntries(page)).at(-1)).toBe(program(`image:${digest(GREEN)}`))
+  expect(await storedImage(page, digest(GREEN))).toEqual({ type: 'image/png', bytes: Array.from(GREEN) })
+
+  await boot(page, PLAIN)
+  await loadProgram(page, 'Red over HTTP')
+  await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
+  await showColor(page, PLAIN, YELLOW_PIXEL)
+  await recallScene(page, 2)
+  await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
+  for (const value of Object.values(await storedText(page))) expect(value).not.toContain('data:image')
+})
+
 test('entries keep their images as text when IndexedDB cannot store them', async ({ page }) => {
   test.setTimeout(120000)
   const failures = []

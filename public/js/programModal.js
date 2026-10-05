@@ -8,6 +8,7 @@
  */
 
 import { programs } from './programs.js'
+import { programImagesMigrated } from './programImages.js'
 
 // DOM element references
 let programModal = null
@@ -265,6 +266,9 @@ function setupEventHandlers() {
             showToast?.(`Could not save program: ${error.message}`, 'error')
             return
         }
+        // On a full localStorage there is room only once older entries'
+        // images have moved out, which starts at page load.
+        await programImagesMigrated()
         const res = programs.saveProgram(name, dsl)
         if (res && res.success === false) {
             if (res.quotaExceeded) {

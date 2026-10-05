@@ -150,3 +150,74 @@ test('SnapshotHistory keeps entries whose images cannot be stored', async () => 
     assert.strictEqual(history._entries[0].dsl, redText)
 })
 
+
+test('SnapshotHistory records snapshots in order while an earlier one is still being prepared', async () => {
+    const history = new SnapshotHistory()
+    let release
+    const stored = new Promise(resolve => { release = resolve })
+    const slow = async dsl => { await stored; return dsl.replace('text', 'reference') }
+    const imageProgram = history.pushInOrder('image text', slow)
+    // A plain edit made after it waits for it.
+    const plain = history.pushInOrder('plain edit')
+    const later = history.pushInOrder('later edit')
+    assert.deepStrictEqual(history._entries.map(entry => entry.dsl), [])
+    release()
+    await Promise.all([imageProgram, plain, later])
+    assert.deepStrictEqual(history._entries.map(entry => entry.dsl), ['image reference', 'plain edit', 'later edit'])
+    // Nothing pending: recorded at once.
+    history.pushInOrder('at once')
+    assert.strictEqual(history._entries.at(-1).dsl, 'at once')
+})
+
+test('SnapshotHistory skips a snapshot it cannot prepare and records the ones after it', async () => {
+    const history = new SnapshotHistory()
+    const warn = console.warn
+    console.warn = () => {}
+    try {
+        const failed = history.pushInOrder('image text', async () => { throw new Error('IndexedDB unavailable') })
+        const plain = history.pushInOrder('plain edit')
+        await Promise.all([failed, plain])
+    } finally {
+        console.warn = warn
+    }
+    assert.deepStrictEqual(history._entries.map(entry => entry.dsl), ['plain edit'])
+})
+
+test('SnapshotHistory neither writes nor prunes stored history until the hold ends', async () => {
+    const storage = historyStorage([{ dsl: 'a', time: 1 }, { dsl: 'b', time: 2 }, { dsl: 'c', time: 3 }])
+    const before = storage.map.get('polymorphic-snapshot-history')
+    let writes = 0
+    const setItem = storage.setItem
+    storage.setItem = (k, v) => { writes++; return setItem(k, v) }
+    const history = new SnapshotHistory(storage)
+    let release
+    history.holdWritesUntil(new Promise(resolve => { release = resolve }))
+    history.push('d')
+    history.push('e')
+    assert.strictEqual(history.back(), 'd')
+    // The pruning a full localStorage asks for waits too.
+    assert.strictEqual(history.prune(1), false)
+    assert.strictEqual(history._entries.length, 5)
+    assert.strictEqual(writes, 0)
+    assert.strictEqual(storage.map.get('polymorphic-snapshot-history'), before)
+    release()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.strictEqual(writes, 1)
+    assert.deepStrictEqual(storedHistory(storage), {
+        entries: ['a', 'b', 'c', 'd', 'e'].map(dsl => ({ dsl, time: history._entries.find(entry => entry.dsl === dsl).time })),
+        cursor: 3,
+    })
+    assert.strictEqual(history.prune(1), true)
+})
+
+test('SnapshotHistory writes after a hold whose promise rejects', async () => {
+    const storage = historyStorage([])
+    const history = new SnapshotHistory(storage)
+    let fail
+    history.holdWritesUntil(new Promise((_resolve, reject) => { fail = reject }))
+    history.push('a')
+    assert.deepStrictEqual(storedHistory(storage).entries, [])
+    fail(new Error('migration failed'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepStrictEqual(storedHistory(storage).entries.map(entry => entry.dsl), ['a'])
+})
