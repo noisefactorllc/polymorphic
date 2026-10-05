@@ -35,7 +35,7 @@ let programDeleteCheckbox = null
 let programDeleteBtn = null
 
 // Callbacks
-let getImages = () => []
+let prepareDsl = async dsl => dsl
 let getDsl = null
 let setDsl = null
 let showToast = null
@@ -180,12 +180,14 @@ export function closeProgramModal() {
  * Initialize the program modal module
  * @param {Object} options
  * @param {Function} options.getDsl - Function to get current DSL
+ * @param {Function} [options.prepareDsl] - Stores the images a DSL uses and
+ *   resolves with the DSL to save, which names them by reference
  * @param {Function} options.setDsl - Function to set DSL and recompile
  */
 export function initProgramModal(options) {
     getDsl = options.getDsl
     setDsl = options.setDsl
-    getImages = options.getImages || (() => [])
+    prepareDsl = options.prepareDsl || (async dsl => dsl)
     showToast = options.showToast || (typeof window !== 'undefined' ? window.showToast : null)
 
     // Cache DOM elements
@@ -251,19 +253,19 @@ function setupEventHandlers() {
     programOverwriteCheckbox?.addEventListener('change', validateSaveButton)
 
     // Save button
-    programSaveBtn?.addEventListener('click', () => {
+    programSaveBtn?.addEventListener('click', async () => {
         const name = programNameInput?.value?.trim()
         if (!name || !getDsl) return
 
-        const dsl = getDsl()
-        let images
+        let dsl
         try {
-            images = getImages()
+            // Images first: a saved program must never name an image that is not stored.
+            dsl = await prepareDsl(getDsl())
         } catch (error) {
             showToast?.(`Could not save program: ${error.message}`, 'error')
             return
         }
-        const res = programs.saveProgram(name, dsl, images)
+        const res = programs.saveProgram(name, dsl)
         if (res && res.success === false) {
             if (res.quotaExceeded) {
                 showToast?.('Could not save program: storage quota exceeded. Free up space by deleting unused programs.', 'error')

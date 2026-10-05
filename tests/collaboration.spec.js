@@ -222,7 +222,7 @@ test('remote text received during a delayed compile reaches the renderer and con
   expect(await guest.evaluate(() => window.__poly.programState.toDsl())).toContain('80')
 })
 
-test('image seed and later replacement reach another client with original bytes and rendered pixels', async ({ page, context }) => {
+test('image seed and later replacement reach another client with original bytes and rendered pixels', async ({ page, browser }) => {
   test.setTimeout(120000)
   await preparePage(page)
   await page.goto(appPath({ dsl: 'search synth\nmedia().write(o0)\nrender(o0)' }))
@@ -241,7 +241,10 @@ test('image seed and later replacement reach another client with original bytes 
   await expect.poll(() => imagePixel(page)).toEqual([255, 0, 0, 255])
   const sessionId = await takeOnline(page)
   await closeDialog(page)
-  const guest = await context.newPage()
+  // Another client is another browser: it shares no image storage with the
+  // host, so every image it shows arrives through the session.
+  const guestContext = await browser.newContext()
+  const guest = await guestContext.newPage()
   await preparePage(guest)
   await guest.goto(appPath({ dsl: 'search synth\nmedia().write(o0)\nrender(o0)' }))
   await waitForApp(guest)
@@ -264,9 +267,11 @@ test('image seed and later replacement reach another client with original bytes 
   await setEditorText(page, (await editorText(page)).replace('render(o0)', 'render(o1)'))
   await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([0, 255, 0, 255])
   await guest.keyboard.press('Control+Shift+Digit1')
+  await expect(guest.locator('.polymorphic-toast')).toContainText('Saved scene 1')
   await guest.evaluate(async () => (await import('/js/programModal.js')).openProgramModal('save'))
   await guest.fill('#programNameInput', 'Image save boundary')
   await guest.click('#programSaveBtn')
+  await expect(guest.locator('.polymorphic-toast')).toContainText('Saved program')
   const saved = await guest.evaluate(() => ({ scene:localStorage.getItem('polymorphic-scenes'), program:localStorage.getItem('polymorphic-programs') }))
   let releaseImage, imageRequested = false
   const download = new Promise(resolve => { releaseImage = resolve })
@@ -298,6 +303,7 @@ test('image seed and later replacement reach another client with original bytes 
     return helper.prepareImagesForShare(document.getElementById('dsl-editor').value, window.__poly.renderer.images)
   })
   expect(reshared.images.map(image => image.dataUrl).sort()).toEqual(sources.slice(1).sort())
+  await guestContext.close()
 })
 
 async function imagePixel(page) {

@@ -1,16 +1,29 @@
 import { test, expect } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import { routePortableImagesLocal } from './portableImagesLocal.js'
 
 test.beforeEach(async ({ page }) => routePortableImagesLocal(page))
 
+/** The bytes of the image stored in IndexedDB under `id`, or null. */
+async function storedImage(page, id) {
+  return page.evaluate(async id => {
+    const { getProgramImage } = await import('/js/programImages.js')
+    const blob = await getProgramImage(id)
+    return blob && Array.from(new Uint8Array(await blob.arrayBuffer()))
+  }, id)
+}
+
 test('image dimensions survive initial ProgramState sync, controls, and context recovery', async ({ page }) => {
   await page.goto('/')
-  const dataUrl = await page.evaluate(() => {
+  // Saved images are files in IndexedDB, named in the program by reference.
+  const reference = await page.evaluate(async () => {
     const source = document.createElement('canvas'); source.width = 96; source.height = 32
     const context = source.getContext('2d'); context.fillStyle = '#ff0000'; context.fillRect(0, 0, 96, 32)
-    return source.toDataURL('image/png')
+    const { storeImageFile } = await import('/js/programImages.js')
+    return storeImageFile(await new Promise(resolve => source.toBlob(resolve, 'image/png')))
   })
-  await page.goto('/?dsl=' + encodeURIComponent(`search synth\nmedia(url: "${dataUrl}").write(o0)\nrender(o0)`))
+  expect(reference).toMatch(/^image:[a-f0-9]{64}$/)
+  await page.goto('/?dsl=' + encodeURIComponent(`search synth\nmedia(url: "${reference}").write(o0)\nrender(o0)`))
   await page.waitForFunction(() => window.__poly?.programState?.getStructure().some(effect => effect.effectKey === 'synth.media'))
   const result = await page.evaluate(() => {
     const app = window.__poly
@@ -21,7 +34,8 @@ test('image dimensions survive initial ProgramState sync, controls, and context 
   })
   expect(result.before).toEqual([[96, 32]])
   expect(result.after).toEqual([[96, 32]])
-  expect(result.dsl).toContain(dataUrl)
+  expect(result.dsl).toContain(reference)
+  expect(result.dsl).not.toContain('data:')
 
   const supported = await page.evaluate(() => {
     window.__imageContextLoss = document.getElementById('canvas').getContext('webgl2').getExtension('WEBGL_lose_context')
@@ -45,7 +59,7 @@ test('image dimensions survive initial ProgramState sync, controls, and context 
     }
   })
   expect(restored.dimensions).toEqual([[96, 32]])
-  expect(restored.dsl).toContain(dataUrl)
+  expect(restored.dsl).toContain(reference)
   expect(restored.pixel).toEqual([255, 0, 0, 255])
 })
 
@@ -93,7 +107,12 @@ for (const [name, program, output] of sketches) {
         document.body.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }))
       }, image)
     }
-    await expect.poll(() => page.locator('#dsl-editor').evaluate(el => el.value)).toContain('data:image/png;base64,')
+    // The program names the image by the SHA-256 of its bytes, which are a
+    // file in IndexedDB, never text in the program.
+    const id = createHash('sha256').update(Buffer.from(image, 'base64')).digest('hex')
+    await expect.poll(() => page.locator('#dsl-editor').evaluate(el => el.value)).toContain(`image:${id}`)
+    expect(await page.locator('#dsl-editor').evaluate(el => el.value)).not.toContain('data:')
+    expect(await storedImage(page, id)).toEqual(Array.from(Buffer.from(image, 'base64')))
     const result = await page.evaluate(async () => {
       const dsl = document.getElementById('dsl-editor').value
       const { parse, lex } = await import('/js/noisemaker/bundle.js')
@@ -132,15 +151,9 @@ for (const [name, program, output] of sketches) {
 test('image drop failure surfaces a warning toast', async ({ page }) => {
   await page.goto('/?dsl=' + encodeURIComponent('search synth\nsolid().write(o0)\nrender(o0)'))
   await page.waitForFunction(() => window.__poly?.renderer?.inner?.pipeline)
-  // Break FileReader so the drop's async path rejects.
+  // Break image storage so the drop's async path rejects.
   await page.evaluate(() => {
-    class FailingFileReader {
-      set onload(_) {}
-      readAsDataURL() {
-        setTimeout(() => this.onerror?.({ target: { error: new Error('read failed') } }), 0)
-      }
-    }
-    window.FileReader = FailingFileReader
+    IDBObjectStore.prototype.put = () => { throw new DOMException('storage failed', 'UnknownError') }
   })
   await page.evaluate(() => {
     const dataTransfer = new DataTransfer()
@@ -148,8 +161,9 @@ test('image drop failure surfaces a warning toast', async ({ page }) => {
     document.body.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }))
   })
   await expect(page.locator('.polymorphic-toast[data-type="warning"]')).toContainText('broken.png')
-  // The editor must be untouched by the failed drop.
-  await expect.poll(() => page.locator('#dsl-editor').evaluate(el => el.value)).not.toContain('data:image')
+  // The editor must be untouched by the failed drop: no reference to an image
+  // that was not stored, and no image as text.
+  expect(await page.locator('#dsl-editor').evaluate(el => el.value)).not.toMatch(/image:|data:/)
 })
 
 test('resize during image decoding keeps the newly compiled image and waits for its upload', async ({ page }) => {

@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
+import { createHash } from 'node:crypto'
 import { SnapshotHistory } from '../../public/js/ui/snapshotHistory.js'
+import { decodeImageText } from '../../public/js/programImages.js'
 
 test('SnapshotHistory initializes safely without global localStorage', () => {
     const history = new SnapshotHistory()
@@ -110,5 +112,41 @@ test('SnapshotHistory prune notifies change listeners', () => {
 
     history.prune(2)
     assert.strictEqual(notified, true)
+})
+
+const RED = Buffer.from([137, 80, 78, 71, 1, 2, 3])
+const redText = `media(url: "data:image/png;base64,${RED.toString('base64')}").write(o0)`
+const redReference = `media(url: "image:${createHash('sha256').update(RED).digest('hex')}").write(o0)`
+
+function historyStorage(entries, cursor = entries.length - 1) {
+    const map = new Map([['polymorphic-snapshot-history', JSON.stringify({ entries, cursor })]])
+    return { map, getItem: k => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) }
+}
+const storedHistory = storage => JSON.parse(storage.map.get('polymorphic-snapshot-history'))
+const fakeStore = async dsl => (await decodeImageText(dsl)).dsl
+
+test('SnapshotHistory moves image text out of stored and in-memory entries', async () => {
+    const storage = historyStorage([{ dsl: 'noise().write(o0)', time: 1 }, { dsl: redText, time: 2 }])
+    const history = new SnapshotHistory(storage)
+    // Another tab saved an entry after this one loaded.
+    const other = new SnapshotHistory(storage)
+    other.push('gradient().write(o0)')
+    assert.strictEqual(await history.moveEmbeddedImages(fakeStore), 1)
+    assert.strictEqual(storage.map.get('polymorphic-snapshot-history').includes('data:image'), false)
+    assert.deepStrictEqual(storedHistory(storage).entries.map(entry => entry.dsl), ['noise().write(o0)', redReference, 'gradient().write(o0)'])
+    assert.deepStrictEqual(history._entries.map(entry => entry.dsl), ['noise().write(o0)', redReference])
+    // The in-memory copy saves without image text too.
+    history.push('voronoi().write(o0)')
+    assert.strictEqual(storage.map.get('polymorphic-snapshot-history').includes('data:image'), false)
+    assert.strictEqual(history.back(), redReference)
+})
+
+test('SnapshotHistory keeps entries whose images cannot be stored', async () => {
+    const storage = historyStorage([{ dsl: redText, time: 1 }])
+    const before = storage.map.get('polymorphic-snapshot-history')
+    const history = new SnapshotHistory(storage)
+    assert.strictEqual(await history.moveEmbeddedImages(async () => { throw new Error('IndexedDB unavailable') }), 0)
+    assert.strictEqual(storage.map.get('polymorphic-snapshot-history'), before)
+    assert.strictEqual(history._entries[0].dsl, redText)
 })
 

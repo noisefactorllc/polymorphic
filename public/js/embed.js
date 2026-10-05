@@ -22,6 +22,8 @@ import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, 
 import { shareModal } from './shareModal.js'
 import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
+import { programs } from './programs.js'
+import { storeImageFile, getProgramImage, hasImageText, storeImageText, storeDslImages, migrateProgramImages } from './programImages.js'
 import { ImportEffectDialog } from './ui/import-effect-dialog.js'
 import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
@@ -774,7 +776,8 @@ function togglePlayPause() {
 
 /**
  * Wire drag-and-drop for image/video files. Dropping a media file:
- *  - For images: inserts a media(url: "<data-url>").write(o0) snippet
+ *  - For images: stores the file in IndexedDB and inserts a
+ *    media(url: "image:<sha256>").write(o0) snippet
  *  - For videos: hands the file off to the live inputs panel as the active
  *    video source.
  */
@@ -860,14 +863,9 @@ function hasDraggedFiles(e) {
 
 async function handleDroppedFile(file) {
     if (file.type.startsWith('image/')) {
-        const dataUrl = await new Promise((res, rej) => {
-            const r = new FileReader()
-            r.onload = () => res(r.result)
-            r.onerror = rej
-            r.readAsDataURL(file)
-        })
+        const url = await storeImageFile(file)
         if (dslEditor) {
-            await insertImageFile(dataUrl)
+            await insertImageFile(url)
             publishLocalDsl('drop-media')
             showToast(`Loaded image: ${file.name}`, 'success')
         }
@@ -881,10 +879,14 @@ async function handleDroppedFile(file) {
     showToast(`Unsupported file type: ${file.type || 'unknown'}`, 'warning')
 }
 
-async function insertImageFile(dataUrl) {
+/** Make a stored image, named `image:<sha256>`, the program's media source. */
+async function insertImageFile(url) {
     await liveInputsPanel.stopMediaSource()
     await renderer.inner.loadEffects(['synth/media'])
-    insertImageSource(dslEditor, dataUrl, getEffect('synth.media').globals)
+    // Sharing and an online session read the program's images from
+    // renderer.images; resolving the stored image puts it there.
+    await renderer.resolveImage(url.slice('image:'.length))
+    insertImageSource(dslEditor, url, getEffect('synth.media').globals)
 }
 
 /**
@@ -1843,7 +1845,7 @@ function setupDslEditor() {
             } else {
                 hideCompilerError()
                 dslEditor.flashLines?.(1, lineCount)
-                if (value) snapshotHistory.push(value)
+                if (value) pushSnapshot(value)
                 outputPicker.setDsl(dslEditor.value).catch(err => console.debug('[outputPicker] setDsl failed:', err))
             }
         } finally {
@@ -1919,7 +1921,7 @@ function setupDslEditor() {
         if (after === before) return
         const ta = dslEditor.getTextarea?.()
         const sel = ta ? { start: ta.selectionStart, end: ta.selectionEnd } : null
-        if (before.trim()) snapshotHistory.push(before)
+        if (before.trim()) pushSnapshot(before)
         dslEditor.value = after
         publishLocalDsl('format')
         if (ta && sel) {
@@ -2053,7 +2055,7 @@ function scheduleHotReload() {
                 // Snapshot the successful program state and stamp the URL so the
                 // current sketch is shareable just by copying the URL.
                 if (dslEditor?.value) {
-                    snapshotHistory.push(dslEditor.value)
+                    pushSnapshot(dslEditor.value)
                     stampUrl(dslEditor.value)
                 }
                 outputPicker.setDsl(dslEditor?.value || '').catch(err => console.debug('[outputPicker] setDsl failed:', err))
@@ -2102,6 +2104,23 @@ function stampUrl(dsl) {
             console.debug('[Polymorphic] URL stamp failed:', err)
         }
     }, 500)
+}
+
+/**
+ * Record a successfully compiled program in snapshot history, which lives in
+ * localStorage. A program that carries an image as base64 text (pasted, or
+ * from an older link) is recorded with the image stored in IndexedDB and named
+ * by reference; when the image cannot be stored, the program is not recorded.
+ */
+function pushSnapshot(dsl) {
+    if (!hasImageText(dsl)) {
+        snapshotHistory.push(dsl)
+        return
+    }
+    storeImageText(dsl).then(
+        stored => snapshotHistory.push(stored),
+        err => console.warn('[Polymorphic] Snapshot not recorded; its image could not be stored:', err)
+    )
 }
 
 /**
@@ -2252,10 +2271,14 @@ async function startShader() {
     // Portable effects registered after boot update the renderer's live state.
     setRuntimeRenderer(renderer.canvasRenderer)
     renderer.resolveImage = async id => {
-        const blob = await onlineAdapter.getImage(id)
+        // Saved images are files in IndexedDB; the rest come from the online session.
+        const stored = await getProgramImage(id)
+        const blob = stored || await onlineAdapter.getImage(id)
         const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-        const image = await tools.prepareImage(blob)
-        if (!renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
+        // A stored image that sharing would refuse, such as one over its size
+        // limit, still renders.
+        const image = await tools.prepareImage(blob).catch(error => { if (!stored) throw error })
+        if (image && !renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
         return blob
     }
     syncOutputController?.dispose()
@@ -2548,24 +2571,19 @@ function setupMenuBar() {
                 // since live coders save mid-edit.
                 const dsl = dslEditor?.value || ''
                 if (dsl.trim()) {
-                    let images
-                    try {
-                        images = renderer?.getImageAssets(dsl) || []
-                    } catch (error) {
-                        showToast(`Could not save scene ${slot}: ${error.message}`, 'error')
-                        e.preventDefault()
-                        return
-                    }
-                    const res = scenes.save(slot, dsl, images)
-                    if (res && res.success === false) {
-                        if (res.quotaExceeded) {
-                            showToast(`Could not save scene ${slot}: storage quota exceeded`, 'error')
+                    // Images first: a saved scene must never name an image that is not stored.
+                    storeDslImages(dsl, renderer?.images).then(stored => {
+                        const res = scenes.save(slot, stored)
+                        if (res && res.success === false) {
+                            if (res.quotaExceeded) {
+                                showToast(`Could not save scene ${slot}: storage quota exceeded`, 'error')
+                            } else {
+                                showToast(`Could not save scene ${slot}: storage error`, 'error')
+                            }
                         } else {
-                            showToast(`Could not save scene ${slot}: storage error`, 'error')
+                            showToast(`Saved scene ${slot}`, 'success')
                         }
-                    } else {
-                        showToast(`Saved scene ${slot}`, 'success')
-                    }
+                    }, error => showToast(`Could not save scene ${slot}: ${error.message}`, 'error'))
                 } else {
                     showToast(`Cannot save empty scene ${slot}`, 'warning')
                 }
@@ -2652,7 +2670,7 @@ function init() {
     // Initialize program modal
     initProgramModal({
         getDsl: () => dslEditor?.value || '',
-        getImages: () => renderer?.getImageAssets(dslEditor?.value || '') || [],
+        prepareDsl: dsl => storeDslImages(dsl, renderer?.images),
         setDsl: (dsl, images = []) => {
             if (renderer) renderer.images = images
             if (dslEditor) {
@@ -2804,6 +2822,12 @@ function init() {
         }
     }
 
+    // Programs, scenes and snapshot history saved before images had their own
+    // storage hold them as base64 text in localStorage. Move the bytes to
+    // IndexedDB; non-blocking.
+    migrateProgramImages([programs, scenes, snapshotHistory])
+        .catch(err => console.error('Failed to move program images:', err))
+
     // Start shader immediately (no consent screen for Polymorphic)
     startShader()
 }
@@ -2952,7 +2976,7 @@ async function switchOutput(idx, options = {}) {
 
     const result = resetFeedback ? await hushSurfaces() : await recompileShader()
     if (result?.success) {
-        snapshotHistory.push(next)
+        pushSnapshot(next)
         stampUrl(next)
         outputPicker.setDsl(next).catch(err => console.debug('[outputPicker] setDsl failed:', err))
     }

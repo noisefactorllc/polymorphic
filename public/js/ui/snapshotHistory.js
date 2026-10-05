@@ -8,9 +8,12 @@
  * This is *program-level* history (each entry is a whole DSL document) — it's
  * coarser than the editor's internal text-undo, and intentionally so. It's
  * meant for "I made a bunch of changes that all compiled — let me jump back".
+ * Entries name images by reference; the images are stored in IndexedDB by
+ * programImages.js.
  */
 
 import { isQuotaExceededError, registerTransientPruner, getLocalStorage } from '../storageGuard.js'
+import { hasImageText } from '../programImages.js'
 
 const STORAGE_KEY = 'polymorphic-snapshot-history'
 const MAX_ENTRIES = 50
@@ -183,6 +186,67 @@ export class SnapshotHistory {
         }
         this._notify()
         return true
+    }
+
+    /**
+     * Move images that older versions kept in history entries as base64 text
+     * out to image storage, then rewrite those entries to name them by
+     * reference.
+     *
+     * An entry loses its text only after `store` has committed its images, so
+     * a failure leaves it as it was. Stored history is re-read before it is
+     * written, so entries another tab saved meanwhile are kept.
+     *
+     * @param {(dsl: string, images: Array) => Promise<string>} store -
+     *   stores the images and resolves with the DSL naming them by reference
+     * @returns {Promise<number>} how many stored entries were rewritten
+     */
+    async moveEmbeddedImages(store) {
+        const carriers = new Set()
+        for (const entry of [...this._entries, ...(this._readStored()?.entries || [])]) {
+            if (hasImageText(entry?.dsl)) carriers.add(entry.dsl)
+        }
+        const moved = new Map()
+        for (const dsl of carriers) {
+            try {
+                moved.set(dsl, await store(dsl, []))
+            } catch (err) {
+                console.error('[SnapshotHistory] Error moving images of an entry:', err)
+            }
+        }
+        if (!moved.size) return 0
+        // The images are stored, so entries in memory can name them now; the
+        // next save writes them.
+        for (const entry of this._entries) {
+            if (moved.has(entry?.dsl)) entry.dsl = moved.get(entry.dsl)
+        }
+        if (moved.has(this._lastSaved)) this._lastSaved = moved.get(this._lastSaved)
+        const data = this._readStored()
+        let count = 0
+        for (const entry of data?.entries || []) {
+            if (moved.has(entry?.dsl)) {
+                entry.dsl = moved.get(entry.dsl)
+                count++
+            }
+        }
+        if (!count) return 0
+        try {
+            this._storage.setItem(STORAGE_KEY, JSON.stringify(data))
+        } catch (err) {
+            console.warn('[SnapshotHistory] Rewriting stored entries failed:', err)
+            return 0
+        }
+        return count
+    }
+
+    /** History as stored now, or null if storage is unavailable or unreadable. */
+    _readStored() {
+        try {
+            const data = JSON.parse(this._storage?.getItem(STORAGE_KEY) ?? 'null')
+            return Array.isArray(data?.entries) ? data : null
+        } catch {
+            return null
+        }
     }
 }
 

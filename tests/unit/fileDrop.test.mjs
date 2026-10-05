@@ -6,7 +6,7 @@ import vm from 'node:vm'
 // ---------------------------------------------------------------------------
 // Behavioral tests for the file-drop controller in embed.js. The drop path is
 // source-sliced into a vm sandbox (same strategy as
-// tests/unit/editor-normalization.test.mjs) so that a failing FileReader,
+// tests/unit/editor-normalization.test.mjs) so that image storage that fails,
 // a missing synth/media effect, or a rejected video activation surfaces as a
 // Handfish warning toast instead of an unhandled promise rejection.
 // ---------------------------------------------------------------------------
@@ -31,7 +31,9 @@ function makeOverlay() {
     }
 }
 
-function makeSandbox({ fileReader, liveInputsPanel = { stopMediaSource: async () => {} }, renderer }) {
+const IMAGE_ID = 'a'.repeat(64)
+
+function makeSandbox({ storeImageFile = makeImageStore(), liveInputsPanel = { stopMediaSource: async () => {} }, renderer }) {
     const overlay = makeOverlay()
     const handlers = {}
     const dropTarget = {
@@ -50,11 +52,11 @@ function makeSandbox({ fileReader, liveInputsPanel = { stopMediaSource: async ()
             },
             createElement: () => overlay,
         },
-        FileReader: fileReader,
+        storeImageFile,
         showToast: (message, kind) => toasts.push({ message, kind }),
         publishLocalDsl: () => {},
         dslEditor: { value: 'search synth\n', },
-        insertImageSource: (editor, dataUrl, globals) => insertedImages.push({ editor, dataUrl, globals }),
+        insertImageSource: (editor, url, globals) => insertedImages.push({ editor, url, globals }),
         getEffect: () => ({ globals: { W: 512 } }),
         renderer,
         liveInputsPanel,
@@ -64,18 +66,13 @@ function makeSandbox({ fileReader, liveInputsPanel = { stopMediaSource: async ()
     return { sandbox, handlers, toasts, insertedImages, overlay }
 }
 
-function makeFileReader({ fail = false } = {}) {
-    return class {
-        readAsDataURL() {
-            setTimeout(() => {
-                if (fail) {
-                    this.onerror?.({ target: { error: new Error('read error') } })
-                } else {
-                    this.result = 'data:image/png;base64,AAAA'
-                    this.onload?.()
-                }
-            }, 0)
-        }
+// Stands in for programImages.storeImageFile, which keeps the file in IndexedDB.
+function makeImageStore({ fail = false, stored = [] } = {}) {
+    return async (file) => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+        if (fail) throw new Error('IndexedDB unavailable')
+        stored.push(file)
+        return `image:${IMAGE_ID}`
     }
 }
 
@@ -91,22 +88,22 @@ test('file drop slice exists in embed.js', () => {
 })
 
 test('a failing image drop surfaces a warning toast instead of an unhandled rejection', async () => {
-    const { handlers, toasts } = makeSandbox({
-        fileReader: makeFileReader({ fail: true }),
+    const { handlers, toasts, insertedImages } = makeSandbox({
+        storeImageFile: makeImageStore({ fail: true }),
     })
     const file = { name: 'sketch.png', type: 'image/png' }
-    // The handler must settle (not reject) even though the FileReader failed.
+    // The handler must settle (not reject) even though the image was not stored.
     await handlers.drop(dropEvent(file))
     const warning = toasts.find(t => t.kind === 'warning')
     assert.ok(warning, 'a warning toast must be shown')
     assert.match(warning.message, /sketch\.png/)
-    assert.match(warning.message, /read error|Couldn't use/)
+    assert.match(warning.message, /IndexedDB unavailable/)
+    assert.equal(insertedImages.length, 0, 'an image that was not stored must not be inserted')
 })
 
 test('a failing media-effect load on image drop surfaces a warning toast', async () => {
     const { handlers, toasts } = makeSandbox({
-        fileReader: makeFileReader(),
-        renderer: { inner: { loadEffects: async () => { throw new Error('network down') } } },
+        renderer: { inner: { loadEffects: async () => { throw new Error('network down') } }, resolveImage: async () => {} },
     })
     await handlers.drop(dropEvent({ name: 'photo.jpg', type: 'image/jpeg' }))
     const warning = toasts.find(t => t.kind === 'warning')
@@ -115,15 +112,21 @@ test('a failing media-effect load on image drop surfaces a warning toast', async
     assert.match(warning.message, /network down/)
 })
 
-test('a successful image drop inserts the media source and reports success', async () => {
+test('a successful image drop stores the file and inserts its reference, never its bytes as text', async () => {
+    const stored = []
+    const resolved = []
     const { handlers, toasts, insertedImages } = makeSandbox({
-        fileReader: makeFileReader(),
-        renderer: { inner: { loadEffects: async () => {} } },
+        storeImageFile: makeImageStore({ stored }),
+        renderer: { inner: { loadEffects: async () => {} }, resolveImage: async id => { resolved.push(id) } },
     })
-    await handlers.drop(dropEvent({ name: 'sky.png', type: 'image/png' }))
+    const file = { name: 'sky.png', type: 'image/png' }
+    await handlers.drop(dropEvent(file))
+    assert.deepEqual(stored, [file])
     assert.equal(insertedImages.length, 1)
-    assert.equal(insertedImages[0].dataUrl, 'data:image/png;base64,AAAA')
+    assert.equal(insertedImages[0].url, `image:${IMAGE_ID}`)
     assert.deepEqual(insertedImages[0].globals, { W: 512 })
+    // Sharing and online sessions find the stored image before the program names it.
+    assert.deepEqual(resolved, [IMAGE_ID])
     const success = toasts.find(t => t.kind === 'success')
     assert.ok(success, 'a success toast must be shown')
     assert.match(success.message, /sky\.png/)
@@ -131,7 +134,6 @@ test('a successful image drop inserts the media source and reports success', asy
 
 test('a failing video drop surfaces a warning toast', async () => {
     const { handlers, toasts } = makeSandbox({
-        fileReader: makeFileReader(),
         liveInputsPanel: { useVideoFile: async () => { throw new Error('bad video') } },
     })
     await handlers.drop(dropEvent({ name: 'clip.webm', type: 'video/webm' }))
@@ -143,7 +145,6 @@ test('a failing video drop surfaces a warning toast', async () => {
 
 test('non-file drops and unsupported types stay silent or warn without throwing', async () => {
     const { handlers, toasts } = makeSandbox({
-        fileReader: makeFileReader(),
         liveInputsPanel: { useVideoFile: async () => {} },
     })
     await handlers.drop({ preventDefault: () => {}, dataTransfer: { types: ['text/plain'], files: [] } })

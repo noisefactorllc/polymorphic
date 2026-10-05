@@ -1,6 +1,7 @@
 import { SharedAudio } from '../audio.js'
 import { connectSyncAudio, refreshSyncAudioDevices, isSyncAudioSource } from '../sync/audioInput.js'
 import { createSyncCameraSession } from '../sync/cameraSession.js'
+import { storeImageFile } from '../programImages.js'
 
 /**
  * Live Inputs Panel
@@ -734,10 +735,10 @@ class LiveInputsPanel {
             if (kind === 'image') {
                 const file = await pickFile('image/*')
                 if (!file || generation !== this._sourceGeneration) return
-                const dataUrl = await fileToDataURL(file)
+                const url = await storeImageFile(file)
                 if (generation !== this._sourceGeneration) return
                 this._setSourceStatus(`image: ${file.name}`, 'connected')
-                await this._onInsert(dataUrl, { as: 'image' })
+                await this._onInsert(url, { as: 'image' })
                 if (generation === this._sourceGeneration) this._markActiveSourceBtn(btn)
             }
         } catch (error) {
@@ -1142,15 +1143,6 @@ function pickFile(accept) {
         input.addEventListener('cancel', () => finish(null))
         document.body.appendChild(input)
         input.click()
-    })
-}
-
-function fileToDataURL(file) {
-    return new Promise((resolve, reject) => {
-        const r = new FileReader()
-        r.onload = () => resolve(r.result)
-        r.onerror = reject
-        r.readAsDataURL(file)
     })
 }
 
