@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, acceptNativeReceiverBytes } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, acceptNativeReceiverBytes, installSenderTransportCut } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
+const cut = installSenderTransportCut(getEndpoint)
 const setup = createSetup(getEndpoint)
 const connectNativeReceiver = createNativeReceiverConnect(setup, getEndpoint)
 
@@ -101,6 +102,67 @@ test('the receiver acceptance poll rides out a lifecycle close mid-poll', async 
         }
     })
     await acceptNativeReceiverBytes(page)
+})
+
+test('a real sender transport close is recovered through the acceptance poll', async ({ page }) => {
+    test.slow()
+    await connectNativeReceiver(page, 'webgl2', null, cut.endpoint)
+    // Reproduce the measured race for real, not by injection: the acceptance
+    // poll's first getStats runs against a sender whose data transport is cut
+    // underneath the controller — an abrupt teardown with no WebSocket close
+    // frame, exactly the shape a network drop takes — so the daemon reaps the
+    // sender from the data socket it owns, the stale exchange surfaces a
+    // lifecycle error against the still-cached client/sender pair, and the
+    // controller recovers through its backoff onto a replacement sender. The
+    // poll must ride the window out and the acceptance itself (receiver
+    // checksum match over real rendered bytes, zero rejects, zero failures)
+    // is unchanged.
+    const preCutSenderId = await page.evaluate(cutUrl => {
+        const output = window.__poly.syncOutputController
+        const client = output._client
+        const sender = output._sender
+        if (!client || !sender) throw new Error('receiver leg lost its client or sender')
+        window.__staleLifecycleErrors = []
+        const lifecycleNames = ['SyncLifecycleError', 'SyncUnavailableError', 'SyncTimeoutError', 'SyncSenderLostError']
+        const record = error => {
+            if (lifecycleNames.includes(error?.name)) {
+                window.__staleLifecycleErrors.push(`${error.name}: ${error.message}`)
+            }
+        }
+        const exchange = client._exchange.bind(client)
+        client._exchange = (...args) => {
+            const staged = (async () => {
+                if (args[0]?.type === 'getStats' && !window.__senderCloseStaged) {
+                    window.__senderCloseStaged = true
+                    await fetch(cutUrl, { mode: 'no-cors' })
+                    await new Promise(resolve => setTimeout(resolve, 50))
+                }
+                return exchange(...args)
+            })()
+            staged.catch(record)
+            return staged
+        }
+        const schedule = client._scheduleControl.bind(client)
+        client._scheduleControl = (session, operation) => {
+            const result = schedule(session, operation)
+            result.catch(record)
+            return result
+        }
+        return sender.id
+    }, cut.controlUrl())
+    const acceptance = acceptNativeReceiverBytes(page)
+    await page.waitForFunction(preId => {
+        const output = window.__poly.syncOutputController
+        const cause = output._lastRecoveryCause
+        return Boolean(cause && Number(cause.recoveryCount) >= 1 &&
+            output._sender && output._sender.id !== preId &&
+            output.state.status === 'sending')
+    }, preCutSenderId, { timeout: 30000 })
+    const observed = await page.evaluate(() => window.__staleLifecycleErrors.slice())
+    expect(observed.length, `stale-exchange lifecycle errors: ${observed.join('; ')}`).toBeGreaterThan(0)
+    expect(Number((await page.evaluate(() => window.__poly.syncOutputController._lastRecoveryCause))?.recoveryCount))
+        .toBeGreaterThanOrEqual(1)
+    await acceptance
 })
 
 test('a failed native input keeps its selected identity and the enable button permits retry', async ({ page }) => {

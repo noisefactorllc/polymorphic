@@ -4,6 +4,8 @@
 import { test, expect } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
+import net from 'node:net'
 import path from 'node:path'
 
 const defaultDaemon = path.resolve(__dirname, '../../sync/build/sync_audio_test_server')
@@ -95,11 +97,90 @@ export function createSetup(getEndpoint) {
     }
 }
 
+// Raw transport cut for the real sender-close regression. A TCP forwarder in
+// front of the native daemon: every connection forwards untouched, and a spec
+// can tear down exactly the sender's data connections the way a network drop
+// would — an abrupt teardown with no WebSocket close frame, so the daemon
+// reaps the sender from the data socket it owns and the browser surfaces an
+// abnormal (1006) closure. Control and audio traffic never touches the cut.
+export function installSenderTransportCut(getEndpoint) {
+    let forwarder = null, control = null, cutPort = null
+    const dataConnections = new Set()
+    const destroyDataConnections = () => {
+        for (const pair of [...dataConnections]) {
+            dataConnections.delete(pair)
+            try { pair.client.destroy() } catch { /* Already gone. */ }
+            try { pair.upstream.destroy() } catch { /* Already gone. */ }
+        }
+    }
+    test.beforeAll(async () => {
+        const upstreamPort = Number(new URL(getEndpoint()).port)
+        forwarder = net.createServer(socket => {
+            let upstream = null
+            let head = Buffer.alloc(0)
+            const pair = { client: socket, upstream: null }
+            const drop = () => {
+                if (pair.upstream) dataConnections.delete(pair)
+                upstream?.destroy()
+                socket.destroy()
+            }
+            socket.on('close', drop)
+            socket.on('error', drop)
+            socket.on('data', chunk => {
+                if (upstream) return // pipe() carries the stream once established.
+                head = Buffer.concat([head, chunk])
+                const end = head.indexOf('\r\n\r\n')
+                if (end < 0) return
+                // The daemon's valid_host check requires its own port in Host;
+                // the forwarder listens on a different one, so rewrite it.
+                const rewritten = Buffer.from(
+                    head.toString('latin1').replace(/Host: [^\r\n]+/i, `Host: 127.0.0.1:${upstreamPort}`),
+                    'latin1')
+                upstream = net.connect(upstreamPort, '127.0.0.1')
+                pair.upstream = upstream
+                upstream.on('close', drop)
+                upstream.on('error', drop)
+                if (/^GET \/senders\//.test(head.toString('latin1'))) dataConnections.add(pair)
+                upstream.write(rewritten)
+                socket.pipe(upstream)
+                upstream.pipe(socket)
+            })
+        })
+        control = http.createServer((_request, response) => {
+            response.writeHead(200, { 'access-control-allow-origin': '*', 'content-length': 2 })
+            response.end('ok')
+            destroyDataConnections()
+        })
+        await Promise.all([
+            new Promise((resolve, reject) => {
+                forwarder.once('error', reject)
+                forwarder.listen(0, '127.0.0.1', resolve)
+            }),
+            new Promise((resolve, reject) => {
+                control.once('error', reject)
+                control.listen(0, '127.0.0.1', resolve)
+            }),
+        ])
+        cutPort = control.address().port
+    })
+    test.afterAll(async () => {
+        destroyDataConnections()
+        if (forwarder) await new Promise(resolve => forwarder.close(resolve))
+        if (control) await new Promise(resolve => control.close(resolve))
+    })
+    return {
+        endpoint: () => `http://127.0.0.1:${forwarder.address().port}`,
+        controlUrl: () => `http://127.0.0.1:${cutPort}/cut`,
+        cutSenderTransports: destroyDataConnections,
+    }
+}
+
 // Everything a receiver leg needs before the acceptance poll: viewport
 // routing, the observed-socket bundle override, the full-app boot, and the
 // connect/enable lifecycle with its bounded deadline-close retries.
 export function createNativeReceiverConnect(setup, getEndpoint) {
-    return async function connectNativeReceiver(page, backend, viewport = null) {
+    return async function connectNativeReceiver(page, backend, viewport = null, endpointGetter = null) {
+        const receiverEndpoint = endpointGetter || getEndpoint
         if (viewport) {
             // The app floors CSS×DPR for the canvas buffer, so an odd CSS
             // viewport yields an odd frame geometry. The compressed H.264 path
@@ -126,7 +207,7 @@ export function createNativeReceiverConnect(setup, getEndpoint) {
                 }
             }
             export class SyncBridgeClient extends Base {
-                constructor(options) { super({ ...options, endpoint: ${JSON.stringify(getEndpoint())}, WebSocket: ObservedSocket, permissions: { query: async () => ({ state: 'granted' }) } }); }
+                constructor(options) { super({ ...options, endpoint: ${JSON.stringify(receiverEndpoint())}, WebSocket: ObservedSocket, permissions: { query: async () => ({ state: 'granted' }) } }); }
                 async pair() { throw new Error('Video should reuse the audio grant'); }
             }`
         }))
