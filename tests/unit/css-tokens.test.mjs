@@ -12,6 +12,20 @@ function readCss(filename) {
     return fs.readFileSync(path.join(cssDir, filename), 'utf8')
 }
 
+// Raw color function literals (oklch/oklab/lab/lch/color()) are hardcoding
+// too. The only permitted use is *defining* an app-level directional color
+// alias (e.g. `--ui-chrome-highlight-color: oklch(100% 0 0)` inside a rule
+// whose block contains only custom-property definitions) — the Handfish
+// "add a semantic alias rather than hardcoding" rule. Any use inside a real
+// (non-custom) property declaration is rejected.
+const COLOR_FUNCTION_LITERALS = /\b(?:oklch|oklab|lab|lch|color)\s*\(/i
+
+// Named CSS color literals are hardcoding too (e.g. `black` fallbacks).
+// Black and white commonly appear in shadow/gesture values; reject every
+// other named color outright and reject black/white unless the token
+// fallback chain already provides a `--hf-` reference.
+const NAMED_COLORS = 'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|grey|green|greenyellow|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat'
+
 /**
  * Extracts property declaration values from CSS, ignoring comments and selectors.
  */
@@ -101,7 +115,6 @@ test('public/css stylesheets contain zero raw oklch/lab/color() literals in decl
     const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
     assertNoRawColorFunctionLiterals(html, 'public/index.html')
 })
-
 test('public/css/menu.css maps theme variables to Handfish tokens', () => {
     const css = readCss('menu.css')
     const decls = extractDeclarationValues(css)
@@ -285,7 +298,6 @@ function assertInjectedCssTokenClean(moduleName) {
     // Black and white commonly appear in shadow/gesture values; reject every
     // other named color outright and reject black/white unless the token
     // fallback chain already provides a `--hf-` reference.
-    const NAMED_COLORS = 'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|grey|green|greenyellow|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat'
     assert.doesNotMatch(
         css,
         new RegExp(`\\b(?:${NAMED_COLORS})\\b`, 'i'),
@@ -649,12 +661,18 @@ function assertCssTextTokenized(css, label) {
         /\b(?:rgba?|hsla?)\s*\(/i,
         `${label} must not use raw rgb/rgba/hsl/hsla literals outside var(--hf-*) references; use --hf-* tokens`
     )
-    // A bare black/white keyword hardcodes the value a token resolves to.
-    // `white-space` and other hyphenated identifiers are not color values.
     assert.doesNotMatch(
         withoutChains,
-        /\b(?:black|white)\b(?!\s*-)/i,
-        `${label} must not use a bare black/white color value outside var(--hf-*) references`
+        COLOR_FUNCTION_LITERALS,
+        `${label} must not use raw oklch/oklab/lab/lch/color() literals outside var(--hf-*) references; use --hf-* tokens`
+    )
+    // A bare black/white keyword hardcodes the value a token resolves to;
+    // every other named color is rejected outright. `white-space` and other
+    // hyphenated identifiers are not color values.
+    assert.doesNotMatch(
+        withoutChains,
+        new RegExp(`\\b(?:${NAMED_COLORS}|black|white)\\b(?!\\s*-)(?!\\s*\\()`, 'i'),
+        `${label} must not use a bare named color value outside var(--hf-*) references`
     )
 }
 
