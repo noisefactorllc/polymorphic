@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverTest } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, acceptNativeReceiverBytes } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const setup = createSetup(getEndpoint)
-const runNativeReceiverTest = createNativeReceiverTest(setup, getEndpoint)
+const connectNativeReceiver = createNativeReceiverConnect(setup, getEndpoint)
 
 for (const channels of [1, 2, 8, 32]) {
     test(`native ${channels}-channel audio reaches every shader channel and releases capture`, async ({ page }) => {
@@ -67,12 +67,40 @@ test('native read failure clears active state and permits a new source', async (
 
 test('native receiver accepts webgl2 renderer bytes while audio and video share the grant', async ({ page }) => {
     test.slow()
-    await runNativeReceiverTest(page, 'webgl2')
+    await connectNativeReceiver(page, 'webgl2')
+    await acceptNativeReceiverBytes(page)
 })
 
 test('native receiver accepts odd webgl2 frame geometry through the fallback queue', async ({ page }) => {
     test.slow()
-    await runNativeReceiverTest(page, 'webgl2', { width: 1281, height: 723 })
+    await connectNativeReceiver(page, 'webgl2', { width: 1281, height: 723 })
+    await acceptNativeReceiverBytes(page)
+})
+
+test('the receiver acceptance poll rides out a lifecycle close mid-poll', async ({ page }) => {
+    test.slow()
+    await connectNativeReceiver(page, 'webgl2')
+    // Deterministic form of the measured race: a daemon deadline close ends
+    // the sender between the poll's client/sender reads and its getStats
+    // exchange, the controller recovers through its backoff, and the stale
+    // exchange surfaces a lifecycle error that aborted the poll instead of
+    // retrying. Inject exactly one such error on the first getStats; the poll
+    // must ride it out inside its window, and the acceptance itself (receiver
+    // checksum match, zero rejects, zero failures) is unchanged.
+    await page.evaluate(async () => {
+        const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.3/browser/client.js')
+        const client = window.__poly.syncOutputController._client
+        const exchange = client._exchange.bind(client)
+        let injected = false
+        client._exchange = (...args) => {
+            if (!injected && args[0]?.type === 'getStats') {
+                injected = true
+                return Promise.reject(new SyncLifecycleError('Sender does not exist'))
+            }
+            return exchange(...args)
+        }
+    })
+    await acceptNativeReceiverBytes(page)
 })
 
 test('a failed native input keeps its selected identity and the enable button permits retry', async ({ page }) => {

@@ -95,8 +95,11 @@ export function createSetup(getEndpoint) {
     }
 }
 
-export function createNativeReceiverTest(setup, getEndpoint) {
-    return async function runNativeReceiverTest(page, backend, viewport = null) {
+// Everything a receiver leg needs before the acceptance poll: viewport
+// routing, the observed-socket bundle override, the full-app boot, and the
+// connect/enable lifecycle with its bounded deadline-close retries.
+export function createNativeReceiverConnect(setup, getEndpoint) {
+    return async function connectNativeReceiver(page, backend, viewport = null) {
         if (viewport) {
             // The app floors CSS×DPR for the canvas buffer, so an odd CSS
             // viewport yields an odd frame geometry. The compressed H.264 path
@@ -171,37 +174,67 @@ export function createNativeReceiverTest(setup, getEndpoint) {
             await output.connect()
             await output.start('Polymorphic native receiver')
         })
-        const receiverStatus = () => page.evaluate(async () => {
-            const output = window.__poly.syncOutputController
-            const client = output._client, sender = output._sender
-            if (!sender) return { state: output.state, accepted: false }
-            const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
-                { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
-            window.nativeReceiverStats = stats
-            return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
-                accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
-        })
+    }
+}
+
+export async function acceptNativeReceiverBytes(page) {
+    const receiverStatus = () => page.evaluate(async () => {
+        const output = window.__poly.syncOutputController
+        const client = output._client, sender = output._sender
+        if (!sender) return { state: output.state, accepted: false }
+        // The daemon's 2 s incomplete-frame deadline can end the sender while
+        // the poll is mid-exchange: the controller releases its client and
+        // recovers through its 250 ms / 1 s / 4 s backoff, so the exchange
+        // races that teardown and surfaces a lifecycle error (measured as
+        // SyncLifecycleError "Sender does not exist" both when the local
+        // client closed first and when the daemon answers for a gone sender).
+        // Treat exactly those lifecycle classes as "not accepted yet" so the
+        // poll retries inside its window; any other error still surfaces.
+        let stats
         try {
-            // The window must span one full product recovery cycle: the daemon's
-            // 2 s incomplete-frame deadline can close the sender data stream on
-            // a saturated page, the controller then recovers with its 250 ms /
-            // 1 s / 4 s backoff, and the replacement sender needs two fresh
-            // frames before the receiver accepts bytes. 15 s measured as too
-            // tight for exactly that legitimate cycle on SwiftShader WebGL2;
-            // the acceptance itself (receiver checksum match, zero rejects,
-            // zero failures) is unchanged.
-            await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 45_000 }).toBe(true)
+            stats = await client._scheduleControl(client._controlSession, () => client._exchange(
+                { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
         } catch (error) {
-            error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
-            throw error
+            const lifecycleNames = ['SyncLifecycleError', 'SyncUnavailableError', 'SyncTimeoutError', 'SyncSenderLostError']
+            if (!lifecycleNames.includes(error?.name)) throw error
+            return { state: output.state, accepted: false }
         }
-        const stats = await page.evaluate(() => window.nativeReceiverStats)
-        expect(Number(stats.rejected)).toBe(0)
-        expect(Number(stats.failed)).toBe(0)
-        await page.evaluate(() => window.__poly.syncOutputController.stop())
-        expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(true)
-        await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
-        expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)
-        expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
+        window.nativeReceiverStats = stats
+        return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
+            accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+    })
+    try {
+        // The window must span one full product recovery cycle: the daemon's
+        // 2 s incomplete-frame deadline can close the sender data stream on
+        // a saturated page, the controller then recovers with its 250 ms /
+        // 1 s / 4 s backoff, and the replacement sender needs two fresh
+        // frames before the receiver accepts bytes. 15 s measured as too
+        // tight for exactly that legitimate cycle on SwiftShader WebGL2;
+        // the acceptance itself (receiver checksum match, zero rejects,
+        // zero failures) is unchanged.
+        await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 45_000 }).toBe(true)
+    } catch (error) {
+        let diagnostics
+        try { diagnostics = JSON.stringify(await receiverStatus()) } catch (diagnosticError) {
+            diagnostics = 'unavailable: ' + (diagnosticError?.message || diagnosticError)
+        }
+        error.message += '\nReceiver diagnostics: ' + diagnostics
+        throw error
+    }
+    const stats = await page.evaluate(() => window.nativeReceiverStats)
+    expect(Number(stats.rejected)).toBe(0)
+    expect(Number(stats.failed)).toBe(0)
+    await page.evaluate(() => window.__poly.syncOutputController.stop())
+    expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(true)
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
+    expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)
+    expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
+}
+
+export function createNativeReceiverTest(setup, getEndpoint) {
+    const connectNativeReceiver = createNativeReceiverConnect(setup, getEndpoint)
+    return async function runNativeReceiverTest(page, backend, viewport = null) {
+        await connectNativeReceiver(page, backend, viewport)
+        await acceptNativeReceiverBytes(page)
     }
 }
