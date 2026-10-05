@@ -360,6 +360,7 @@ class EffectControls extends HTMLElement {
         this._bodyEl = null
         this._controlHandles = new Map()
         this._gatedGroups = new Map()
+        this._pendingNames = []
         this._applyingFromState = false
         this._programStateListener = null
         this._rendered = false
@@ -374,6 +375,7 @@ class EffectControls extends HTMLElement {
         if (!this._effectInfo) {
             this.setAttribute('hidden', '')
         }
+        this._flushAccessibleNames()
     }
 
     disconnectedCallback() {
@@ -508,6 +510,7 @@ class EffectControls extends HTMLElement {
         this._bodyEl.innerHTML = ''
         this._controlHandles.clear()
         this._gatedGroups.clear()
+        this._pendingNames.length = 0
         const def = this._effectDef
         if (!def || !def.globals || Object.keys(def.globals).length === 0) {
             const empty = document.createElement('div')
@@ -548,7 +551,21 @@ class EffectControls extends HTMLElement {
 
             this._bodyEl.appendChild(section)
         }
+        this._flushAccessibleNames()
         this._updateGates()
+    }
+
+    /**
+     * Name every queued control now that its group is in the document and the
+     * Handfish hosts have rendered their inner widgets. Called from
+     * _renderBody and connectedCallback; no-op when nothing is queued.
+     */
+    _flushAccessibleNames() {
+        const pending = this._pendingNames
+        this._pendingNames = []
+        for (const { control, label } of pending) {
+            nameControlAfterLabel(control, label)
+        }
     }
 
     /** Disable each control whose `ui.enabledBy` condition is unmet. */
@@ -619,7 +636,15 @@ class EffectControls extends HTMLElement {
         }
 
         if (handle) {
-            if (handle.element) group.appendChild(handle.element)
+            if (handle.element) {
+                group.appendChild(handle.element)
+                // Naming must happen once the control is in the document: the
+                // Handfish hosts render their inner widgets in
+                // connectedCallback, which does not fire on this detached
+                // group. _renderBody flushes the queue after the sections are
+                // appended.
+                this._pendingNames.push({ control: handle.element, label })
+            }
             this._controlHandles.set(paramName, handle)
         }
         return group
@@ -986,6 +1011,45 @@ class EffectControls extends HTMLElement {
         note.className = 'ec-empty'
         note.textContent = `(${spec?.type || 'unknown'} not yet supported)`
         return { element: note }
+    }
+}
+
+let ecLabelSeq = 0
+
+/**
+ * The focusable widgets a control renders: the control element itself (a
+ * native input is its own widget) plus every focusable node the Handfish
+ * components keep inside their host — the range input and the editable
+ * value display in <slider-value>, the trigger <button> of
+ * <select-dropdown>/<color-picker>, the switch track of <toggle-switch>,
+ * and any focusable node a future control adds.
+ */
+function focusableWidgets(control) {
+    const widgets = [control]
+    for (const el of control.querySelectorAll(
+        'input, button, select, textarea, [contenteditable="true"], [tabindex]'
+    )) {
+        if (el.getAttribute('tabindex') === '-1') continue
+        widgets.push(el)
+    }
+    return widgets
+}
+
+/**
+ * Every parameter control must announce which parameter it operates. The
+ * visible label is a sibling span, and the Handfish components at this pin
+ * do not forward an accessible name from their host to the inner widget
+ * (flagged upstream), so an aria-label on the host changes nothing. Point
+ * each focusable widget at the visible label with aria-labelledby instead:
+ * assistive technology then announces the parameter name — "scale",
+ * "ridges", "color mode" — not just the role and current value.
+ */
+function nameControlAfterLabel(control, label) {
+    if (!control || !label) return
+    if (!label.id) label.id = `ec-label-${++ecLabelSeq}`
+    const id = label.id
+    for (const widget of focusableWidgets(control)) {
+        widget.setAttribute('aria-labelledby', id)
     }
 }
 

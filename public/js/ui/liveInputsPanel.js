@@ -480,8 +480,8 @@ class LiveInputsPanel {
                         <button class="live-input-toggle" data-id="audio-toggle">enable</button>
                     </div>
                     <div class="live-input-device-row">
-                        <span class="live-input-device-label">source</span>
-                        <select class="live-input-device-select" data-id="audio-device">
+                        <span class="live-input-device-label" id="live-inputs-audio-label">source</span>
+                        <select class="live-input-device-select" aria-labelledby="live-inputs-audio-label" data-id="audio-device">
                             <option value="">default</option>
                         </select>
                     </div>
@@ -515,8 +515,8 @@ class LiveInputsPanel {
                         <span class="live-input-status" data-id="source-status">none</span>
                     </div>
                     <div class="live-input-device-row">
-                        <span class="live-input-device-label">camera</span>
-                        <select class="live-input-device-select" data-id="camera-device"><option value="">system default</option></select>
+                        <span class="live-input-device-label" id="live-inputs-camera-label">camera</span>
+                        <select class="live-input-device-select" aria-labelledby="live-inputs-camera-label" data-id="camera-device"><option value="">system default</option></select>
                     </div>
                     <div class="source-buttons">
                         <button class="source-btn" data-source="webcam"><span class="icon-material">videocam</span><span>webcam</span></button>

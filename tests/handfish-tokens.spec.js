@@ -4,6 +4,9 @@
 // chrome (body, loading, spinner, error), the shared toast, the copy-feedback
 // checkmark class, and the viewport popup mirror page.
 //
+// GAP-010 adds an accessibility-name case: the effect parameter panel and the
+// live-inputs device selectors must announce their visible label.
+//
 // A hard-coded color yields the same computed value in every theme, so the
 // core property under test is: every audited surface's computed colors come
 // from resolved --hf-* tokens (oklch()/color() serializations, not the
@@ -21,6 +24,95 @@ async function waitForShell(page) {
         return !!el && getComputedStyle(el).color.includes('oklch')
     }, null, { timeout: 30000 })
 }
+
+// Wait for a compiled, running program before touching the parameter panel:
+// the panel is fed from the engine's effect definitions for the live program.
+async function bootSettled(page, dsl) {
+    await page.goto(`/?dsl=${encodeURIComponent(dsl)}`)
+    await page.waitForFunction(
+        () =>
+            document.getElementById('canvas')?.classList.contains('visible') &&
+            window.__poly?.renderer?.isRunning === true,
+        null,
+        { timeout: 45000 }
+    )
+}
+
+/**
+ * Read an element's own accessibility node (role + name) through CDP, the way
+ * assistive technology sees it. nodes[0] of getPartialAXTree is the requested
+ * element; the rest is its subtree and ancestors.
+ */
+async function axNode(cdp, expression) {
+    const { result } = await cdp.send('Runtime.evaluate', { expression })
+    expect(result.objectId, `${expression} must resolve to an element`).toBeTruthy()
+    const { nodes } = await cdp.send('Accessibility.getPartialAXTree', { objectId: result.objectId })
+    return nodes[0]
+}
+
+test('parameter and device controls announce accessible names', async ({ page }) => {
+    const BOOT_DSL = 'search synth, filter\n\nperlin(scale: 75, octaves: 2)\n  .write(o0)\n\nrender(o0)'
+    await bootSettled(page, BOOT_DSL)
+
+    // Open the perlin parameter panel on its call site, the way a click on
+    // the effect name does.
+    await page.evaluate((dsl) => {
+        document.getElementById('dsl-editor').dispatchEvent(
+            new CustomEvent('effectclick', { detail: { caretOffset: dsl.indexOf('perlin') + 3, dsl } })
+        )
+    }, BOOT_DSL)
+    await page.waitForSelector('#effect-controls-panel:not([hidden])', { timeout: 15000 })
+
+    const cdp = await page.context().newCDPSession(page)
+
+    // Tag every focusable widget inside the panel, each with the visible
+    // label of the parameter group it belongs to (null for panel chrome).
+    const widgets = await page.evaluate(() => {
+        const panel = document.getElementById('effect-controls-panel')
+        const els = [
+            ...panel.querySelectorAll('input, button, select, textarea, [contenteditable="true"], [tabindex]'),
+        ].filter(el => el.getAttribute('tabindex') !== '-1')
+        return els.map((el, i) => {
+            el.dataset.axProbe = String(i)
+            const group = el.closest('.ec-control-group')
+            return {
+                probe: String(i),
+                label: group ? group.querySelector('.ec-control-label')?.textContent.trim() : null,
+            }
+        })
+    })
+    expect(widgets.length, 'the panel renders focusable parameter widgets').toBeGreaterThan(5)
+
+    for (const { probe, label } of widgets) {
+        const node = await axNode(cdp, `document.querySelector('[data-ax-probe="${probe}"]')`)
+        const role = node.role?.value
+        if (node.ignored || role === 'none') {
+            // ui-gated (inert) or not-yet-shown widget: assistive technology
+            // announces nothing for it by design.
+            continue
+        }
+        if (label === null) {
+            // Panel chrome (info, close) already carries its own visible text.
+            expect(node.name?.value, 'panel chrome must announce a name').toBeTruthy()
+            continue
+        }
+        expect(node.name?.value, `the ${role} widget for "${label}" must announce its visible label, not "${node.name?.value}"`)
+            .toBe(label)
+    }
+
+    // The live-inputs device selectors: native selects whose visible labels
+    // are sibling spans.
+    await page.evaluate(() => window.__poly.liveInputsPanel.open())
+    await page.waitForSelector('.live-inputs-panel.visible', { timeout: 15000 })
+
+    const camera = await axNode(cdp, `document.querySelector('.live-inputs-panel [data-id="camera-device"]')`)
+    expect(camera.role?.value).toBe('combobox')
+    expect(camera.name?.value, 'the camera device select must announce "camera"').toBe('camera')
+
+    const source = await axNode(cdp, `document.querySelector('.live-inputs-panel [data-id="audio-device"]')`)
+    expect(source.role?.value).toBe('combobox')
+    expect(source.name?.value, 'the audio device select must announce "source"').toBe('source')
+})
 
 test('boot chrome reads Handfish tokens and flips between dark and light themes', async ({ page }) => {
     await page.goto('/')
