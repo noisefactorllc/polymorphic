@@ -80,9 +80,16 @@ test('the shared toast resolves token colors and flips with the theme', async ({
         }
     })
     await page.goto('/?backend=webgpu')
-    await waitForShell(page)
 
     // The toast dismisses itself after ~4s; read it in one evaluation.
+    const readToast = () => {
+        const t = document.querySelector('.polymorphic-toast')
+        if (!t) return null
+        return {
+            bg: getComputedStyle(t).backgroundColor,
+            color: getComputedStyle(t).color,
+        }
+    }
     const darkToast = await (await page.waitForFunction(() => {
         const t = document.querySelector('.polymorphic-toast')
         return t ? { bg: getComputedStyle(t).backgroundColor, color: getComputedStyle(t).color } : null
@@ -92,19 +99,18 @@ test('the shared toast resolves token colors and flips with the theme', async ({
     expect(darkToast.bg).not.toMatch(/rgba\(102,\s*126,\s*234/)
     expect(darkToast.bg).not.toBe('rgba(102, 126, 234, 0.95)')
 
-    // Flip the theme and read in the same evaluation: the toast auto-dismisses
-    // ~4s after it appears, so every extra roundtrip risks losing it.
-    const lightToast = await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light'
+    // Flip the theme, then trigger a second showToast call (a bare digit
+    // recalls scene 1; the empty-slot toast takes the same token-based path)
+    // and read it under the light theme — the first toast is gone by then.
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light' })
+    await page.keyboard.press('1')
+    const lightToast = await (await page.waitForFunction(() => {
         const t = document.querySelector('.polymorphic-toast')
-        if (!t) return null
-        return {
-            bg: getComputedStyle(t).backgroundColor,
-            color: getComputedStyle(t).color,
-        }
-    })
-    expect(lightToast, 'toast still visible for the light-theme read').not.toBeNull()
+        return t ? { bg: getComputedStyle(t).backgroundColor, color: getComputedStyle(t).color } : null
+    }, null, { timeout: 15000 })).jsonValue()
     expect(lightToast.bg).toMatch(/oklch|color\(/)
+    // Both toasts come from the same token chain; the theme flipped its value.
+    expect(lightToast.bg).not.toBe(darkToast.bg)
     // The text token (--hf-text-bright) flips near-white ↔ near-black.
     expect(lightToast.color).not.toBe(darkToast.color)
 })
@@ -158,5 +164,27 @@ test('the viewport popup mirror page loads Handfish tokens and flips with the th
     })
     expect(light.bodyBg).not.toBe(dark.bodyBg)
     expect(light.hintColor).not.toBe(dark.hintColor)
+
+    // Rendered letterbox: draw(null) paints only the token-resolved
+    // background across the whole popup canvas, so a hard-coded fill would
+    // show as pure black pixels in both themes. Read the actual pixels
+    // (the theme is still 'light' from the style read above).
+    const readLetterboxPixel = () => popup.evaluate(() => {
+        const out = document.getElementById('out')
+        const ctx = out.getContext('2d')
+        window._polymorphicViewport.draw(null)
+        const d = ctx.getImageData(0, 0, 1, 1).data
+        return [d[0], d[1], d[2]]
+    })
+    const lightPixel = await readLetterboxPixel()
+    await popup.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
+    const darkPixel = await readLetterboxPixel()
+
+    // Letterbox came from the resolved token, not a hard-coded #000.
+    expect(lightPixel, 'light-theme letterbox must not stay black')
+        .not.toEqual([0, 0, 0])
+    expect(darkPixel, 'dark-theme letterbox must resolve the token, not #000')
+        .not.toEqual([0, 0, 0])
+    expect(lightPixel).not.toEqual(darkPixel)
     await popup.close()
 })

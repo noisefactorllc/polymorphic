@@ -752,6 +752,28 @@ test('viewportWindow.js popup mirror page uses Handfish token references', () =>
         /font-family:\s*var\(--hf-font-family-mono/,
         'popup hint text must reference var(--hf-font-family-mono)'
     )
+    // The letterbox canvas fill must read the resolved theme color, never a
+    // literal: a hard-coded #000 leaves black bars around the mirror in the
+    // light theme.
+    const scriptMatch = code.match(/<script>([\s\S]*?)<\/script>/)
+    assert.ok(scriptMatch, 'viewportWindow.js popup page must define its mirror <script>')
+    assert.match(
+        scriptMatch[1],
+        /fillStyle\s*=\s*getComputedStyle\(document\.body\)\.backgroundColor/,
+        'the popup letterbox fill must come from the resolved --hf-* background, not a literal'
+    )
+    for (const m of scriptMatch[1].matchAll(/(?:fill|stroke)Style\s*=\s*([^;\n]+)/g)) {
+        assert.doesNotMatch(
+            m[1],
+            /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\(|\b(?:black|white)\b(?!\s*-)/i,
+            `the popup script must not assign a raw color literal to a canvas style (got: ${m[1].trim()}); read the resolved --hf-* color`
+        )
+        assert.doesNotMatch(
+            m[1],
+            COLOR_FUNCTION_LITERALS,
+            `the popup script must not assign a raw color-function literal to a canvas style (got: ${m[1].trim()}); read the resolved --hf-* color`
+        )
+    }
 })
 
 function assertSvgPresentationAttrsTokenized(source, label) {

@@ -56,7 +56,9 @@ const POPUP_HTML = `<!DOCTYPE html>
   window._polymorphicViewport = {
     draw(source) {
       if (stopped) return;
-      ctx.fillStyle = '#000';
+      // Letterbox fill: resolve the theme token each frame so the bars around
+      // the mirrored canvas follow --hf-bg-base (never a hard-coded black).
+      ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
       ctx.fillRect(0, 0, out.width, out.height);
       if (!source) return;
       const sw = source.width || 1280;
