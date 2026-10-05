@@ -613,5 +613,165 @@ test('dialog action and close buttons declare focus-visible and active scale', (
     )
 })
 
+// ===========================================================================
+// Surfaces the earlier rules do not read: inline `style.cssText` strings,
+// the viewport popup mirror page, SVG presentation attributes, and
+// index.html's inline <style> block.
+//
+// Contract: a color value is hardcoding unless it sits inside a
+// `var(--hf-...)` reference chain (the chain's fallback keeps the surface
+// functional before handfish's tokens.css resolves). `!important` stays
+// confined to the published exceptions (the scrubber cursor/user-select
+// guards above); none of these surfaces has one.
+// ===========================================================================
+
+const VAR_CHAIN = /var\(--hf-(?:[^()]|\([^()]*\))*\)/g
+
+function stripVarChains(css) {
+    return css.replace(VAR_CHAIN, '')
+}
+
+function assertCssTextTokenized(css, label) {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    assert.doesNotMatch(
+        stripped,
+        /!important/,
+        `${label} must not use !important`
+    )
+    const withoutChains = stripVarChains(stripped)
+    assert.doesNotMatch(
+        withoutChains,
+        /#[0-9a-fA-F]{3,8}\b/,
+        `${label} must not use raw hex colors outside var(--hf-*) references; use --hf-* tokens`
+    )
+    assert.doesNotMatch(
+        withoutChains,
+        /\b(?:rgba?|hsla?)\s*\(/i,
+        `${label} must not use raw rgb/rgba/hsl/hsla literals outside var(--hf-*) references; use --hf-* tokens`
+    )
+    // A bare black/white keyword hardcodes the value a token resolves to.
+    // `white-space` and other hyphenated identifiers are not color values.
+    assert.doesNotMatch(
+        withoutChains,
+        /\b(?:black|white)\b(?!\s*-)/i,
+        `${label} must not use a bare black/white color value outside var(--hf-*) references`
+    )
+}
+
+/** Extract every `X.style.cssText = '...'` / `= \`...\`` assignment body. */
+function extractCssTextStrings(code) {
+    const out = []
+    for (const m of code.matchAll(/style\.cssText\s*=\s*`((?:[^`\\]|\\.)*)`/g)) {
+        out.push(m[1])
+    }
+    for (const m of code.matchAll(/style\.cssText\s*=\s*'((?:[^'\\]|\\.)*)'/g)) {
+        out.push(m[1].replace(/\\'/g, "'"))
+    }
+    return out
+}
+
+test('embed.js inline style.cssText uses Handfish tokens and reuses the shared toast helper', () => {
+    const embed = fs.readFileSync(new URL('../../public/js/embed.js', import.meta.url), 'utf8')
+
+    // The import toast is the shared token-based showToast helper, not a
+    // hard-coded duplicate pill.
+    assert.doesNotMatch(
+        embed,
+        /showImportToast|\.import-toast/,
+        'embed.js must not keep a duplicate import toast; reuse showToast'
+    )
+    assert.match(
+        embed,
+        /showToast\(`Effect "\$\{effectData\.func\}" imported!`\)/,
+        'the effect-import toast must go through showToast'
+    )
+
+    const cssTexts = extractCssTextStrings(embed)
+    assert.ok(cssTexts.length >= 3, 'embed.js must still declare its inline cssText surfaces')
+    cssTexts.forEach((css, i) => assertCssTextTokenized(css, `embed.js style.cssText #${i + 1}`))
+
+    // Toast text color must come from a --hf-* text token, not a bare #fff.
+    assert.match(
+        embed,
+        /const textColor\s*=\s*type === 'warning'\s*\?\s*'var\(--hf-color-1[^)]*\)'\s*:\s*'var\(--hf-text-bright[^)]*\)'/,
+        'showToast text color must use --hf-* tokens for both warning and normal types'
+    )
+    // The toast palette stays inside var(--hf-*) chains (checked per value).
+    const palette = embed.match(/const colors = \{[\s\S]*?\n    \}/)
+    assert.ok(palette, 'showToast must define its background palette')
+    const strippedPalette = stripVarChains(palette[0])
+    assert.doesNotMatch(
+        strippedPalette,
+        /rgba?\s*\(/i,
+        'showToast background palette must keep every literal inside a var(--hf-*) chain'
+    )
+})
+
+test('docReader.js inline style.cssText uses Handfish tokens', () => {
+    const code = fs.readFileSync(new URL('../../public/js/docReader.js', import.meta.url), 'utf8')
+    const cssTexts = extractCssTextStrings(code)
+    assert.ok(cssTexts.length >= 1, 'docReader.js must declare its inline cssText surfaces')
+    cssTexts.forEach((css, i) => assertCssTextTokenized(css, `docReader.js style.cssText #${i + 1}`))
+    assert.match(
+        code,
+        /color:\s*var\(--hf-text-muted/,
+        'the doc build-info line must use a --hf-text-* token'
+    )
+})
+
+test('viewportWindow.js popup mirror page uses Handfish token references', () => {
+    const code = fs.readFileSync(new URL('../../public/js/ui/viewportWindow.js', import.meta.url), 'utf8')
+    const popupMatch = code.match(/<style>([\s\S]*?)<\/style>/)
+    assert.ok(popupMatch, 'viewportWindow.js popup page must define an inline <style> block')
+    assertCssTextTokenized(popupMatch[1], 'viewportWindow.js popup <style>')
+    assert.match(
+        popupMatch[1],
+        /background:\s*var\(--hf-bg-base/,
+        'popup page background must reference var(--hf-bg-base)'
+    )
+    assert.match(
+        popupMatch[1],
+        /font-family:\s*var\(--hf-font-family-mono/,
+        'popup hint text must reference var(--hf-font-family-mono)'
+    )
+})
+
+function assertSvgPresentationAttrsTokenized(source, label) {
+    for (const m of source.matchAll(/\b(fill|stroke|stop-color)="([^"]*)"/g)) {
+        assert.match(
+            m[2].trim().toLowerCase(),
+            /^(?:none|currentcolor|inherit|transparent|url\(.*\))$/,
+            `${label} <${m[1]}> SVG presentation attribute must not hardcode a color (got "${m[2]}"); use stroke="currentColor" with a CSS --hf-* color token`
+        )
+    }
+}
+
+test('SVG presentation attributes carry no hardcoded colors (index.html, shareModal.js)', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
+    assertSvgPresentationAttrsTokenized(html, 'public/index.html')
+    const shareCode = fs.readFileSync(new URL('../../public/js/shareModal.js', import.meta.url), 'utf8')
+    assertSvgPresentationAttrsTokenized(shareCode, 'public/js/shareModal.js')
+    // The copy-feedback checkmark keeps its green from the token, not the markup.
+    assert.match(
+        html,
+        /\.share-copy-check\s*\{[^}]*?var\(--hf-green/,
+        'the share copy checkmark must take its color from var(--hf-green)'
+    )
+})
+
+test('index.html inline <style> block carries no hardcoded colors outside var(--hf-*) and no !important', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8')
+    const styleBlocks = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)]
+    assert.ok(styleBlocks.length >= 1, 'index.html must declare its inline <style> block')
+    for (const [, block] of styleBlocks) {
+        assertCssTextTokenized(block, 'public/index.html inline <style>')
+    }
+    assert.doesNotMatch(
+        html,
+        /!important/,
+        'index.html must not contain any !important declaration (no published exception covers it)'
+    )
+})
+
 
 

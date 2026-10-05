@@ -137,8 +137,8 @@
             width: 100%; 
             height: 100%; 
             overflow: hidden; 
-            background: #0a0a0f;
-            font-family: 'Nunito', 'Nunito Block';
+            background: var(--hf-bg-base, #0a0a0f);
+            font-family: var(--hf-font-family, 'Nunito', 'Nunito Block');
             font-weight: 500;
         }
         
@@ -164,8 +164,8 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: #888;
-            font-size: 14px;
+            color: var(--hf-text-dim, #888);
+            font-size: var(--hf-size-base, 14px);
             text-align: center;
         }
         
@@ -176,8 +176,8 @@
         .spinner {
             width: 32px;
             height: 32px;
-            border: 3px solid #222;
-            border-top-color: #667eea;
+            border: 3px solid var(--hf-color-3, #222);
+            border-top-color: var(--hf-accent, #667eea);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 12px;
@@ -186,8 +186,8 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         @keyframes editor-busy {
-            0%, 100% { box-shadow: inset 0 0 0 2px rgba(255,255,255,0); }
-            50%      { box-shadow: inset 0 0 0 2px rgba(255,200,80,0.4); }
+            0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+            50%      { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hf-yellow, rgb(255, 200, 80)) 40%, transparent); }
         }
         #dsl-overlay.busy { animation: editor-busy 250ms ease-out; }
 
@@ -198,15 +198,15 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: #ff6b6b;
-            font-family: 'Noto Sans Mono', 'Noto Sans Mono Block';
-            font-size: 14px;
+            color: var(--hf-red, #ff6b6b);
+            font-family: var(--hf-font-family-mono, 'Noto Sans Mono', 'Noto Sans Mono Block');
+            font-size: var(--hf-size-base, 14px);
             text-align: center;
-            padding: 20px;
+            padding: var(--hf-space-5, 20px);
             max-width: 80%;
-            background: rgba(0, 0, 0, 0.9);
-            border: 1px solid #ff6b6b;
-            border-radius: 8px;
+            background: color-mix(in srgb, var(--hf-color-1, #000) 90%, transparent);
+            border: 1px solid var(--hf-red, #ff6b6b);
+            border-radius: var(--hf-radius, 8px);
         }
         
         /* DSL Editor Overlay — 1rem inset all around so the bottom edge
@@ -249,7 +249,7 @@
         body.performance-mode .perf-overlay,
         body.performance-mode .status-row,
         body.performance-mode .output-picker,
-        body.performance-mode .recording-indicator { display: none !important; }
+        body.performance-mode .recording-indicator { display: none; }
         /* The rendered cursor dot (see cursorIdle.js) replaces the OS cursor in
            performance mode; it fades out after idle instead of vanishing. */
         body.performance-mode { cursor: none; }
@@ -279,7 +279,7 @@
         body.embed-mode .perf-overlay,
         body.embed-mode .status-row,
         body.embed-mode .output-picker,
-        body.embed-mode .recording-indicator { display: none !important; }
+        body.embed-mode .recording-indicator { display: none; }
 
         /* When the status row is visible (default), shift bottom-anchored
            panels up so they don't overlap. Status row chip height (~1.5rem)
@@ -880,6 +880,12 @@
             height: 12px;
         }
 
+        /* Copy-feedback checkmark inherits the green success token from CSS;
+           the inline SVG uses stroke="currentColor". */
+        .share-copy-check {
+            color: var(--hf-green);
+        }
+
         .blaster-publish-btn {
             width: 100%;
             margin-top: 0.5rem;
@@ -1240,7 +1246,7 @@
                 </div>
                 <div id="share-result" class="share-result" style="display: none;">
                     <div class="share-success">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M9 12l2 2 4-4"></path>
                         </svg>

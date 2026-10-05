@@ -24,11 +24,11 @@ const POPUP_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <title>Polymorphic — Viewport</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--hf-bg-base, #000); overflow: hidden; cursor: none; }
   canvas { width: 100vw; height: 100vh; display: block; }
   .hint {
     position: fixed; bottom: 8px; right: 12px;
-    color: rgba(255,255,255,0.3); font-family: monospace; font-size: 11px;
+    color: var(--hf-text-muted, rgba(255,255,255,0.3)); font-family: var(--hf-font-family-mono, monospace); font-size: var(--hf-size-xs, 11px);
     pointer-events: none; transition: opacity 1s ease 3s; opacity: 1;
   }
   body.played .hint { opacity: 0; }

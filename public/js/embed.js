@@ -528,58 +528,9 @@ importEffectDialog.onEffectImport(async ({ name, files }) => {
     // Show success message
     console.log(`[Polymorphic] Imported effect: ${effectData.func}`)
     
-    // Show toast notification
-    showImportToast(`Effect "${effectData.func}" imported!`)
+    // Show toast notification (the shared token-based toast helper)
+    showToast(`Effect "${effectData.func}" imported!`)
 })
-
-/**
- * Show a temporary toast notification
- * @param {string} message
- */
-function showImportToast(message) {
-    // Remove any existing toast
-    const existing = document.querySelector('.import-toast')
-    if (existing) existing.remove()
-
-    const toast = document.createElement('div')
-    toast.className = 'import-toast'
-    toast.textContent = message
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(102, 126, 234, 0.95);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 14px;
-        z-index: 10001;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        animation: toast-in 0.3s ease;
-    `
-    document.body.appendChild(toast)
-
-    // Add animation keyframes if not present
-    if (!document.getElementById('import-toast-styles')) {
-        const style = document.createElement('style')
-        style.id = 'import-toast-styles'
-        style.textContent = `
-            @keyframes toast-in {
-                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-                to { opacity: 1; transform: translateX(-50%) translateY(0); }
-            }
-        `
-        document.head.appendChild(style)
-    }
-
-    // Auto-remove after 4 seconds
-    setTimeout(() => {
-        toast.style.opacity = '0'
-        toast.style.transition = 'opacity 0.3s ease'
-        setTimeout(() => toast.remove(), 300)
-    }, 4000)
-}
 
 /**
  * Parse a definition.js class file and extract effect properties
@@ -1276,7 +1227,7 @@ function showToast(message, type = 'info') {
         warning: 'var(--hf-yellow, rgba(251, 191, 36, 0.95))',
         error: 'var(--hf-red, rgba(239, 68, 68, 0.95))'
     }
-    const textColor = type === 'warning' ? 'var(--hf-color-1, #111)' : '#fff'
+    const textColor = type === 'warning' ? 'var(--hf-color-1, #111)' : 'var(--hf-text-bright, #fff)'
 
     const toast = document.createElement('div')
     toast.className = 'polymorphic-toast'
@@ -1291,9 +1242,9 @@ function showToast(message, type = 'info') {
         transform: translateX(-50%);
         background: ${colors[type] || colors.info};
         color: ${textColor};
-        padding: 12px 24px;
+        padding: var(--hf-space-3, 12px) var(--hf-space-6, 24px);
         border-radius: var(--hf-radius, 8px);
-        font-size: 14px;
+        font-size: var(--hf-size-base, 14px);
         font-family: inherit;
         z-index: 10001;
         box-shadow: var(--hf-shadow-lg, 0 4px 12px rgba(0,0,0,0.3));
