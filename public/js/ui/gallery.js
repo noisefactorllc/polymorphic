@@ -1045,7 +1045,8 @@ class Gallery {
             card.dataset.liveAttached = '1'
             let composition
             try {
-                composition = await loadFromCode(item.code)
+                // Previews render without media() urls, so skip the image files.
+                composition = await loadFromCode(item.code, { loadImages: false })
             } catch (err) {
                 console.debug('[Gallery] could not load blaster DSL:', err?.message || err)
                 return
@@ -1076,6 +1077,7 @@ class Gallery {
             this._onLoad({
                 title: composition.title || item.title || '(untitled)',
                 dsl: composition.dsl,
+                images: composition.images,
                 tagline: '',
                 tags: [item.app].filter(Boolean)
             })

@@ -1,7 +1,7 @@
 // Share modal for Polymorphic
 // Posts to sharing.noisedeck.app API
 
-import { getLoadedPortableEffects, portableDefinition } from './sharingLoader.js'
+import { getLoadedPortableEffects, portableDefinition, uploadProgramImages, uploadScreenshot } from './sharingLoader.js'
 let registerEscapeable = (el, cb) => {}, unregisterEscapeable = (el) => {}
 try {
     const hf = await import('handfish')
@@ -235,8 +235,8 @@ class ShareModal {
         const ctx = previewCanvas.getContext('2d');
         ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, previewWidth, previewHeight);
 
-        // Store screenshot as base64 JPEG at 85% quality
-        this.screenshot = previewCanvas.toDataURL('image/jpeg', 0.85);
+        // Sharing uploads the screenshot as a JPEG file
+        this.screenshotCanvas = previewCanvas;
     }
 
     async _handleShare() {
@@ -279,15 +279,18 @@ class ShareModal {
                 dsl: this.dsl,
                 title: title || 'Untitled',
                 description: description || '',
-                screenshot: this.screenshot || '',
+                screenshot: '',
                 effects: effectZips
             };
 
             if (this.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first');
             if (/\burl\b/.test(payload.dsl)) {
-                const { prepareImagesForShare, getReferencedImages } = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929');
-                Object.assign(payload, await prepareImagesForShare(payload.dsl, getReferencedImages(payload.dsl, this.images)));
+                const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929');
+                const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, this.images));
+                // Images go to the sharing service as files, named by the ids it returns.
+                payload.dsl = await uploadProgramImages(prepared.dsl, prepared.images, { tools });
             }
+            payload.screenshot = await uploadScreenshot(this.screenshotCanvas) || '';
 
             const response = await fetch('https://sharing.noisedeck.app/api/embed/shorten', {
                 method: 'POST',

@@ -216,9 +216,20 @@ test('a dropped image is a file in IndexedDB that programs, scenes and history n
   for (const value of Object.values(await storedText(page))) expect(value).not.toContain('data:image')
 })
 
-test('sharing still sends a stored image as the {id, dataUrl} the sharing service takes', async ({ page }) => {
+test('sharing uploads a stored image and the screenshot as files and sends their ids, never base64', async ({ page }) => {
   test.setTimeout(120000)
-  const payloads = []
+  const payloads = [], uploads = [], bodies = []
+  const JPEG_ID = 'f'.repeat(64)
+  page.on('request', request => {
+    if (request.url().startsWith('https://sharing.noisedeck.app/api/')) bodies.push(request.postDataBuffer()?.toString('latin1') || '')
+  })
+  await page.route('https://sharing.noisedeck.app/api/images', async route => {
+    const request = route.request()
+    const bytes = request.postDataBuffer()
+    const type = request.headers()['content-type']
+    uploads.push({ type, bytes })
+    await route.fulfill({ status: 201, json: { id: type === 'image/png' ? digest(bytes) : JPEG_ID, url: 'unused', mimeType: type, width: 1, height: 1 } })
+  })
   await page.route('https://sharing.noisedeck.app/api/embed/shorten', async route => {
     payloads.push(route.request().postDataJSON())
     await route.fulfill({ json: { shortUrl: 'https://sharing.noisedeck.app/test' } })
@@ -243,8 +254,15 @@ test('sharing still sends a stored image as the {id, dataUrl} the sharing servic
   for (const payload of payloads) {
     expect(payload.dsl).toContain(`image:${digest(RED)}`)
     expect(payload.dsl).not.toContain('data:')
-    expect(payload.images.map(({ id, dataUrl }) => ({ id, dataUrl }))).toEqual([{ id: digest(RED), dataUrl: text(RED) }])
+    expect(payload).not.toHaveProperty('images')
+    expect(payload.screenshot).toBe(JPEG_ID)
   }
+  // Each share uploads the image file and a JPEG screenshot file.
+  expect(uploads.map(upload => upload.type)).toEqual(['image/png', 'image/jpeg', 'image/png', 'image/jpeg'])
+  for (const upload of uploads.filter(upload => upload.type === 'image/png')) expect(upload.bytes.equals(RED)).toBe(true)
+  for (const upload of uploads.filter(upload => upload.type === 'image/jpeg')) expect([...upload.bytes.subarray(0, 2)]).toEqual([0xff, 0xd8])
+  expect(bodies.length).toBeGreaterThanOrEqual(6)
+  for (const body of bodies) expect(body).not.toMatch(/base64|data:image|dataUrl/)
 })
 
 test('programs, scenes and history saved with images as text move them to IndexedDB on load', async ({ page }) => {

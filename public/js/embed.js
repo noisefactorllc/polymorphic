@@ -20,7 +20,7 @@ import { insertImageSource } from './noisemaker/imageSource.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer, uploadProgramImages, uploadScreenshot } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { programs } from './programs.js'
 import { storeImageFile, getProgramImage, hasImageText, storeImageText, storeDslImages, migrateProgramImages, programImagesMigrated } from './programImages.js'
@@ -1295,8 +1295,8 @@ async function handleEditInApp(appName, appUrl) {
     showToast(`Opening in ${appName}...`, 'info')
 
     try {
-        // Capture screenshot
-        let screenshot = null
+        // Capture screenshot; sharing uploads it as a JPEG file
+        let screenshotCanvas = null
         try {
             const targetWidth = 1200
             const targetHeight = 630
@@ -1319,7 +1319,7 @@ async function handleEditInApp(appName, appUrl) {
                 sy = (canvas.height - sh) / 2
             }
             ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
-            screenshot = tempCanvas.toDataURL('image/jpeg', 0.85)
+            screenshotCanvas = tempCanvas
         } catch (err) {
             console.warn(`[${appName}] Screenshot capture failed:`, err)
         }
@@ -1450,14 +1450,17 @@ async function handleEditInApp(appName, appUrl) {
             description: 'Created with Polymorphic',
             ttlMinutes: 60  // Reduced TTL for edit-in-app links
         }
-        if (screenshot) payload.screenshot = screenshot
         if (effectZips.length > 0) payload.effects = effectZips
 
         if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first')
         if (/\burl\b/.test(payload.dsl)) {
-            const { prepareImagesForShare, getReferencedImages } = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-            Object.assign(payload, await prepareImagesForShare(payload.dsl, getReferencedImages(payload.dsl, renderer.images || [])))
+            const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, renderer.images || []))
+            // Images go to the sharing service as files, named by the ids it returns.
+            payload.dsl = await uploadProgramImages(prepared.dsl, prepared.images, { tools })
         }
+        const screenshot = await uploadScreenshot(screenshotCanvas)
+        if (screenshot) payload.screenshot = screenshot
 
         // Upload to sharing service
         const response = await fetch(SHARE_API_URL, {
@@ -2675,6 +2678,10 @@ function setupMenuBar() {
     gallery.init({
         onLoad: (example) => {
             if (!dslEditor) return
+            // A shared composition brings the images its program names.
+            for (const image of example.images || []) {
+                if (renderer && !renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
+            }
             dslEditor.value = example.dsl
             originalDsl = example.dsl
             publishLocalDsl('gallery')

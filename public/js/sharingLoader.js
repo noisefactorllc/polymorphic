@@ -13,6 +13,7 @@ import {
 } from './noisemaker/bundle.js'
 
 const SHARING_API_BASE = 'https://sharing.noisedeck.app'
+const PORTABLE_IMAGES_URL = 'https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929'
 
 /**
  * Storage for portable effects loaded from sharing URLs.
@@ -39,10 +40,14 @@ export function clearLoadedPortableEffects() {
 /**
  * Fetch composition data from the sharing API
  * @param {string} code - The short code
+ * @param {object} [options]
+ * @param {boolean} [options.loadImages] - Load the image files the composition lists
  * @returns {Promise<object>} Composition data including dsl, effects, title, etc.
  */
-export async function fetchComposition(code) {
-    const response = await fetch(`${SHARING_API_BASE}/api/composition/${code}`)
+export async function fetchComposition(code, { loadImages = true } = {}) {
+    // ?images=files keeps the program's image:<id> media URLs and lists the
+    // composition's images as { id, url } files.
+    const response = await fetch(`${SHARING_API_BASE}/api/composition/${code}?images=files`)
 
     if (!response.ok) {
         if (response.status === 404) {
@@ -51,7 +56,92 @@ export async function fetchComposition(code) {
         throw new Error(`Failed to fetch composition: ${response.status}`)
     }
 
-    return response.json()
+    const composition = await response.json()
+    if (loadImages) await loadSharedImages(composition)
+    return composition
+}
+
+/**
+ * Load a fetched composition's image files into the { id, dataUrl, ... }
+ * images the renderer binds. A program image that cannot be loaded is removed
+ * from the program, so the program renders as it did before images were
+ * shared, instead of failing to compile.
+ */
+async function loadSharedImages(composition) {
+    const listed = Array.isArray(composition.images) ? composition.images : []
+    composition.images = await loadSharedImageFiles(listed)
+    const loaded = new Set(composition.images.map(image => image.id))
+    const missing = new Set(listed.filter(image => !loaded.has(image?.id)).map(image => image?.id))
+    if (!missing.size || typeof composition.dsl !== 'string') return
+    const { replaceMediaUrls } = await import(PORTABLE_IMAGES_URL)
+    composition.dsl = replaceMediaUrls(composition.dsl, url => url?.startsWith('image:') && missing.has(url.slice(6)) ? null : url)
+}
+
+/**
+ * Upload an image file to the sharing service.
+ * @param {Blob} blob - The image file (PNG, JPEG, GIF or WebP)
+ * @returns {Promise<string>} The id the service gives it, named as `image:<id>`
+ */
+export async function uploadImage(blob) {
+    const response = await fetch(`${SHARING_API_BASE}/api/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type },
+        body: blob
+    })
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || `Image upload failed: ${response.status}`)
+    }
+    return (await response.json()).id
+}
+
+/**
+ * Upload the images a program uses to the sharing service as files, and name
+ * each one in the program by the id the service returns.
+ *
+ * Each file is the one this browser stores under the image's id, or else the
+ * prepared image's bytes as a file.
+ *
+ * @param {string} dsl - The program, naming each image as `image:<id>`
+ * @param {Array<{id: string, dataUrl: string, mimeType?: string}>} images - From prepareImagesForShare
+ * @param {object} [options]
+ * @param {object} [options.tools] - The sharing image helpers
+ * @param {(id: string) => Promise<Blob|null>} [options.storedImage] - Stored image file by id
+ * @returns {Promise<string>} The program to share
+ */
+export async function uploadProgramImages(dsl, images = [], { tools, storedImage = storedProgramImage } = {}) {
+    if (!images.length) return dsl
+    tools = tools || await import(PORTABLE_IMAGES_URL)
+    const ids = new Map()
+    for (const image of images) {
+        // The id is the SHA-256 of the bytes, so a stored file is the same image.
+        const stored = await storedImage(image.id).catch(() => null)
+        const blob = stored && stored.type === image.mimeType ? stored : tools.imageToBlob(image)
+        ids.set(image.id, await uploadImage(blob))
+    }
+    if ([...ids].every(([from, to]) => from === to)) return dsl
+    return tools.replaceMediaUrls(dsl, url => url?.startsWith('image:') && ids.has(url.slice(6)) ? `image:${ids.get(url.slice(6))}` : url)
+}
+
+async function storedProgramImage(id) {
+    const { getProgramImage } = await import('./programImages.js')
+    return getProgramImage(id)
+}
+
+/**
+ * Upload a share screenshot as a JPEG file. The screenshot is best-effort: if
+ * it cannot be encoded or uploaded, the program is shared without one.
+ * @param {HTMLCanvasElement|null} canvas - The screenshot
+ * @returns {Promise<string|undefined>} The uploaded screenshot's id
+ */
+export async function uploadScreenshot(canvas) {
+    try {
+        const blob = canvas ? await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85)) : null
+        return blob ? await uploadImage(blob) : undefined
+    } catch (error) {
+        console.warn('Share screenshot was not uploaded:', error)
+        return undefined
+    }
 }
 
 /** Build the declarative definition shared by import, registration and export. */
@@ -178,10 +268,13 @@ export async function registerPortableEffect(effectData) {
  * Load a composition from a short code
  * Fetches the composition and registers any portable effects
  * @param {string} code - The short code
+ * @param {object} [options]
+ * @param {boolean} [options.loadImages] - Load the image files; false for
+ *   previews, which render without images
  * @returns {Promise<{dsl: string, title: string, effects: object[]}>} Loaded composition
  */
-export async function loadFromCode(code) {
-    const composition = await fetchComposition(code)
+export async function loadFromCode(code, { loadImages = true } = {}) {
+    const composition = await fetchComposition(code, { loadImages })
 
     // Register any portable effects
     const registeredEffects = []
@@ -213,4 +306,28 @@ export async function loadFromCode(code) {
 export function getCodeFromUrl() {
     const urlParams = new URLSearchParams(window.location.search)
     return urlParams.get('code')
+}
+
+/**
+ * Shared compositions list their images as { id, url } files. Load each file
+ * into the { id, dataUrl, ... } images the renderer binds, checked against its
+ * id. A file that cannot be loaded is left out and logged.
+ */
+export async function loadSharedImageFiles(images = []) {
+    if (!images.some(image => image?.url && image.dataUrl === undefined)) return images
+    const { prepareImage } = await import(PORTABLE_IMAGES_URL)
+    const loaded = await Promise.all(images.map(async image => {
+        if (!image?.url || image.dataUrl !== undefined) return image
+        try {
+            const response = await fetch(image.url)
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            const prepared = await prepareImage(await response.blob())
+            if (prepared.id !== image.id) throw new Error('the image bytes do not match their id')
+            return prepared
+        } catch (error) {
+            console.warn(`Shared image ${image.id} was not loaded:`, error)
+            return null
+        }
+    }))
+    return loaded.filter(Boolean)
 }

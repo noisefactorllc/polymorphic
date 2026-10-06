@@ -151,7 +151,7 @@ test('?code= load resolves before ?seance= join, so the session snapshot wins', 
 
   const joiner = await context.newPage()
   await preparePage(joiner)
-  await joiner.route('https://sharing.noisedeck.app/api/composition/LOCAL1', async (route) => {
+  await joiner.route('https://sharing.noisedeck.app/api/composition/LOCAL1?images=files', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 150))
     await route.fulfill({
       status: 200,
