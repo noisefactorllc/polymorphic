@@ -25,6 +25,7 @@ async function waitForApp(page) {
 }
 
 test("a parameter edit from the effect panel leaves the editor's native undo usable", async ({ page }) => {
+    test.slow()
     await page.goto(PAGE_URL)
     await waitForApp(page)
     const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
@@ -82,20 +83,22 @@ test("a parameter edit from the effect panel leaves the editor's native undo usa
 })
 
 test('chained panel edits keep the single-press undo transparent', async ({ page }) => {
+    test.slow()
     await page.goto(PAGE_URL)
     await waitForApp(page)
     const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
 
-    // Marker edit through the real keyboard path.
+    // Marker edit through the real keyboard path, on its own line so the
+    // panel's DSL regeneration keeps it in place.
     await page.evaluate(() => {
         const ta = document.getElementById('dsl-editor').getTextarea()
         ta.focus()
         ta.setSelectionRange(ta.value.length, ta.value.length)
     })
-    await page.keyboard.type(' // user note')
+    await page.keyboard.type('\n// panel note')
     // Wait out the hot-reload compile so the panel's program state matches.
     await page.waitForTimeout(1600)
-    expect(await readValue()).toContain('// user note')
+    expect(await readValue()).toContain('// panel note')
 
     // Open the effect panel on the perlin call.
     await page.evaluate(() => {
@@ -130,13 +133,15 @@ test('chained panel edits keep the single-press undo transparent', async ({ page
     // The chained edits rewrote the program and kept the user's edit.
     const edited = await readValue()
     expect(edited).toContain('scale: 60')
-    expect(edited).toContain('// user note')
+    expect(edited).toContain('// panel note')
 
-    // One Ctrl+Z still removes the user's typed edit.
+    // One Ctrl+Z still removes the user's typed edit — and the chained
+    // panel value stays in place, remapped onto the text without it.
     await page.locator('#dsl-editor').click()
     await page.keyboard.press('Control+z')
     await page.waitForTimeout(150)
     const undone = await readValue()
-    expect(undone.trimEnd()).not.toContain("// user")
+    expect(undone).not.toContain('// panel')
+    expect(undone).toContain('scale: 60')
     expect(undone).toContain('perlin(')
 })

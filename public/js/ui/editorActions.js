@@ -155,11 +155,14 @@ export function numberLiteralAt(text, cursor) {
  */
 
 const undoBlocks = new WeakMap()
-// The user's last typing burst: {before, lastActivity} — `before` is the
-// editor text before the burst's first keystroke. Chromium records typing
-// one entry per character here, so native undo removes a single character
-// per press; the burst target lets one press undo the whole edit.
+// The user's typing bursts, oldest first: each `{before, lastActivity}` —
+// `before` is the editor text before the burst's first keystroke. Chromium
+// records typing here as one entry per character, so native undo removes a
+// single character per press; the burst targets let one press undo a whole
+// edit, and repeated presses walk back burst by burst.
 const userBursts = new WeakMap()
+// Bookkeeping for presses already taken against a pending block.
+const pressState = new WeakMap()
 let trackedWriteDepth = 0
 const undoTransparencyInstalled = new WeakSet()
 
@@ -182,11 +185,15 @@ export function noteProgrammaticWrite(ta, before, after) {
 }
 
 /**
- * Forget the pending programmatic block for a textarea.
+ * Forget the pending programmatic block and any press bookkeeping for a
+ * textarea. The user's typing bursts survive: they keep forming while the
+ * user types, and a stale target simply fails verification later.
  * @param {HTMLTextAreaElement} ta
  */
 export function clearProgrammaticWrites(ta) {
-    if (ta) undoBlocks.delete(ta)
+    if (!ta) return
+    undoBlocks.delete(ta)
+    pressState.delete(ta)
 }
 
 /**
@@ -293,16 +300,19 @@ export function installUndoTransparency(editor) {
         const type = e.inputType || ''
         if (type === 'historyUndo' || type === 'historyRedo') return
         if (programmaticWriteInFlight()) return
-        // Track the user's typing burst so one press can undo it whole:
-        // `beforeinput` sees the text before the edit lands. Bursts more
-        // than a second apart undo separately, matching the product's
-        // snapshot history granularity.
+        // Track the user's typing bursts so one press can undo a whole
+        // edit: `beforeinput` sees the text before the edit lands. Bursts
+        // more than three seconds apart undo separately.
         const now = performance.now()
-        const burst = userBursts.get(ta)
-        if (!burst || now - burst.lastActivity > 3000) {
-            userBursts.set(ta, { before: ta.value, lastActivity: now })
+        const bursts = userBursts.get(ta)
+        const last = bursts && bursts.length ? bursts[bursts.length - 1] : null
+        if (!last || now - last.lastActivity > 3000) {
+            if (!bursts) userBursts.set(ta, [])
+            const list = userBursts.get(ta)
+            list.push({ before: ta.value, lastActivity: now })
+            if (list.length > 50) list.shift()
         } else {
-            burst.lastActivity = now
+            last.lastActivity = now
         }
     })
 
@@ -312,92 +322,116 @@ export function installUndoTransparency(editor) {
         if (e.key !== 'z' && e.key !== 'Z') return
 
         const block = undoBlocks.get(ta)
-        // Pass through to native undo unless a pending block tops the stack.
-        if (!block || ta.value !== block.afterText) {
+        const bursts = userBursts.get(ta) || []
+        const press = pressState.get(ta) || { consumed: 0, netApplied: false, postPressText: null, postPopText: null }
+        // Pass through to native undo unless the pending block tops the
+        // stack, either freshly written or as a net a previous press of this
+        // series re-applied on top of the typing it already undid.
+        const atFresh = !!block && ta.value === block.afterText
+        const atPost = !!block && press.netApplied && press.postPressText !== null && ta.value === press.postPressText
+        if (!atFresh && !atPost) {
             clearProgrammaticWrites(ta)
             return
         }
         e.preventDefault()
+
+        const restoreTo = (target) => {
+            let restore = 2000
+            while (ta.value !== target && restore-- > 0) {
+                const before = ta.value
+                if (!document.execCommand('redo') || ta.value === before) break
+            }
+        }
+        const undoUntil = (target) => {
+            let guard = 2000
+            while (ta.value !== target && guard-- > 0) {
+                const before = ta.value
+                if (!document.execCommand('undo') || ta.value === before) break
+            }
+            return ta.value === target
+        }
 
         beginTrackedWrite()
         try {
             if (document.activeElement !== ta) {
                 try { ta.focus({ preventScroll: true }) } catch { ta.focus() }
             }
-            // Undo the pending block.
             const prePress = ta.value
-            let guard = 1000
-            while (ta.value !== block.startText && guard-- > 0) {
-                const before = ta.value
-                if (!document.execCommand('undo') || ta.value === before) break
-            }
-            if (ta.value !== block.startText) {
+            // Step back to the post-pop state: a fresh block must undo its
+            // own entries; a repeat press first pops the net the previous
+            // press re-applied on top of the typing it already undid.
+            if (atPost) {
+                document.execCommand('undo')
+                if (ta.value !== press.postPopText) {
+                    restoreTo(prePress)
+                    clearProgrammaticWrites(ta)
+                    return
+                }
+            } else if (!undoUntil(block.startText)) {
                 // The block could not be reconstructed (unsupported stack,
                 // pruned history, oversized block). Restore the pre-press
                 // text so this press is a clean no-op instead of a swallowed
                 // partial undo.
-                let restore = 1000
-                while (ta.value !== prePress && restore-- > 0) {
-                    const before = ta.value
-                    if (!document.execCommand('redo') || ta.value === before) break
-                }
+                restoreTo(prePress)
+                clearProgrammaticWrites(ta)
                 return
             }
-            // Undo the user's last typing burst below the block, down to
+            // Undo the next-older typing burst below the block, down to
             // where the burst began. Chromium records typing as one entry
             // per character, so the burst target is what makes a single
-            // press remove the whole edit. Without a tracked burst, fall
-            // back to a single native entry. If the burst cannot be fully
-            // undone, restore the pre-press state so the press stays a
-            // clean no-op.
-            const prePop = ta.value
-            const burst = userBursts.get(ta)
-            let popped = false
-            if (burst && burst.before !== prePop) {
-                let burstGuard = 1000
-                while (ta.value !== burst.before && burstGuard-- > 0) {
-                    const before = ta.value
-                    if (!document.execCommand('undo') || ta.value === before) break
-                }
-                if (ta.value !== burst.before) {
-                    let restore = 1000
-                    while (ta.value !== prePress && restore-- > 0) {
-                        const before = ta.value
-                        if (!document.execCommand('redo') || ta.value === before) break
-                    }
-                    return
-                }
-                popped = true
-            } else if (!burst) {
-                const beforePop = ta.value
-                document.execCommand('undo')
-                popped = ta.value !== beforePop
+            // press remove the whole edit while the programmatic state
+            // stays in place.
+            const idx = bursts.length - 1 - press.consumed
+            if (idx < 0) {
+                // Everything the user typed is already undone; leave the
+                // block's entries popped and hand back to native undo.
+                clearProgrammaticWrites(ta)
+                return
             }
-            if (!popped) return
-            // Re-apply the block's net change on top of the undone user
-            // edit, remapping the region around what the user edit removed.
+            const target = bursts[idx].before
+            if (target !== ta.value && !undoUntil(target)) {
+                restoreTo(prePress)
+                clearProgrammaticWrites(ta)
+                return
+            }
+            const postPop = ta.value
+            // Re-apply the block's net change on top of the undone typing,
+            // remapping the region around everything that was popped.
+            let applied = false
             const net = singleRegionDiff(block.startText, block.afterText)
-            const pop = singleRegionDiff(block.startText, ta.value)
-            if (!net || !pop) return
-            let at = null
-            if (net.end <= pop.start) {
-                at = { start: net.start, end: net.end }
-            } else if (net.start >= pop.end) {
-                const shift = pop.replacement.length - pop.original.length
-                at = { start: net.start + shift, end: net.end + shift }
+            const pop = singleRegionDiff(block.startText, postPop)
+            if (net && pop) {
+                let at = null
+                if (net.end <= pop.start) {
+                    at = { start: net.start, end: net.end }
+                } else if (net.start >= pop.end) {
+                    const shift = pop.replacement.length - pop.original.length
+                    at = { start: net.start + shift, end: net.end + shift }
+                }
+                if (at && postPop.slice(at.start, at.end) === net.original) {
+                    applyEditorRange(editor, at.start, at.end, net.replacement)
+                    applied = ta.value !== postPop
+                }
             }
-            const current = ta.value
-            if (at && current.slice(at.start, at.end) === net.original) {
-                applyEditorRange(editor, at.start, at.end, net.replacement)
+            if (!applied) {
+                // The net cannot be re-applied on this text — the
+                // programmatic state is gone; hand back to native undo.
+                clearProgrammaticWrites(ta)
+                return
             }
+            // Keep the block tracked: the next press steps to the
+            // next-older burst while this net stays in place.
+            pressState.set(ta, {
+                consumed: press.consumed + 1,
+                netApplied: true,
+                postPopText: postPop,
+                postPressText: ta.value,
+            })
         } catch {
             // Whatever state the sequence reached stands; never swallow the
             // press into a broken editor.
         } finally {
             endTrackedWrite()
-            clearProgrammaticWrites(ta)
-            // The press consumed the block and the burst below it.
-            userBursts.delete(ta)
         }
     })
 }

@@ -369,6 +369,8 @@ test('scrubber clamps parameter bounds with zero turnaround lag', async ({ page 
 
 
 test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page }) => {
+    // Two typing bursts plus the scrub run long on a loaded machine.
+    test.slow()
     await page.goto(PAGE_URL)
     await waitForApp(page)
 
@@ -381,14 +383,18 @@ test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page 
     })
     const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
 
-    // Marker edit through the real keyboard path.
+    // Two marker edits through the real keyboard path, far enough apart to
+    // count as separate typing bursts.
     await page.evaluate(() => {
         const ta = document.getElementById('dsl-editor').getTextarea()
         ta.focus()
         ta.setSelectionRange(ta.value.length, ta.value.length)
     })
-    await page.keyboard.type(' // user note')
-    // Wait out the hot-reload compile so the panel's program state matches.
+    await page.keyboard.type(' // first note')
+    // Wait out the hot-reload compile and the burst-separation window.
+    await page.waitForTimeout(3600)
+    await page.keyboard.type(' // second note')
+    // Wait out the hot-reload compile so the scrub's program state matches.
     await page.waitForTimeout(1600)
 
     // Real Alt+drag scrub of the scale literal (75 -> 95).
@@ -401,25 +407,31 @@ test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page 
     await page.keyboard.up('Alt')
     await page.waitForTimeout(200)
 
-    // The scrub wrote its new value and kept the user's edit.
+    // The scrub wrote its new value and kept the user's edits.
     const scrubbed = await readValue()
     expect(scrubbed).toContain('scale: 95')
-    expect(scrubbed).toContain('// user note')
+    expect(scrubbed).toContain('// first note')
+    expect(scrubbed).toContain('// second note')
 
-    // One Ctrl+Z undoes the user's typed edit while the scrub keeps its new
-    // value: the scrub's programmatic writes are transparent to the native
-    // undo stack.
+    // One Ctrl+Z undoes the user's last typed edit while the scrub keeps
+    // its new value: the scrub's programmatic writes are transparent to the
+    // native undo stack.
     await page.keyboard.press('Control+z')
     await page.waitForTimeout(150)
     const undone = await readValue()
-    expect(undone.trimEnd()).not.toContain("// user")
+    expect(undone).not.toContain('// second note')
+    expect(undone).toContain('// first note')
     expect(undone).toContain('scale: 95')
     expect(undone).toContain('perlin(')
 
-    // Further presses keep stepping back through undo history.
+    // The next press steps further back through the typing while the
+    // scrubbed value stays in place.
     await page.keyboard.press('Control+z')
     await page.waitForTimeout(150)
-    expect(await readValue()).not.toEqual(undone)
+    const undoneAgain = await readValue()
+    expect(undoneAgain).not.toContain('note')
+    expect(undoneAgain).toContain('scale: 95')
+    expect(undoneAgain).toContain('perlin(')
 })
 
 test('scrubber tooltip stays inside the viewport when dragged to its edges', async ({ page }) => {
