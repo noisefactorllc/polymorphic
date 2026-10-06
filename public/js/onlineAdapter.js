@@ -1,6 +1,6 @@
 export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
 // Bypass browsers that cached the older alias without Cache-Control.
-export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929'
+export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20261006'
 
 export const DEFAULT_RECONNECT_BASE_MS = 500
 export const DEFAULT_RECONNECT_MAX_MS = 8000

@@ -26,7 +26,7 @@ test('online adapter uses the rolling major SDK URL by default', () => {
 
     assert.equal(config.seanceUrl, DEFAULT_SEANCE_URL)
     assert.equal(config.sdkUrl, DEFAULT_SEANCE_SDK_URL)
-    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929')
+    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20261006')
 })
 
 test('online adapter allows tests to override SDK and server URLs on a dev host', () => {

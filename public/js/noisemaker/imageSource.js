@@ -2,8 +2,11 @@ import { lex, parse } from './bundle.js'
 import { findCalls } from './dslQuery.js'
 import { replaceRange } from '../ui/editorActions.js'
 
-/** Update the image source, or insert its chain before the final render. */
-export function insertImageSource(editor, dataUrl, mediaGlobals) {
+/**
+ * Update the image source, or insert its chain before the final render.
+ * `url` names a stored image as `image:<sha256>`.
+ */
+export function insertImageSource(editor, url, mediaGlobals) {
     let source = editor?.value ?? ''
     const originalLength = source.length
     const empty = !source.trim()
@@ -43,7 +46,7 @@ export function insertImageSource(editor, dataUrl, mediaGlobals) {
                 }
                 argStart = end + 1
                 if (token.type === 'RPAREN') {
-                    source = source.slice(0, argsStart) + `url: ${JSON.stringify(dataUrl)}, ` + positionalArgs.join(', ') + source.slice(end)
+                    source = source.slice(0, argsStart) + `url: ${JSON.stringify(url)}, ` + positionalArgs.join(', ') + source.slice(end)
                     break
                 }
                 continue
@@ -54,12 +57,12 @@ export function insertImageSource(editor, dataUrl, mediaGlobals) {
             if (depth === 1 && (token.type === 'RPAREN' || token.type === 'COMMA' && urlStart !== null)) {
                 const end = tokenOffset(token)
                 if (urlStart !== null) {
-                    source = source.slice(0, urlStart) + `url: ${JSON.stringify(dataUrl)}` + source.slice(end)
+                    source = source.slice(0, urlStart) + `url: ${JSON.stringify(url)}` + source.slice(end)
                     break
                 }
                 const start = tokenOffset(tokens[mediaIndex + 1]) + 1
                 const separator = i > mediaIndex + 2 ? ', ' : ''
-                source = source.slice(0, start) + `url: ${JSON.stringify(dataUrl)}${separator}` + source.slice(start)
+                source = source.slice(0, start) + `url: ${JSON.stringify(url)}${separator}` + source.slice(start)
                 break
             }
             if (['LPAREN', 'LBRACE', 'LBRACKET'].includes(token.type)) depth++
@@ -80,7 +83,7 @@ export function insertImageSource(editor, dataUrl, mediaGlobals) {
         offset = tokenOffset(token)
     }
     const prefix = empty ? 'search synth\n\n' : '\n\n'
-    const chain = `media(url: ${JSON.stringify(dataUrl)}).write(${output})`
+    const chain = `media(url: ${JSON.stringify(url)}).write(${output})`
     const suffix = program.render ? '\n\n' : `\n\nrender(${output})\n`
     replaceRange(editor, 0, originalLength, source.slice(0, offset) + prefix + chain + suffix + source.slice(offset))
 }

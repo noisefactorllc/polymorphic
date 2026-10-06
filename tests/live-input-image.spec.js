@@ -171,7 +171,7 @@ test('resize during image decoding keeps the newly compiled image and waits for 
   await page.waitForFunction(() => window.__poly?.renderer?.inner?.pipeline)
   await page.evaluate(async () => {
     const renderer = window.__poly.renderer
-    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20261006')
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 8
     const ctx = canvas.getContext('2d')
@@ -179,7 +179,7 @@ test('resize during image decoding keeps the newly compiled image and waits for 
     for (const color of ['#ff0000', '#00ff00']) {
       ctx.fillStyle = color
       ctx.fillRect(0, 0, 8, 8)
-      assets.push(await tools.prepareImage(await new Promise(resolve => canvas.toBlob(resolve))))
+      assets.push(await tools.prepareImageFile(await new Promise(resolve => canvas.toBlob(resolve))))
     }
     renderer.images = assets
     const program = asset => `search synth\nmedia(url:"image:${asset.id}").write(o0)\nrender(o0)`
@@ -196,14 +196,15 @@ test('resize during image decoding keeps the newly compiled image and waits for 
       const image = new NativeImage()
       created.push(image)
       Object.defineProperty(image, 'onload', { set(handler) {
+        // The second program's image is the only one decoded from here on.
         image.addEventListener('load', event => {
-          if (image.src === assets[1].dataUrl) held.push(() => handler.call(image, event))
+          if (image === created[0]) held.push(() => handler.call(image, event))
           else handler.call(image, event)
         }, {once:true})
       } })
       return image
     }
-    window.__imageResizeTest = { created, held, uploads, expected:assets[1].dataUrl, NativeImage }
+    window.__imageResizeTest = { created, held, uploads, NativeImage }
     window.__imageResizeTest.pending = renderer.compile(program(assets[1]))
   })
   await page.waitForFunction(() => window.__imageResizeTest.held.length === 1)
@@ -215,7 +216,7 @@ test('resize during image decoding keeps the newly compiled image and waits for 
     try {
       state.held[0]()
       const compiled = await state.pending
-      return { compiled, created, uploads:state.uploads, expected:state.expected }
+      return { compiled, created, uploads:state.uploads, expected:state.created[0].src }
     } finally {
       window.Image = state.NativeImage
     }

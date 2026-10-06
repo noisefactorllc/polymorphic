@@ -52,7 +52,7 @@ globalThis.indexedDB = {
 
 const {
     storeProgramImages, getProgramImage, storeImageFile, storeImageText, imageId, sha256Hex,
-    migrateProgramImages, programImagesMigrated,
+    migrateProgramImages, programImagesMigrated, storeDslImages, imageFileRecord, imageFileRecords,
 } = await import('../../public/js/programImages.js')
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -110,6 +110,51 @@ test('a picked file is read once, and its stored copy survives the file going aw
     assert.notEqual(stored, file)
     assert.equal(stored.type, 'image/png')
     assert.deepEqual(Buffer.from(await stored.arrayBuffer()), bytes)
+})
+
+test('saving stores a referenced image that a share or online session brought as a Blob record', async () => {
+    const bytes = Buffer.concat([RED, randomBytes(16)])
+    const id = sha256(bytes)
+    const dsl = `media(url: "image:${id}").write(o0)`
+    await assert.rejects(storeDslImages(dsl, []), /not available yet/)
+    const blob = new Blob([bytes], { type: 'image/png' })
+    assert.equal(await storeDslImages(dsl, [{ id, blob, mimeType: 'image/png', width: 1, height: 1 }]), dsl)
+    const stored = await getProgramImage(id)
+    assert.deepEqual(Buffer.from(await stored.arrayBuffer()), bytes)
+    assert.equal(stored.type, 'image/png')
+})
+
+test('saving refuses a Blob record whose bytes are not the image its id names', async () => {
+    const id = sha256(randomBytes(16))
+    const dsl = `media(url: "image:${id}").write(o0)`
+    await assert.rejects(storeDslImages(dsl, [{ id, blob: new Blob([RED], { type: 'image/png' }) }]), /do not match their id/)
+    assert.equal(await getProgramImage(id), null)
+})
+
+test('saving still stores a referenced image that an earlier page held as a base64 record', async () => {
+    const bytes = Buffer.concat([RED, randomBytes(16)])
+    const id = sha256(bytes)
+    const dsl = `media(url: "image:${id}").write(o0)`
+    assert.equal(await storeDslImages(dsl, [{ id, dataUrl: text(bytes) }]), dsl)
+    assert.deepEqual(Buffer.from(await (await getProgramImage(id)).arrayBuffer()), bytes)
+})
+
+test('imageFileRecord reads a base64 record into a Blob record and leaves other records as they are', async () => {
+    const legacy = { id: sha256(RED), dataUrl: text(RED), width: 1, height: 1 }
+    const record = imageFileRecord(legacy)
+    assert.equal(record.dataUrl, undefined)
+    assert.ok(record.blob instanceof Blob)
+    assert.equal(record.blob.type, 'image/png')
+    assert.equal(record.mimeType, 'image/png')
+    assert.deepEqual([record.id, record.width, record.height], [legacy.id, 1, 1])
+    assert.deepEqual(Buffer.from(await record.blob.arrayBuffer()), RED)
+    const file = { id: sha256(RED), blob: new Blob([RED], { type: 'image/png' }) }
+    assert.equal(imageFileRecord(file), file)
+    // Not an image sharing carries: left for the renderer to refuse, as before.
+    const svg = { id: sha256(RED), dataUrl: 'data:image/svg+xml;base64,PHN2Zy8+' }
+    assert.equal(imageFileRecord(svg), svg)
+    assert.deepEqual(imageFileRecords(undefined), [])
+    assert.deepEqual(imageFileRecords([file]), [file])
 })
 
 test('the plain JavaScript SHA-256 matches the published test vectors', () => {

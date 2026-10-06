@@ -22,7 +22,14 @@ export async function prepareImage(blob) {
     if (bytes[0] !== 0x89 || bytes[1] !== 0x50) throw new Error('Invalid image format')
     return { id: await hex(bytes), dataUrl: 'data:image/png;base64,' + base64(bytes), mimeType: 'image/png', width: 1, height: 1 }
 }
+export async function prepareImageFile(blob) {
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    if (bytes[0] !== 0x89 || bytes[1] !== 0x50) throw new Error('Invalid image format')
+    return { id: await hex(bytes), blob: new Blob([bytes], { type: 'image/png' }), mimeType: 'image/png', width: 1, height: 1 }
+}
 export function imageToBlob(image) {
+    if (image.blob instanceof Blob) return image.blob
+    if (!String(image.dataUrl).startsWith('data:image/png;base64,')) throw new Error('Invalid image base64 data URL')
     const raw = atob(image.dataUrl.slice(image.dataUrl.indexOf(',') + 1))
     return new Blob([Uint8Array.from(raw, c => c.charCodeAt(0))], { type: image.dataUrl.slice(5, image.dataUrl.indexOf(';')) })
 }
@@ -103,8 +110,37 @@ test('opening a share asks for image files and loads each one as an image the re
     assert.equal(composition.dsl, program(`image:${digest(RED)}`))
     assert.equal(composition.images.length, 1)
     assert.equal(composition.images[0].id, digest(RED))
-    assert.equal(composition.images[0].dataUrl, `data:image/png;base64,${RED.toString('base64')}`)
+    // Images are files: the record holds the image's bytes as a Blob, never as text.
+    assert.ok(composition.images[0].blob instanceof Blob)
+    assert.ok(Buffer.from(await composition.images[0].blob.arrayBuffer()).equals(RED))
+    assert.equal(composition.images[0].dataUrl, undefined)
     assert.equal(composition.images[0].mimeType, 'image/png')
+})
+
+test('an image that an older share response carried as base64 text is read into a Blob record', async t => {
+    const warnings = []
+    const warn = console.warn
+    console.warn = (...args) => warnings.push(args.join(' '))
+    t.after(() => { console.warn = warn })
+    const requests = serve(t, url => {
+        if (url.includes('/api/composition/')) return json({
+            code: 'ABC123', dsl: program(`image:${digest(RED)}`, `image:${digest(GREEN)}`), effects: [],
+            images: [
+                { id: digest(RED), dataUrl: `data:image/png;base64,${RED.toString('base64')}` },
+                // Text whose bytes are not the image its id names.
+                { id: digest(GREEN), dataUrl: `data:image/png;base64,${RED.toString('base64')}` },
+            ],
+        })
+        return json({ error: 'unexpected' }, 404)
+    })
+    const composition = await loader.loadFromCode('ABC123')
+    assert.equal(requests.length, 1)
+    assert.deepEqual(composition.images.map(image => image.id), [digest(RED)])
+    assert.ok(composition.images[0].blob instanceof Blob)
+    assert.ok(Buffer.from(await composition.images[0].blob.arrayBuffer()).equals(RED))
+    assert.equal(composition.images[0].dataUrl, undefined)
+    assert.equal(composition.dsl, `${program(`image:${digest(RED)}`)}\nmedia().write(o1)`)
+    assert.equal(warnings.length, 1)
 })
 
 test('an image file that fails to load or does not match its id is left out, and the program renders without it', async t => {
@@ -155,8 +191,8 @@ test('uploadImage reports the service error', async t => {
 })
 
 test('uploadProgramImages uploads the stored file, or the prepared bytes, and renames images by the returned id', async t => {
-    const red = await tools.prepareImage(new Blob([RED], { type: 'image/png' }))
-    const green = await tools.prepareImage(new Blob([GREEN], { type: 'image/png' }))
+    const red = await tools.prepareImageFile(new Blob([RED], { type: 'image/png' }))
+    const green = await tools.prepareImageFile(new Blob([GREEN], { type: 'image/png' }))
     const storedRed = new Blob([RED], { type: 'image/png' })
     const renamed = 'e'.repeat(64)
     const requests = serve(t, async (url, init) => {
@@ -175,6 +211,15 @@ test('uploadProgramImages uploads the stored file, or the prepared bytes, and re
         assert.equal(request.init.headers['Content-Type'], 'image/png')
         assert.ok(request.init.body instanceof Blob)
     }
+})
+
+test('uploadProgramImages still uploads images that earlier pages prepared as base64 records, as files', async t => {
+    const green = await tools.prepareImage(new Blob([GREEN], { type: 'image/png' }))
+    const requests = serve(t, async (url, init) => json({ id: digest(Buffer.from(await init.body.arrayBuffer())) }, 201))
+    const dsl = await loader.uploadProgramImages(program(`image:${green.id}`), [green], { tools, storedImage: async () => null })
+    assert.equal(dsl, program(`image:${green.id}`))
+    assert.ok(requests[0].init.body instanceof Blob)
+    assert.ok(Buffer.from(await requests[0].init.body.arrayBuffer()).equals(GREEN))
 })
 
 test('uploadProgramImages leaves a program without images untouched and uploads nothing', async t => {

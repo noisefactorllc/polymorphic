@@ -13,7 +13,14 @@ import {
 } from './noisemaker/bundle.js'
 
 const SHARING_API_BASE = 'https://sharing.noisedeck.app'
-const PORTABLE_IMAGES_URL = 'https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929'
+// The sharing image helpers. The file is cached as immutable for each `v`, so
+// a change to the helpers needs a new `v` here.
+export const PORTABLE_IMAGES_URL = 'https://sharing.noisedeck.app/js/portableImages.js?v=images-20261006'
+
+/** The sharing image helpers module. */
+export function loadImageTools() {
+    return import(PORTABLE_IMAGES_URL)
+}
 
 /**
  * Storage for portable effects loaded from sharing URLs.
@@ -62,7 +69,7 @@ export async function fetchComposition(code, { loadImages = true } = {}) {
 }
 
 /**
- * Load a fetched composition's image files into the { id, dataUrl, ... }
+ * Load a fetched composition's image files into the { id, blob, ... }
  * images the renderer binds. A program image that cannot be loaded is removed
  * from the program, so the program renders as it did before images were
  * shared, instead of failing to compile.
@@ -73,7 +80,7 @@ async function loadSharedImages(composition) {
     const loaded = new Set(composition.images.map(image => image.id))
     const missing = new Set(listed.filter(image => !loaded.has(image?.id)).map(image => image?.id))
     if (!missing.size || typeof composition.dsl !== 'string') return
-    const { replaceMediaUrls } = await import(PORTABLE_IMAGES_URL)
+    const { replaceMediaUrls } = await loadImageTools()
     composition.dsl = replaceMediaUrls(composition.dsl, url => url?.startsWith('image:') && missing.has(url.slice(6)) ? null : url)
 }
 
@@ -103,7 +110,7 @@ export async function uploadImage(blob) {
  * prepared image's bytes as a file.
  *
  * @param {string} dsl - The program, naming each image as `image:<id>`
- * @param {Array<{id: string, dataUrl: string, mimeType?: string}>} images - From prepareImagesForShare
+ * @param {Array<{id: string, blob: Blob, mimeType?: string}>} images - From prepareImagesForShare
  * @param {object} [options]
  * @param {object} [options.tools] - The sharing image helpers
  * @param {(id: string) => Promise<Blob|null>} [options.storedImage] - Stored image file by id
@@ -111,7 +118,7 @@ export async function uploadImage(blob) {
  */
 export async function uploadProgramImages(dsl, images = [], { tools, storedImage = storedProgramImage } = {}) {
     if (!images.length) return dsl
-    tools = tools || await import(PORTABLE_IMAGES_URL)
+    tools = tools || await loadImageTools()
     const ids = new Map()
     for (const image of images) {
         // The id is the SHA-256 of the bytes, so a stored file is the same image.
@@ -310,18 +317,25 @@ export function getCodeFromUrl() {
 
 /**
  * Shared compositions list their images as { id, url } files. Load each file
- * into the { id, dataUrl, ... } images the renderer binds, checked against its
- * id. A file that cannot be loaded is left out and logged.
+ * into the { id, blob, ... } images the renderer binds, checked against its
+ * id. An image that an older response carried as a base64 { id, dataUrl } is
+ * read into the same Blob record. An image that cannot be loaded is left out
+ * and logged.
  */
 export async function loadSharedImageFiles(images = []) {
-    if (!images.some(image => image?.url && image.dataUrl === undefined)) return images
-    const { prepareImage } = await import(PORTABLE_IMAGES_URL)
+    if (!images.some(image => image?.url || image?.dataUrl !== undefined)) return images
+    const { prepareImageFile, imageToBlob } = await loadImageTools()
     const loaded = await Promise.all(images.map(async image => {
-        if (!image?.url || image.dataUrl !== undefined) return image
+        if (image?.blob instanceof Blob) return image
         try {
-            const response = await fetch(image.url)
-            if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            const prepared = await prepareImage(await response.blob())
+            let blob
+            if (image?.dataUrl !== undefined) blob = imageToBlob(image)
+            else if (image?.url) {
+                const response = await fetch(image.url)
+                if (!response.ok) throw new Error(`HTTP ${response.status}`)
+                blob = await response.blob()
+            } else return image
+            const prepared = await prepareImageFile(blob)
             if (prepared.id !== image.id) throw new Error('the image bytes do not match their id')
             return prepared
         } catch (error) {

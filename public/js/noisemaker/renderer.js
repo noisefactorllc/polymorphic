@@ -7,6 +7,8 @@
 
 import { CanvasRenderer, extractEffectNamesFromDsl, extractEffectsFromDsl } from './bundle.js'
 import { textEffectsFromParsed } from './textParams.js'
+import { loadImageTools } from '../sharingLoader.js'
+import { imageFileRecords } from '../programImages.js'
 
 // Shader assets served from the shaders CDN.
 const SHADER_BASE_PATH = 'https://shaders.noisedeck.app/1'
@@ -177,6 +179,22 @@ export class PolymorphicRenderer {
         this._renderer.stop()
     }
 
+    /**
+     * The images programs name as `image:<id>`, as `{id, blob, ...}` records
+     * that hold their bytes as Blobs. A list of `{id, dataUrl}` records, as
+     * programs and scenes saved before images were files keep, is read into
+     * Blob records when it is assigned.
+     */
+    get images() {
+        return this._images
+    }
+
+    set images(images) {
+        this._images = Array.isArray(images) && images.some(image => typeof image?.dataUrl === 'string')
+            ? imageFileRecords(images)
+            : images || []
+    }
+
     getImageAssets(dsl = this._currentDsl) {
         if (!this._imageTools && /\burl\b/.test(dsl)) throw new Error('Images are still loading; try again shortly')
         return this._imageTools?.getReferencedImages(dsl, this.images) || []
@@ -213,7 +231,7 @@ export class PolymorphicRenderer {
             // them for every engine/parser call. Media url extraction below
             // still reads from the original `dsl`, since that is the only copy
             // that still carries the url.
-            if (/\burl\b/.test(dsl)) this._imageTools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            if (/\burl\b/.test(dsl)) this._imageTools = await loadImageTools()
             const engineDsl = this._imageTools ? this._imageTools.stripMediaUrls(dsl) : dsl
 
             // Extract effect names and load them if needed

@@ -20,6 +20,8 @@ const IMAGE_REF = /image:([a-f0-9]{64})/g
 // or picked image into a media() call.
 const IMAGE_TEXT = /(["'])data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/]*={0,2})\1/g
 const IMAGE_DATA_URL = /^data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/]*={0,2})$/
+// The image types sharing and online sessions carry.
+const SHARED_IMAGE_DATA_URL = /^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]*={0,2})$/
 
 let dbPromise = null
 let migration = null
@@ -205,16 +207,46 @@ function decodeBase64(type, base64) {
 }
 
 /**
- * Decode `{id, dataUrl}` images and check each against its id.
- * @param {Array<{id: string, dataUrl: string}>} images
+ * An image record that holds its bytes as a Blob. A record from before images
+ * were files, `{id, dataUrl}` with a base64 PNG, JPEG, GIF or WebP data URL,
+ * is decoded into one; its id is checked wherever its bytes are used, as
+ * before. Any other record is returned as it is.
+ * @param {object} image
+ * @returns {object}
+ */
+export function imageFileRecord(image) {
+    if (image?.blob instanceof Blob || typeof image?.dataUrl !== 'string') return image
+    const match = SHARED_IMAGE_DATA_URL.exec(image.dataUrl)
+    if (!match) return image
+    const { dataUrl, ...record } = image
+    return { ...record, blob: decodeBase64(match[1], match[2]), mimeType: match[1] }
+}
+
+/**
+ * imageFileRecord for every image in a list.
+ * @param {Array<object>} [images]
+ * @returns {Array<object>}
+ */
+export function imageFileRecords(images) {
+    return Array.isArray(images) ? images.map(imageFileRecord) : []
+}
+
+/**
+ * The bytes of `{id, blob}` images, and of `{id, dataUrl}` images saved
+ * before images were files, each checked against its id.
+ * @param {Array<{id: string, blob?: Blob, dataUrl?: string}>} images
  * @returns {Promise<Array<{id: string, blob: Blob}>>}
  */
 async function decodeImages(images) {
     const decoded = []
     for (const image of images) {
-        const match = typeof image?.dataUrl === 'string' && IMAGE_DATA_URL.exec(image.dataUrl)
-        if (!match || !IMAGE_ID.test(image.id)) throw new Error('Invalid program image')
-        const blob = decodeBase64(match[1], match[2])
+        if (!IMAGE_ID.test(image?.id)) throw new Error('Invalid program image')
+        let blob = image.blob
+        if (!(blob instanceof Blob)) {
+            const match = typeof image.dataUrl === 'string' && IMAGE_DATA_URL.exec(image.dataUrl)
+            if (!match) throw new Error('Invalid program image')
+            blob = decodeBase64(match[1], match[2])
+        }
         if (await imageId(blob) !== image.id) throw new Error(`Image bytes do not match their id: ${image.id}`)
         decoded.push({ id: image.id, blob })
     }
@@ -335,12 +367,12 @@ export async function storeImageText(dsl, images = []) {
 /**
  * Store every image a program uses before the program is saved: the images it
  * carries as text, and the referenced images that only a shared composition
- * or online session brought, which arrive in `available`. Resolves with the
- * DSL to save, which names every image by reference; rejects if a referenced
- * image is neither stored nor available.
+ * or online session brought, which arrive in `available` as `{id, blob}`
+ * records. Resolves with the DSL to save, which names every image by
+ * reference; rejects if a referenced image is neither stored nor available.
  *
  * @param {string} dsl
- * @param {Array<{id: string, dataUrl: string}>} [available]
+ * @param {Array<{id: string, blob: Blob}>} [available]
  * @returns {Promise<string>}
  */
 export async function storeDslImages(dsl, available = []) {

@@ -477,6 +477,10 @@ test('entries keep their images as text when IndexedDB cannot store them', async
   await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
   await loadProgram(page, 'Listed image')
   await expect.poll(() => outputPixel(page)).toEqual(GREEN_PIXEL)
+  // In memory the listed image is read into a file, never kept as its text.
+  expect(await page.evaluate(() => Promise.all(window.__poly.renderer.images.map(async image => ({
+    id: image.id, text: 'dataUrl' in image, type: image.blob?.type, bytes: Array.from(new Uint8Array(await image.blob.arrayBuffer())),
+  }))))).toEqual([{ id: digest(GREEN), text: false, type: 'image/png', bytes: [...GREEN] }])
   const after = await storedText(page)
   expect(after['polymorphic-programs']).toBe(seed['polymorphic-programs'])
   expect(after['polymorphic-scenes']).toBe(seed['polymorphic-scenes'])

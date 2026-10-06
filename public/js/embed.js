@@ -20,7 +20,7 @@ import { insertImageSource } from './noisemaker/imageSource.js'
 import { preloadFontsForDsl } from './fontLoader.js'
 import { initDocReader, toggleDocReader, showPlaceholderContent, hideDocReader, showDocReader, setApplyToEditorCallback, isDocReaderVisible, loadEffectHelp } from './docReader.js'
 import { shareModal } from './shareModal.js'
-import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer, uploadProgramImages, uploadScreenshot } from './sharingLoader.js'
+import { loadFromCode, getCodeFromUrl, registerPortableEffect, getLoadedPortableEffects, portableDefinition, setRuntimeRenderer, uploadProgramImages, uploadScreenshot, loadImageTools } from './sharingLoader.js'
 import { initProgramModal, openProgramModal } from './programModal.js'
 import { programs } from './programs.js'
 import { storeImageFile, getProgramImage, hasImageText, storeImageText, storeDslImages, migrateProgramImages, programImagesMigrated } from './programImages.js'
@@ -1117,12 +1117,13 @@ function setupOnlineCollaboration() {
             if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can go online; stop the camera or video first')
             if (!/\burl\b/.test(dsl)) return { dsl, images: [] }
             const target = renderer
-            const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-            const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, target.images || []))
+            const tools = await loadImageTools()
+            // Images go online as files: every prepared image holds its bytes as a Blob.
+            const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, target.images || []), { files: true })
             for (const image of prepared.images) if (!target.images.some(asset => asset.id === image.id)) target.images.push(image)
             return prepared
         },
-        imageBlob: async image => (await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')).imageToBlob(image),
+        imageBlob: async image => (await loadImageTools()).imageToBlob(image),
         applyCurrentDsl: applyCurrentDslFromOnline,
         showToast,
         // Keep the menu label (the only always-visible session indicator) in
@@ -1454,8 +1455,8 @@ async function handleEditInApp(appName, appUrl) {
 
         if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first')
         if (/\burl\b/.test(payload.dsl)) {
-            const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-            const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, renderer.images || []))
+            const tools = await loadImageTools()
+            const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, renderer.images || []), { files: true })
             // Images go to the sharing service as files, named by the ids it returns.
             payload.dsl = await uploadProgramImages(prepared.dsl, prepared.images, { tools })
         }
@@ -1618,7 +1619,7 @@ async function recompileShader(overrideDsl) {
         if (superseded()) return { success: false, superseded: true }
 
         if (/\burl\b/.test(dsl)) {
-            const tools = renderer._imageTools || await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            const tools = renderer._imageTools || await loadImageTools()
             if (tools.getMediaSources(dsl).some(source => source.url && source.url !== 'live')) await liveInputsPanel.stopMediaSource()
             if (superseded()) return { success: false, superseded: true }
         }
@@ -2350,10 +2351,10 @@ async function startShader() {
         // Saved images are files in IndexedDB; the rest come from the online session.
         const stored = await getProgramImage(id)
         const blob = stored || await onlineAdapter.getImage(id)
-        const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+        const tools = await loadImageTools()
         // A stored image that sharing would refuse, such as one over its size
         // limit, still renders.
-        const image = await tools.prepareImage(blob).catch(error => { if (!stored) throw error })
+        const image = await tools.prepareImageFile(blob).catch(error => { if (!stored) throw error })
         if (image && !renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
         return blob
     }

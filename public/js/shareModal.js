@@ -1,7 +1,7 @@
 // Share modal for Polymorphic
 // Posts to sharing.noisedeck.app API
 
-import { getLoadedPortableEffects, portableDefinition, uploadProgramImages, uploadScreenshot } from './sharingLoader.js'
+import { getLoadedPortableEffects, portableDefinition, uploadProgramImages, uploadScreenshot, loadImageTools } from './sharingLoader.js'
 let registerEscapeable = (el, cb) => {}, unregisterEscapeable = (el) => {}
 try {
     const hf = await import('handfish')
@@ -285,8 +285,8 @@ class ShareModal {
 
             if (this.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first');
             if (/\burl\b/.test(payload.dsl)) {
-                const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929');
-                const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, this.images));
+                const tools = await loadImageTools();
+                const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, this.images), { files: true });
                 // Images go to the sharing service as files, named by the ids it returns.
                 payload.dsl = await uploadProgramImages(prepared.dsl, prepared.images, { tools });
             }

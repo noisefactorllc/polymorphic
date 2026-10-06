@@ -1,6 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 // Substitute only the remote CDN boundary; execute the production loader.
 const runtimeRegistrations = []
@@ -115,16 +119,42 @@ globalThis.__portableRuntime = {
     getEffect: name => runtimeEffects.get(name),
     registerEffect: (name, effect) => runtimeEffects.set(name, effect)
 }
+// The sharing image helpers come from a sharing checkout when one is present,
+// otherwise from a stand-in with the part of the contract imports use.
+const helperFile = resolve(process.env.PORTABLE_IMAGES_MODULE || '../sharing/public/js/portableImages.js')
+const STAND_IN = `
+export async function prepareImageFile(blob) {
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const id = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('')
+    return { id, blob: new Blob([bytes], { type: blob.type }), mimeType: blob.type }
+}
+export function imageToBlob(image) {
+    const [head, base64] = image.dataUrl.split(',')
+    return new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: head.slice(5, head.indexOf(';')) })
+}
+export const replaceMediaUrls = dsl => dsl`
+const helperUrl = existsSync(helperFile)
+    ? pathToFileURL(helperFile).href
+    : `data:text/javascript;base64,${Buffer.from(STAND_IN).toString('base64')}`
 const source = (await readFile(new URL('../../public/js/sharingLoader.js', import.meta.url), 'utf8'))
     .replace(/import\s*\{[\s\S]*?\}\s*from '\.\/noisemaker\/bundle.js'/, 'const { CanvasRenderer, getEffect, registerEffect, unregisterEffect } = globalThis.__portableRuntime')
+    .replace(/const PORTABLE_IMAGES_URL = '[^']+'/, `const PORTABLE_IMAGES_URL = ${JSON.stringify(helperUrl)}`)
 const loader = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 
-test('composition imports retain the original image payloads for rendering and reshare', async t => {
+test('composition imports retain the original image bytes, as Blob records, for rendering and reshare', async t => {
     const previous = globalThis.fetch
-    const images = [{ id: 'a'.repeat(64), dataUrl: 'data:image/png;base64,AAAA' }]
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ code: 'abcdef', dsl: 'media().write(o0)', images }) })
+    // A 1x1 PNG, as a response from before images were files carries it.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64')
+    const id = createHash('sha256').update(png).digest('hex')
+    const images = [{ id, dataUrl: `data:image/png;base64,${png.toString('base64')}` }]
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ code: 'abcdef', dsl: `media(url: "image:${id}").write(o0)`, images }) })
     t.after(() => { globalThis.fetch = previous })
-    assert.deepEqual((await loader.loadFromCode('abcdef')).images, images)
+    const loaded = await loader.loadFromCode('abcdef')
+    assert.deepEqual(loaded.images.map(image => image.id), [id])
+    assert.equal(loaded.images[0].dataUrl, undefined)
+    assert.ok(loaded.images[0].blob instanceof Blob)
+    assert.deepEqual(Buffer.from(await loaded.images[0].blob.arrayBuffer()), png)
+    assert.equal(loaded.dsl, `media(url: "image:${id}").write(o0)`)
 })
 const data = {
     name: 'Volume', func: 'volume', namespace: 'synth3d', starter: true,

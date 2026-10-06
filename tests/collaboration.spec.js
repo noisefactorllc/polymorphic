@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import { routeHandfishLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './portableImagesLocal.js'
 import { SEANCE_SDK_URL, hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
@@ -262,7 +263,8 @@ test('image seed and later replacement reach another client with original bytes 
   await closeDialog(guest)
   await expect.poll(() => guest.evaluate(() => window.__poly.liveInputsPanel.hasLiveMedia)).toBe(false)
   await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([255, 0, 0, 255])
-  await expect.poll(() => guest.evaluate(() => window.__poly.renderer.images.map(image => image.dataUrl).sort())).toEqual(sources.slice(0, 2).sort())
+  // The guest holds each image as a file whose bytes are the original's, never as text.
+  await expect.poll(async () => (await heldImages(guest)).sort(byId)).toEqual(sources.slice(0, 2).map(fileImage).sort(byId))
   expect(await editorText(guest)).not.toContain('data:')
   await setEditorText(page, (await editorText(page)).replace('render(o0)', 'render(o1)'))
   await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([0, 255, 0, 255])
@@ -297,14 +299,27 @@ test('image seed and later replacement reach another client with original bytes 
     releaseImage()
   }
   await expect.poll(() => imagePixel(guest), { timeout: 30000 }).toEqual([0, 0, 255, 255])
-  expect(await guest.evaluate(() => window.__poly.renderer.images.map(image => image.dataUrl))).toContain(sources[2])
+  expect(await heldImages(guest)).toContainEqual(fileImage(sources[2]))
   const reshared = await guest.evaluate(async () => {
-    const helper = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-    return helper.prepareImagesForShare(document.getElementById('dsl-editor').value, window.__poly.renderer.images)
+    const helper = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20261006')
+    const prepared = await helper.prepareImagesForShare(document.getElementById('dsl-editor').value, window.__poly.renderer.images, { files: true })
+    return window.__describeImages(prepared.images)
   })
-  expect(reshared.images.map(image => image.dataUrl).sort()).toEqual(sources.slice(1).sort())
+  expect(reshared.sort(byId)).toEqual(sources.slice(1).map(fileImage).sort(byId))
   await guestContext.close()
 })
+
+/** An image a page holds as a file: its id, the SHA-256 of its Blob, and no text. */
+function fileImage(dataUrl) {
+  const id = createHash('sha256').update(Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64')).digest('hex')
+  return { id, digest: id, text: false }
+}
+const byId = (a, b) => a.id.localeCompare(b.id)
+
+/** The images the page's renderer holds, described as fileImage describes them. */
+function heldImages(page) {
+  return page.evaluate(() => window.__describeImages(window.__poly.renderer.images))
+}
 
 async function imagePixel(page) {
   return page.evaluate(() => {
@@ -319,6 +334,13 @@ async function preparePage(page) {
   await routeSeanceSdkLocal(page)
   await routePortableImagesLocal(page)
   await page.addInitScript(() => {
+    window.__describeImages = images => Promise.all(images.map(async image => ({
+      id: image.id,
+      digest: image.blob instanceof Blob
+        ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await image.blob.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('')
+        : null,
+      text: 'dataUrl' in image,
+    })))
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
