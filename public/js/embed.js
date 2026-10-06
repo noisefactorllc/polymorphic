@@ -29,7 +29,7 @@ import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
 import { buildPaletteActions } from './ui/paletteActions.js'
 import { formatDsl } from './ui/formatter.js'
-import { insertAtCursor, getSelectionOrBlock, blockRangeAt } from './ui/editorActions.js'
+import { insertAtCursor, getSelectionOrBlock, blockRangeAt, installUndoTransparency, noteProgrammaticWrite, clearProgrammaticWrites, runAsTrackedWrite } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
 import { getCursorIdleHider } from './ui/cursorIdle.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
@@ -1826,6 +1826,10 @@ function setupDslEditor() {
         scheduleHotReload()
     })
 
+    // Ctrl/Cmd+Z keeps programmatic writes (scrubs, panel edits) transparent:
+    // the first press undoes the user's last typed edit, not the writes.
+    installUndoTransparency(dslEditor)
+
     // Handle force recompile event from Ctrl/Cmd+Enter
     // The code-editor component dispatches 'forcerecompile' events
     dslEditor.addEventListener('forcerecompile', async () => {
@@ -2057,19 +2061,42 @@ function writeDslPreservingUndo(editor, text) {
         return
     }
     const prev = document.activeElement
+    const prevValue = editor.value
     const editorHadFocus = prev === ta
     if (!editorHadFocus) {
         try { ta.focus({ preventScroll: true }) } catch { ta.focus() }
     }
     suppressDslInput = true
     try {
-        editor.value = text
-        if (editor.value !== text) {
-            // The undo-preserving write did not land (editing commands
-            // unavailable). Fall back to a plain assignment, which keeps the
-            // program text correct but clears the native undo stack.
-            ta.value = text
-            ta.dispatchEvent(new Event('input', { bubbles: true }))
+        // Run the write inside the tracked-write bracket so its own input
+        // events do not clear a pending programmatic block — chained panel
+        // and scrub writes must record as one block, or Ctrl/Cmd+Z would
+        // undo the previous write instead of the user's typing.
+        let viaUndoStack = true
+        const write = () => {
+            editor.value = text
+            if (editor.value !== text) {
+                // The undo-preserving write did not land (editing commands
+                // unavailable). Fall back to a plain assignment, which keeps
+                // the program text correct but clears the native undo stack.
+                viaUndoStack = false
+                ta.value = text
+                ta.dispatchEvent(new Event('input', { bubbles: true }))
+            }
+        }
+        if (typeof runAsTrackedWrite === 'function') {
+            runAsTrackedWrite(write)
+        } else {
+            write()
+        }
+        // Record the write so Ctrl/Cmd+Z treats it as transparent to the
+        // user's typing. The helpers ship with this module in the browser;
+        // the typeof guards keep stripped-down contexts (unit harnesses)
+        // working without them. When the fallback assignment ran, the native
+        // stack is gone — forget the block instead of recording a dead one.
+        if (typeof noteProgrammaticWrite === 'function' && typeof clearProgrammaticWrites === 'function') {
+            if (viaUndoStack) noteProgrammaticWrite(ta, prevValue, text)
+            else clearProgrammaticWrites(ta)
         }
     } finally {
         suppressDslInput = false

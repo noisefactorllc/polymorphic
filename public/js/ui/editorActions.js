@@ -141,6 +141,268 @@ export function numberLiteralAt(text, cursor) {
 }
 
 /**
+ * Undo transparency for programmatic editor writes.
+ *
+ * Programmatic writes made through the editing commands preserve the
+ * textarea's native undo stack but occupy it: after a scrub or a panel edit,
+ * Ctrl+Z would first undo those writes before reaching the user's typing.
+ * The product positions the native stack as the fine-grained undo layer for
+ * user edits, so the writes recorded here are treated as transparent: a
+ * Ctrl+Z pressed while a recorded block is pending undoes through the block,
+ * undoes the user's last edit below it, and re-applies the block's net
+ * change — the user's typing is undone immediately and the programmatic
+ * state survives, exactly as if the writes had never been undo steps.
+ */
+
+const undoBlocks = new WeakMap()
+// The user's last typing burst: {before, lastActivity} — `before` is the
+// editor text before the burst's first keystroke. Chromium records typing
+// one entry per character here, so native undo removes a single character
+// per press; the burst target lets one press undo the whole edit.
+const userBursts = new WeakMap()
+let trackedWriteDepth = 0
+const undoTransparencyInstalled = new WeakSet()
+
+/**
+ * Record a programmatic write for undo transparency. Writes extend the
+ * pending block while they chain onto it (each write's `before` is the
+ * block's current end); any other write starts a fresh block.
+ * @param {HTMLTextAreaElement} ta
+ * @param {string} before - editor text before the write
+ * @param {string} after - editor text after the write
+ */
+export function noteProgrammaticWrite(ta, before, after) {
+    if (!ta || before === after) return
+    const block = undoBlocks.get(ta)
+    if (block && block.afterText === before) {
+        block.afterText = after
+    } else {
+        undoBlocks.set(ta, { startText: before, afterText: after })
+    }
+}
+
+/**
+ * Forget the pending programmatic block for a textarea.
+ * @param {HTMLTextAreaElement} ta
+ */
+export function clearProgrammaticWrites(ta) {
+    if (ta) undoBlocks.delete(ta)
+}
+
+/**
+ * True while a write that must not count as a user edit is in flight. The
+ * editor's input handling checks this to tell programmatic writes — whose
+ * input events are indistinguishable from typing — from real user edits.
+ * @returns {boolean}
+ */
+export function programmaticWriteInFlight() {
+    return trackedWriteDepth > 0
+}
+
+function beginTrackedWrite() {
+    trackedWriteDepth++
+}
+
+function endTrackedWrite() {
+    trackedWriteDepth = Math.max(0, trackedWriteDepth - 1)
+}
+
+/**
+ * Run `fn` as a tracked programmatic write: input events it fires do not
+ * count as user edits, so a pending programmatic block survives and chains
+ * across the write.
+ * @param {() => void} fn
+ */
+export function runAsTrackedWrite(fn) {
+    beginTrackedWrite()
+    try {
+        fn()
+    } finally {
+        endTrackedWrite()
+    }
+}
+
+/**
+ * Apply a single-range replacement without recording it as a pending
+ * programmatic write (used to re-apply a block's net change during undo).
+ * @param {HTMLElement} editor
+ * @param {number} start
+ * @param {number} end
+ * @param {string} replacement
+ */
+export function applyEditorRange(editor, start, end, replacement) {
+    const ta = editor?.getTextarea?.()
+    if (!ta) return
+    const value = ta.value
+    const nextValue = value.slice(0, start) + replacement + value.slice(end)
+    if (nextValue === value) return
+    beginTrackedWrite()
+    try {
+        if (!writeThroughUndoStack(ta, start, end, replacement, nextValue)) {
+            ta.value = nextValue
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+    } finally {
+        endTrackedWrite()
+    }
+    const cursor = start + replacement.length
+    ta.selectionStart = ta.selectionEnd = cursor
+}
+
+/**
+ * Single-contiguous-region diff of two strings via common prefix/suffix.
+ * @param {string} a
+ * @param {string} b
+ * @returns {{start: number, end: number, original: string, replacement: string} | null}
+ */
+function singleRegionDiff(a, b) {
+    if (a === b) return null
+    let start = 0
+    const maxStart = Math.min(a.length, b.length)
+    while (start < maxStart && a[start] === b[start]) start++
+    let endA = a.length
+    let endB = b.length
+    while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+        endA--
+        endB--
+    }
+    return { start, end: endA, original: a.slice(start, endA), replacement: b.slice(start, endB) }
+}
+
+/**
+ * Make Ctrl/Cmd+Z treat the editor's pending programmatic writes as
+ * transparent: the first press undoes the user's last typed edit and keeps
+ * the programmatic state, instead of first stepping back through the
+ * writes. Presses with nothing pending pass through to the browser's native
+ * undo untouched.
+ * @param {HTMLElement} editor - <code-editor> custom element
+ */
+export function installUndoTransparency(editor) {
+    const ta = editor?.getTextarea?.()
+    if (!ta || undoTransparencyInstalled.has(editor)) return
+    if (typeof document === 'undefined' || typeof document.execCommand !== 'function') return
+    undoTransparencyInstalled.add(editor)
+
+    ta.addEventListener('input', () => {
+        if (programmaticWriteInFlight()) return
+        // A user edit (or any untracked write) invalidates the block.
+        clearProgrammaticWrites(ta)
+    })
+
+    ta.addEventListener('beforeinput', (e) => {
+        const type = e.inputType || ''
+        if (type === 'historyUndo' || type === 'historyRedo') return
+        if (programmaticWriteInFlight()) return
+        // Track the user's typing burst so one press can undo it whole:
+        // `beforeinput` sees the text before the edit lands. Bursts more
+        // than a second apart undo separately, matching the product's
+        // snapshot history granularity.
+        const now = performance.now()
+        const burst = userBursts.get(ta)
+        if (!burst || now - burst.lastActivity > 3000) {
+            userBursts.set(ta, { before: ta.value, lastActivity: now })
+        } else {
+            burst.lastActivity = now
+        }
+    })
+
+    ta.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.altKey) return
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return
+        if (e.key !== 'z' && e.key !== 'Z') return
+
+        const block = undoBlocks.get(ta)
+        // Pass through to native undo unless a pending block tops the stack.
+        if (!block || ta.value !== block.afterText) {
+            clearProgrammaticWrites(ta)
+            return
+        }
+        e.preventDefault()
+
+        beginTrackedWrite()
+        try {
+            if (document.activeElement !== ta) {
+                try { ta.focus({ preventScroll: true }) } catch { ta.focus() }
+            }
+            // Undo the pending block.
+            const prePress = ta.value
+            let guard = 1000
+            while (ta.value !== block.startText && guard-- > 0) {
+                const before = ta.value
+                if (!document.execCommand('undo') || ta.value === before) break
+            }
+            if (ta.value !== block.startText) {
+                // The block could not be reconstructed (unsupported stack,
+                // pruned history, oversized block). Restore the pre-press
+                // text so this press is a clean no-op instead of a swallowed
+                // partial undo.
+                let restore = 1000
+                while (ta.value !== prePress && restore-- > 0) {
+                    const before = ta.value
+                    if (!document.execCommand('redo') || ta.value === before) break
+                }
+                return
+            }
+            // Undo the user's last typing burst below the block, down to
+            // where the burst began. Chromium records typing as one entry
+            // per character, so the burst target is what makes a single
+            // press remove the whole edit. Without a tracked burst, fall
+            // back to a single native entry. If the burst cannot be fully
+            // undone, restore the pre-press state so the press stays a
+            // clean no-op.
+            const prePop = ta.value
+            const burst = userBursts.get(ta)
+            let popped = false
+            if (burst && burst.before !== prePop) {
+                let burstGuard = 1000
+                while (ta.value !== burst.before && burstGuard-- > 0) {
+                    const before = ta.value
+                    if (!document.execCommand('undo') || ta.value === before) break
+                }
+                if (ta.value !== burst.before) {
+                    let restore = 1000
+                    while (ta.value !== prePress && restore-- > 0) {
+                        const before = ta.value
+                        if (!document.execCommand('redo') || ta.value === before) break
+                    }
+                    return
+                }
+                popped = true
+            } else if (!burst) {
+                const beforePop = ta.value
+                document.execCommand('undo')
+                popped = ta.value !== beforePop
+            }
+            if (!popped) return
+            // Re-apply the block's net change on top of the undone user
+            // edit, remapping the region around what the user edit removed.
+            const net = singleRegionDiff(block.startText, block.afterText)
+            const pop = singleRegionDiff(block.startText, ta.value)
+            if (!net || !pop) return
+            let at = null
+            if (net.end <= pop.start) {
+                at = { start: net.start, end: net.end }
+            } else if (net.start >= pop.end) {
+                const shift = pop.replacement.length - pop.original.length
+                at = { start: net.start + shift, end: net.end + shift }
+            }
+            const current = ta.value
+            if (at && current.slice(at.start, at.end) === net.original) {
+                applyEditorRange(editor, at.start, at.end, net.replacement)
+            }
+        } catch {
+            // Whatever state the sequence reached stands; never swallow the
+            // press into a broken editor.
+        } finally {
+            endTrackedWrite()
+            clearProgrammaticWrites(ta)
+            // The press consumed the block and the burst below it.
+            userBursts.delete(ta)
+        }
+    })
+}
+
+/**
  * Apply a programmatic text change to a textarea through the browser's
  * editing commands (`document.execCommand`). Unlike a `value` assignment or
  * `setRangeText()` — both of which wipe the textarea's native undo stack —
@@ -189,10 +451,16 @@ export function replaceRange(editor, start, end, replacement) {
     const value = ta.value
     const nextValue = value.slice(0, start) + replacement + value.slice(end)
     if (nextValue === value) return
-    if (!writeThroughUndoStack(ta, start, end, replacement, nextValue)) {
-        ta.value = nextValue
-        ta.dispatchEvent(new Event('input', { bubbles: true }))
+    beginTrackedWrite()
+    try {
+        if (!writeThroughUndoStack(ta, start, end, replacement, nextValue)) {
+            ta.value = nextValue
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+    } finally {
+        endTrackedWrite()
     }
+    noteProgrammaticWrite(ta, value, nextValue)
     // Position cursor at end of replacement
     const cursor = start + replacement.length
     ta.selectionStart = ta.selectionEnd = cursor

@@ -406,23 +406,20 @@ test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page 
     expect(scrubbed).toContain('scale: 95')
     expect(scrubbed).toContain('// user note')
 
-    // The scrub's programmatic writes must not have wiped the textarea's
-    // native undo stack: Ctrl+Z first steps back through the scrub's own
-    // edits, then reaches the user's typed edit and removes it.
-    let value = scrubbed
-    let undid = false
-    for (let i = 0; i < 12; i++) {
-        await page.keyboard.press('Control+z')
-        await page.waitForTimeout(40)
-        const next = await readValue()
-        if (next === value) break
-        undid = true
-        value = next
-        if (!next.includes('// user note')) break
-    }
-    expect(undid).toBe(true)
-    expect(value).not.toContain('// user note')
-    expect(value).toContain('perlin(')
+    // One Ctrl+Z undoes the user's typed edit while the scrub keeps its new
+    // value: the scrub's programmatic writes are transparent to the native
+    // undo stack.
+    await page.keyboard.press('Control+z')
+    await page.waitForTimeout(150)
+    const undone = await readValue()
+    expect(undone.trimEnd()).not.toContain("// user")
+    expect(undone).toContain('scale: 95')
+    expect(undone).toContain('perlin(')
+
+    // Further presses keep stepping back through undo history.
+    await page.keyboard.press('Control+z')
+    await page.waitForTimeout(150)
+    expect(await readValue()).not.toEqual(undone)
 })
 
 test('scrubber tooltip stays inside the viewport when dragged to its edges', async ({ page }) => {
