@@ -368,6 +368,63 @@ test('scrubber clamps parameter bounds with zero turnaround lag', async ({ page 
 })
 
 
+test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page }) => {
+    await page.goto(PAGE_URL)
+    await waitForApp(page)
+
+    // Calculate position of literal "75"
+    const coords = await page.evaluate(() => {
+        const ed = document.getElementById('dsl-editor')
+        const span = [...ed.querySelectorAll('*')].find(el => el.textContent === '75' || el.textContent === '75,')
+        const rect = span.getBoundingClientRect()
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    })
+    const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
+
+    // Marker edit through the real keyboard path.
+    await page.evaluate(() => {
+        const ta = document.getElementById('dsl-editor').getTextarea()
+        ta.focus()
+        ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+    await page.keyboard.type(' // user note')
+    // Wait out the hot-reload compile so the panel's program state matches.
+    await page.waitForTimeout(1600)
+
+    // Real Alt+drag scrub of the scale literal (75 -> 95).
+    await page.mouse.move(coords.x, coords.y)
+    await page.keyboard.down('Alt')
+    await page.mouse.down()
+    await page.mouse.move(coords.x + 20, coords.y, { steps: 5 })
+    await page.waitForTimeout(100)
+    await page.mouse.up()
+    await page.keyboard.up('Alt')
+    await page.waitForTimeout(200)
+
+    // The scrub wrote its new value and kept the user's edit.
+    const scrubbed = await readValue()
+    expect(scrubbed).toContain('scale: 95')
+    expect(scrubbed).toContain('// user note')
+
+    // The scrub's programmatic writes must not have wiped the textarea's
+    // native undo stack: Ctrl+Z first steps back through the scrub's own
+    // edits, then reaches the user's typed edit and removes it.
+    let value = scrubbed
+    let undid = false
+    for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('Control+z')
+        await page.waitForTimeout(40)
+        const next = await readValue()
+        if (next === value) break
+        undid = true
+        value = next
+        if (!next.includes('// user note')) break
+    }
+    expect(undid).toBe(true)
+    expect(value).not.toContain('// user note')
+    expect(value).toContain('perlin(')
+})
+
 test('scrubber tooltip stays inside the viewport when dragged to its edges', async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 550 })
     await page.goto(PAGE_URL)

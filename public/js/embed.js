@@ -91,6 +91,10 @@ let activeCallSite = null
 // Flag to suppress reactive sync while we mutate the DSL programmatically
 let suppressDslReact = false
 
+// Suppresses the editor's own input handling while an undo-preserving
+// programmatic DSL write replays its editing-command input event.
+let suppressDslInput = false
+
 // Hot reload state
 let hotReloadTimeout = null
 
@@ -1805,6 +1809,10 @@ function setupDslEditor() {
     // Hot reload: recompile DSL 500ms after user stops typing
     // The code-editor component dispatches 'input' events when content changes
     dslEditor.addEventListener('input', () => {
+        // The panel's undo-preserving DSL writes go through editing commands
+        // whose own input event must not schedule a redundant recompile —
+        // non-`define` panel edits update the pipeline live.
+        if (suppressDslInput) return
         // Clear stale diagnostic line markers when user edits code
         clearErrorLineMarker()
 
@@ -1987,7 +1995,7 @@ function setupProgramState() {
         if (editorDsl === dslEditor.value) return
         suppressDslReact = true
         try {
-            dslEditor.value = editorDsl
+            writeDslPreservingUndo(dslEditor, editorDsl)
             programStateDsl = editorDsl
             if (renderer?.canvasRenderer) {
                 renderer.canvasRenderer.currentDsl = newDsl
@@ -2023,6 +2031,49 @@ function setupProgramState() {
             }
         })
     })
+}
+
+/**
+ * Write a regenerated program back into the editor without destroying the
+ * textarea's native undo stack. A plain `editor.value = text` assignment (or
+ * a write through the host editor while its textarea is unfocused) clears
+ * that stack, leaving the user's typing unreachable via Ctrl/Cmd+Z. The host
+ * editor's value setter applies the change through the browser's editing
+ * commands — which keep the stack intact — but only while its textarea is
+ * focused, so the field takes focus for the write and hands it back to the
+ * control the user was driving. The editing commands' own input event is
+ * suppressed: a panel edit updates the pipeline live and must not schedule a
+ * redundant recompile.
+ * @param {HTMLElement} editor
+ * @param {string} text
+ */
+function writeDslPreservingUndo(editor, text) {
+    const ta = editor.getTextarea?.()
+    if (!ta || typeof document === 'undefined') {
+        editor.value = text
+        return
+    }
+    const prev = document.activeElement
+    const editorHadFocus = prev === ta
+    if (!editorHadFocus) {
+        try { ta.focus({ preventScroll: true }) } catch { ta.focus() }
+    }
+    suppressDslInput = true
+    try {
+        editor.value = text
+        if (editor.value !== text) {
+            // The undo-preserving write did not land (editing commands
+            // unavailable). Fall back to a plain assignment, which keeps the
+            // program text correct but clears the native undo stack.
+            ta.value = text
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+    } finally {
+        suppressDslInput = false
+    }
+    if (!editorHadFocus && prev && typeof prev.focus === 'function') {
+        try { prev.focus({ preventScroll: true }) } catch { prev.focus() }
+    }
 }
 
 /**

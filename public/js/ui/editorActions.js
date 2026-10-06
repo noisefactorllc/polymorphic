@@ -141,8 +141,43 @@ export function numberLiteralAt(text, cursor) {
 }
 
 /**
+ * Apply a programmatic text change to a textarea through the browser's
+ * editing commands (`document.execCommand`). Unlike a `value` assignment or
+ * `setRangeText()` — both of which wipe the textarea's native undo stack —
+ * an editing command keeps the stack intact: the user's earlier typing stays
+ * undoable after the write, and the written change itself becomes an undoable
+ * step. The commands only reach a focused field, so focus is taken for the
+ * write.
+ *
+ * @param {HTMLTextAreaElement} ta
+ * @param {number} start
+ * @param {number} end
+ * @param {string} replacement
+ * @param {string} nextValue - the exact value the textarea must end up with
+ * @returns {boolean} true when the undo-preserving write landed
+ */
+function writeThroughUndoStack(ta, start, end, replacement, nextValue) {
+    if (typeof document === 'undefined' || typeof document.execCommand !== 'function') return false
+    if (document.activeElement !== ta) {
+        try { ta.focus({ preventScroll: true }) } catch { ta.focus() }
+    }
+    try {
+        ta.setSelectionRange(start, end)
+        const applied = replacement === ''
+            ? document.execCommand('delete')
+            : document.execCommand('insertText', false, replacement)
+        return Boolean(applied) && ta.value === nextValue
+    } catch {
+        return false
+    }
+}
+
+/**
  * Replace a substring in the editor's value, preserving the cursor's relative
- * position to the changed region.
+ * position to the changed region. The write goes through the browser's
+ * editing commands so the editor's native undo stack survives it; a plain
+ * value assignment (the fallback when the commands are unavailable) would
+ * clear that stack and leave the user's typing unreachable via Ctrl/Cmd+Z.
  * @param {HTMLElement} editor
  * @param {number} start
  * @param {number} end
@@ -151,11 +186,14 @@ export function numberLiteralAt(text, cursor) {
 export function replaceRange(editor, start, end, replacement) {
     const ta = editor?.getTextarea?.()
     if (!ta) return
-    const before = ta.value.slice(0, start)
-    const after = ta.value.slice(end)
-    ta.value = before + replacement + after
+    const value = ta.value
+    const nextValue = value.slice(0, start) + replacement + value.slice(end)
+    if (nextValue === value) return
+    if (!writeThroughUndoStack(ta, start, end, replacement, nextValue)) {
+        ta.value = nextValue
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+    }
     // Position cursor at end of replacement
     const cursor = start + replacement.length
     ta.selectionStart = ta.selectionEnd = cursor
-    ta.dispatchEvent(new Event('input', { bubbles: true }))
 }
