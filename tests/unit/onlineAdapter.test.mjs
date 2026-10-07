@@ -628,6 +628,26 @@ test('reconnection recovery clears reconnecting state, updates dialog, and notif
     adapter.dispose()
 })
 
+test('a code retyped in capitals takes one lookup and joins the session by its own id', async () => {
+    const layer = fakeLayer()
+    const { adapter } = harness(layer)
+    const lookups = []
+    const stub = globalThis.fetch
+    globalThis.fetch = async (url) => {
+        lookups.push(String(url))
+        return new Response(JSON.stringify({ id: 'RouFjG', open: true, dialect: 'noisemaker-dsl' }), { status: 200 })
+    }
+    try {
+        await adapter.joinSession('ROUFJG')
+    } finally {
+        globalThis.fetch = stub
+    }
+    assert.equal(lookups.length, 1)
+    assert.match(lookups[0], /\/v1\/sessions\/ROUFJG$/)
+    assert.equal(adapter.getSessionId(), 'RouFjG')
+    adapter.dispose()
+})
+
 test('a terminal server close during reconnection ends the session and cleans up URL', async () => {
     const layer = fakeLayer()
     const { adapter, toasts, urls, dialog } = harness(layer)

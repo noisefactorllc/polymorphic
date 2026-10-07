@@ -90,6 +90,8 @@ export function inspectRemoteDsl(text) {
 }
 const VOLATILE_SHARE_PARAMS = ['code']
 const SESSION_ID_CASE_STORAGE_KEY = 'polymorphic.seance.sessionIdCaseMap'
+// A Seance session code: six letters or digits.
+const SESSION_CODE = /^[A-Za-z0-9]{6}$/
 
 // Hosts on which the ?seanceUrl= / ?seanceSdk= overrides are honoured. The
 // SDK URL is fed to import(), so on a public origin those params would let any
@@ -523,24 +525,27 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     async function resolveJoinSessionId(sessionId) {
         const remembered = recallSessionId(sessionId)
         if (remembered) return remembered
+        if (!SESSION_CODE.test(String(sessionId || '')) || !globalThis.fetch) return sessionId
 
-        const candidates = caseCandidates(sessionId)
-        if (candidates.length <= 1 || !globalThis.fetch) return sessionId
-
-        for (const candidate of candidates) {
+        // Seance finds a session whatever the case of its code and replies with
+        // the session's own id, so a code retyped in capitals takes one lookup.
+        try {
+            const response = await globalThis.fetch(`${stripTrailingSlash(config.seanceUrl)}/v1/sessions/${encodeURIComponent(sessionId)}`, {
+                credentials: 'include',
+            })
+            if (!response.ok) return sessionId
+            let id = sessionId
             try {
-                const response = await globalThis.fetch(`${stripTrailingSlash(config.seanceUrl)}/v1/sessions/${encodeURIComponent(candidate)}`, {
-                    credentials: 'include',
-                })
-                if (response.ok) {
-                    rememberSessionId(candidate)
-                    return candidate
-                }
+                const body = await response.json()
+                if (typeof body?.id === 'string' && body.id) id = body.id
             } catch {
-                return sessionId
+                // An unreadable reply still confirmed the code as typed.
             }
+            rememberSessionId(id)
+            return id
+        } catch {
+            return sessionId
         }
-        return sessionId
     }
 
     function wireUi() {
@@ -635,23 +640,6 @@ function readSessionFromLocation(locationLike) {
     } catch {
         return null
     }
-}
-
-function caseCandidates(sessionId) {
-    const value = String(sessionId || '').trim()
-    if (!/^[A-Z0-9]{6}$/.test(value)) return [value]
-    const chars = [...value]
-    const variants = ['']
-    for (const ch of chars) {
-        const lower = /[A-Z]/.test(ch) ? ch.toLowerCase() : ch
-        const options = lower === ch ? [ch] : [ch, lower]
-        const currentLength = variants.length
-        for (let i = 0; i < currentLength; i++) {
-            const prefix = variants.shift()
-            for (const option of options) variants.push(prefix + option)
-        }
-    }
-    return [value, ...variants.filter((candidate) => candidate !== value)]
 }
 
 function stripTrailingSlash(value) {
