@@ -19,6 +19,11 @@ import {
 } from '../../public/js/onlineAdapter.js'
 import { hasLocalSeanceHarness, resolveSeanceHarnessPaths } from '../seanceLocal.js'
 
+// Joining by an upper-case code looks each of its case variants up on the
+// Seance server. These tests must never reach the production server, so every
+// fetch here gets the 404 the server gives an unknown session.
+globalThis.fetch = async () => new Response(null, { status: 404 })
+
 test('online adapter uses the rolling major SDK URL by default', () => {
     const config = resolveOnlineConfig({
         location: 'https://polymorphic.test/?backend=webgl2',

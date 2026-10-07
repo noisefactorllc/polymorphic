@@ -60,6 +60,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3017',
     launchOptions: { args: baseArgs },
+    // In WebKit, page.route() misses requests from a page that public/sw.js
+    // controls, so a mocked sharing or Seance call would reach production.
+    serviceWorkers: 'block',
   },
   // Without software Vulkan one run covers every spec on the launch args above
   // (or Metal on macOS). With it, only the webgpu receiver spec moves to the
