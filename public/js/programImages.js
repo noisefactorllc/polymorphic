@@ -3,8 +3,11 @@
  *
  * A program's DSL names each image it uses as `image:<sha256>`. Programs,
  * scenes and snapshot history live in localStorage and hold only that DSL;
- * the image is stored here, in IndexedDB, as the original file's bytes in a
- * Blob. There is one record per image however many programs use it.
+ * the image is stored here, in IndexedDB, as the original file's bytes in an
+ * ArrayBuffer with its media type, `{id, type, bytes, storedAt}`. There is one
+ * record per image however many programs use it. WebKit's private browsing
+ * refuses a Blob or File in IndexedDB but takes an ArrayBuffer; records saved
+ * earlier as a Blob, `{id, blob, storedAt}`, still read.
  *
  * localStorage is a few megabytes per origin, so images saved inside programs
  * as base64 text filled it and every later save failed. IndexedDB is a share
@@ -309,9 +312,11 @@ export async function storeProgramImages(images = []) {
     for (const { id, blob } of images) {
         if (!IMAGE_ID.test(id) || !(blob instanceof Blob)) throw new Error('Invalid program image')
     }
+    // Read every file before the transaction opens: awaiting inside it would let it commit early.
+    const records = await Promise.all(images.map(async ({ id, blob }) => ({ id, type: blob.type, bytes: await blob.arrayBuffer() })))
     const storedAt = Date.now()
     await transact('readwrite', store => {
-        for (const { id, blob } of images) store.put({ id, blob, storedAt })
+        for (const record of records) store.put({ ...record, storedAt })
     })
 }
 
@@ -340,6 +345,7 @@ export async function getProgramImage(id) {
     if (typeof indexedDB === 'undefined' || !IMAGE_ID.test(id)) return null
     try {
         const record = await transact('readonly', store => store.get(id))
+        if (record?.bytes instanceof ArrayBuffer) return new Blob([record.bytes], { type: record.type || '' })
         return record?.blob || null
     } catch (error) {
         console.error('Error reading program image:', error)

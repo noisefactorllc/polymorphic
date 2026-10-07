@@ -216,6 +216,53 @@ test('a dropped image is a file in IndexedDB that programs, scenes and history n
   for (const value of Object.values(await storedText(page))) expect(value).not.toContain('data:image')
 })
 
+/**
+ * The record IndexedDB holds under `id`, read without the app: its media type,
+ * whether it keeps the file's bytes in an ArrayBuffer, and those bytes.
+ */
+async function storedRecord(page, id) {
+  return page.evaluate(id => new Promise((resolve, reject) => {
+    const open = indexedDB.open('polymorphic-program-images')
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const db = open.result
+      const get = db.transaction('images', 'readonly').objectStore('images').get(id)
+      get.onerror = () => { db.close(); reject(get.error) }
+      get.onsuccess = () => {
+        db.close()
+        const record = get.result
+        resolve(record && {
+          type: record.type,
+          arrayBuffer: record.bytes instanceof ArrayBuffer,
+          bytes: record.bytes instanceof ArrayBuffer ? Array.from(new Uint8Array(record.bytes)) : null,
+        })
+      }
+    }
+  }), id)
+}
+
+// WebKit's private browsing, and Playwright's default WebKit context, refuse a
+// Blob or File in IndexedDB but take an ArrayBuffer.
+test('a program saved with an image reopens after a reload with the exact image bytes', async ({ page }) => {
+  test.setTimeout(120000)
+  await boot(page, PLAIN)
+  await dropImage(page, RED, 'red.png')
+  await expect.poll(() => editorText(page)).toContain(`image:${digest(RED)}`)
+  await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
+  await saveProgram(page, 'Picture')
+
+  await boot(page, PLAIN)
+  await expect.poll(() => outputPixel(page)).toEqual(YELLOW_PIXEL)
+  await loadProgram(page, 'Picture')
+  await expect.poll(() => outputPixel(page)).toEqual(RED_PIXEL)
+  const record = await storedRecord(page, digest(RED))
+  expect({ type: record.type, arrayBuffer: record.arrayBuffer }).toEqual({ type: 'image/png', arrayBuffer: true })
+  expect(digest(Buffer.from(record.bytes))).toBe(digest(RED))
+  const file = await storedImage(page, digest(RED))
+  expect(file.type).toBe('image/png')
+  expect(digest(Buffer.from(file.bytes))).toBe(digest(RED))
+})
+
 test('sharing uploads a stored image and the screenshot as files and sends their ids, never base64', async ({ page }) => {
   test.setTimeout(120000)
   const payloads = [], uploads = [], bodies = []

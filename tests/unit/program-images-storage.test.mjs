@@ -93,6 +93,31 @@ test('image writes ask for strict durability, and reads do not', async () => {
     assert.deepEqual(transactions, [{ mode: 'readonly', options: undefined }])
 })
 
+test('an image is stored as its bytes in an ArrayBuffer, which WebKit private browsing accepts, and read as a Blob', async () => {
+    const bytes = randomBytes(64)
+    const id = sha256(bytes)
+    await storeProgramImages([{ id, blob: new File([bytes], 'picked.png', { type: 'image/png' }) }])
+    const record = records.get(id)
+    assert.deepEqual(Object.keys(record).sort(), ['bytes', 'id', 'storedAt', 'type'])
+    assert.ok(record.bytes instanceof ArrayBuffer)
+    assert.equal(record.type, 'image/png')
+    assert.deepEqual(Buffer.from(record.bytes), bytes)
+    const stored = await getProgramImage(id)
+    assert.ok(stored instanceof Blob)
+    assert.equal(stored.type, 'image/png')
+    assert.deepEqual(Buffer.from(await stored.arrayBuffer()), bytes)
+})
+
+test('an image stored earlier as a Blob still reads', async () => {
+    const bytes = randomBytes(64)
+    const id = sha256(bytes)
+    const blob = new Blob([bytes], { type: 'image/jpeg' })
+    records.set(id, { id, blob, storedAt: 1 })
+    const stored = await getProgramImage(id)
+    assert.equal(stored.type, 'image/jpeg')
+    assert.deepEqual(Buffer.from(await stored.arrayBuffer()), bytes)
+})
+
 test('a picked file is read once, and its stored copy survives the file going away', async () => {
     const bytes = randomBytes(4096)
     let reads = 0
