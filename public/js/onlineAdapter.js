@@ -90,8 +90,8 @@ export function inspectRemoteDsl(text) {
 }
 const VOLATILE_SHARE_PARAMS = ['code']
 const SESSION_ID_CASE_STORAGE_KEY = 'polymorphic.seance.sessionIdCaseMap'
-// A Seance session code: six letters or digits.
-const SESSION_CODE = /^[A-Za-z0-9]{6}$/
+// A Seance session code typed in capitals. Other codes are joined as typed.
+const CAPITALIZED_SESSION_CODE = /^[A-Z0-9]{6}$/
 
 // Hosts on which the ?seanceUrl= / ?seanceSdk= overrides are honoured. The
 // SDK URL is fed to import(), so on a public origin those params would let any
@@ -525,7 +525,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     async function resolveJoinSessionId(sessionId) {
         const remembered = recallSessionId(sessionId)
         if (remembered) return remembered
-        if (!SESSION_CODE.test(String(sessionId || '')) || !globalThis.fetch) return sessionId
+        if (!CAPITALIZED_SESSION_CODE.test(String(sessionId || '')) || !globalThis.fetch) return sessionId
 
         // Seance finds a session whatever the case of its code and replies with
         // the session's own id, so a code retyped in capitals takes one lookup.
