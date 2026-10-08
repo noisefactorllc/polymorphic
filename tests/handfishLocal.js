@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 //
-// Pre-release helper: when HANDFISH_LOCAL points at a local Handfish build
-// (e.g. HANDFISH_LOCAL=../handfish/dist), serve the Handfish CDN from it so
-// components and editor APIs can be exercised before they ship. No machine path
-// is committed; with the env var unset these tests run against the real CDN.
+// Pre-release helper: serve the Handfish CDN from a local Handfish build so
+// components and editor APIs can be exercised before they ship. The build is
+// HANDFISH_LOCAL when set (e.g. HANDFISH_LOCAL=../handfish/dist), otherwise a
+// ../handfish/dist sibling checkout when one exists. No machine path is
+// committed; with neither, these tests run against the real CDN.
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 

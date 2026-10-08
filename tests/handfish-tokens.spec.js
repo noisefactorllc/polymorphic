@@ -211,6 +211,12 @@ test('the viewport popup mirror page loads Handfish tokens and flips with the th
     await page.goto('/')
     await waitForShell(page)
 
+    // While any route is active, Playwright stalls the subresource requests of
+    // a popup written with document.write: the popup stays "loading" and never
+    // fetches tokens.css. Drop the local-Handfish route first, so the popup
+    // loads the CDN stylesheet its markup names, as it does in a browser.
+    await page.unrouteAll({ behavior: 'wait' })
+
     const popupPromise = page.waitForEvent('popup')
     await page.evaluate(async () => {
         const vw = await import('/js/ui/viewportWindow.js')
