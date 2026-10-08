@@ -141,6 +141,174 @@ export function numberLiteralAt(text, cursor) {
 }
 
 /**
+ * Split DSL text into code, string and comment tokens with their offsets.
+ * Whitespace separates tokens and is not returned. Comments and strings come
+ * out whole, so an edit built from these tokens never cuts through one.
+ *
+ * @param {string} text
+ * @returns {Array<{kind: 'code'|'string'|'comment', text: string, start: number, end: number}>}
+ */
+export function dslTokens(text) {
+    const tokens = []
+    const len = text.length
+    const isWord = (ch) => /[A-Za-z0-9_.#$]/.test(ch)
+    let i = 0
+    while (i < len) {
+        const ch = text[i]
+        if (/\s/.test(ch)) {
+            i++
+            continue
+        }
+        const start = i
+        let kind = 'code'
+        if (ch === '/' && text[i + 1] === '/') {
+            kind = 'comment'
+            while (i < len && text[i] !== '\n') i++
+        } else if (ch === '/' && text[i + 1] === '*') {
+            kind = 'comment'
+            const close = text.indexOf('*/', i + 2)
+            i = close < 0 ? len : close + 2
+        } else if (text.startsWith('"""', i)) {
+            kind = 'string'
+            const close = text.indexOf('"""', i + 3)
+            i = close < 0 ? len : close + 3
+        } else if (ch === '"' || ch === '\'') {
+            kind = 'string'
+            i++
+            while (i < len && text[i] !== ch && text[i] !== '\n') i += text[i] === '\\' ? 2 : 1
+            i = Math.min(len, i < len && text[i] === ch ? i + 1 : i)
+        } else if (isWord(ch)) {
+            while (i < len && isWord(text[i])) i++
+        } else {
+            i++
+        }
+        tokens.push({ kind, text: text.slice(start, i), start, end: i })
+    }
+    return tokens
+}
+
+/**
+ * Runs of differing tokens between two token lists, as index ranges. Common
+ * leading and trailing tokens are matched first; the rest is aligned by a
+ * longest common subsequence while it stays small, and otherwise forms one
+ * run.
+ * @param {Array<{text: string}>} a
+ * @param {Array<{text: string}>} b
+ * @returns {Array<{aStart: number, aEnd: number, bStart: number, bEnd: number}>}
+ */
+function tokenHunks(a, b) {
+    let p = 0
+    while (p < a.length && p < b.length && a[p].text === b[p].text) p++
+    let endA = a.length
+    let endB = b.length
+    while (endA > p && endB > p && a[endA - 1].text === b[endB - 1].text) {
+        endA--
+        endB--
+    }
+    if (p === endA && p === endB) return []
+    const n = endA - p
+    const m = endB - p
+    if (n === 0 || m === 0 || n * m > 40000) return [{ aStart: p, aEnd: endA, bStart: p, bEnd: endB }]
+    const lcs = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1))
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            lcs[i][j] = a[p + i].text === b[p + j].text
+                ? lcs[i + 1][j + 1] + 1
+                : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+        }
+    }
+    const hunks = []
+    let open = null
+    let i = 0
+    let j = 0
+    const close = () => {
+        if (!open) return
+        open.aEnd = p + i
+        open.bEnd = p + j
+        hunks.push(open)
+        open = null
+    }
+    while (i < n || j < m) {
+        if (i < n && j < m && a[p + i].text === b[p + j].text) {
+            close()
+            i++
+            j++
+            continue
+        }
+        if (!open) open = { aStart: p + i, bStart: p + j }
+        if (j < m && (i === n || lcs[i][j + 1] >= lcs[i + 1][j])) j++
+        else i++
+    }
+    close()
+    return hunks
+}
+
+/**
+ * Rewrite `current` into a program whose code matches `regenerated`, by
+ * changing only the code that differs. The comments and layout of `current`
+ * stay where they are; new code takes the layout `regenerated` gives it.
+ *
+ * Programmatic rewrites (an effect-panel parameter edit regenerates the whole
+ * program) otherwise move or drop the user's comments, and their net change
+ * then reaches past the parameter into the user's own typing.
+ *
+ * @param {string} current - the editor text
+ * @param {string} regenerated - the program to express
+ * @returns {string|null} the patched text, or null when the patch would have
+ *   to remove, move or add a comment
+ */
+export function patchProgramText(current, regenerated) {
+    if (current === regenerated) return current
+    const currentTokens = dslTokens(current)
+    const comments = currentTokens.filter(t => t.kind === 'comment')
+    const a = currentTokens.filter(t => t.kind !== 'comment')
+    const b = dslTokens(regenerated).filter(t => t.kind !== 'comment')
+    let out = current
+    const hunks = tokenHunks(a, b)
+    for (let h = hunks.length - 1; h >= 0; h--) {
+        const { aStart, aEnd, bStart, bEnd } = hunks[h]
+        let from
+        let to
+        let text
+        if (aEnd > aStart && bEnd > bStart) {
+            from = a[aStart].start
+            to = a[aEnd - 1].end
+            text = regenerated.slice(b[bStart].start, b[bEnd - 1].end)
+        } else if (bEnd > bStart) {
+            // Inserted code, with the spacing that follows it (or, at the
+            // end of the program, the spacing that leads to it).
+            if (aStart < a.length) {
+                from = to = a[aStart].start
+                text = regenerated.slice(b[bStart].start, b[bEnd].start)
+            } else if (aStart > 0) {
+                from = to = a[aStart - 1].end
+                text = regenerated.slice(b[bStart - 1].end, b[bEnd - 1].end)
+            } else {
+                return null
+            }
+        } else if (aEnd < a.length) {
+            from = a[aStart].start
+            to = a[aEnd].start
+            text = ''
+        } else if (aStart > 0) {
+            from = a[aStart - 1].end
+            to = a[aEnd - 1].end
+            text = ''
+        } else {
+            return null
+        }
+        if (comments.some(c => c.start < to && c.end > from)) return null
+        if (dslTokens(text).some(t => t.kind === 'comment')) return null
+        out = out.slice(0, from) + text + out.slice(to)
+    }
+    const result = dslTokens(out)
+    const sameTexts = (x, y) => x.length === y.length && x.every((t, k) => t.text === y[k].text)
+    if (!sameTexts(result.filter(t => t.kind !== 'comment'), b)) return null
+    if (!sameTexts(result.filter(t => t.kind === 'comment'), comments)) return null
+    return out
+}
+
+/**
  * Undo transparency for programmatic editor writes.
  *
  * Programmatic writes made through the editing commands preserve the
@@ -277,6 +445,17 @@ function singleRegionDiff(a, b) {
 }
 
 /**
+ * An event's time on the `performance.now()` clock; the current time when the
+ * event carries none.
+ * @param {Event} e
+ * @returns {number}
+ */
+function eventTime(e) {
+    const at = e?.timeStamp
+    return Number.isFinite(at) && at > 0 ? at : performance.now()
+}
+
+/**
  * Make Ctrl/Cmd+Z treat the editor's pending programmatic writes as
  * transparent: the first press undoes the user's last typed edit and keeps
  * the programmatic state, instead of first stepping back through the
@@ -290,6 +469,18 @@ export function installUndoTransparency(editor) {
     if (typeof document === 'undefined' || typeof document.execCommand !== 'function') return
     undoTransparencyInstalled.add(editor)
 
+    // The key behind the edit about to land, with the time it was pressed.
+    // A key's event time is when the user pressed it, which can be well
+    // before the page handles it: while a hot-reload compile or a heavy
+    // frame holds the page, typed keys wait in the queue.
+    let pressedKey = null
+    ta.addEventListener('keydown', (e) => {
+        pressedKey = { key: e.key, at: eventTime(e) }
+    }, true)
+    ta.addEventListener('keyup', (e) => {
+        if (pressedKey && pressedKey.key === e.key) pressedKey = null
+    }, true)
+
     ta.addEventListener('input', () => {
         if (programmaticWriteInFlight()) return
         // A user edit (or any untracked write) invalidates the block.
@@ -302,17 +493,21 @@ export function installUndoTransparency(editor) {
         if (programmaticWriteInFlight()) return
         // Track the user's typing bursts so one press can undo a whole
         // edit: `beforeinput` sees the text before the edit lands. Bursts
-        // more than three seconds apart undo separately.
-        const now = performance.now()
+        // more than three seconds apart undo separately. The gap is the
+        // user's pause between the key presses behind two edits, not the
+        // time between the page handling them: a busy page must not split
+        // one typed note into several undo steps.
+        const pressedAt = pressedKey ? pressedKey.at : eventTime(e)
+        pressedKey = null
         const bursts = userBursts.get(ta)
         const last = bursts && bursts.length ? bursts[bursts.length - 1] : null
-        if (!last || now - last.lastActivity > 3000) {
+        if (!last || pressedAt - last.lastActivity > 3000) {
             if (!bursts) userBursts.set(ta, [])
             const list = userBursts.get(ta)
-            list.push({ before: ta.value, lastActivity: now })
+            list.push({ before: ta.value, lastActivity: pressedAt })
             if (list.length > 50) list.shift()
         } else {
-            last.lastActivity = now
+            last.lastActivity = Math.max(last.lastActivity, pressedAt)
         }
     })
 

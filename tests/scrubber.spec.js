@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+import { typeAtHumanPace } from './keyboardTyping.js'
 
 
 installHandfishLocal(test)
@@ -368,36 +369,41 @@ test('scrubber clamps parameter bounds with zero turnaround lag', async ({ page 
 })
 
 
-test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page }) => {
-    // Two typing bursts plus the scrub run long on a loaded machine.
-    test.slow()
-    await page.goto(PAGE_URL)
-    await waitForApp(page)
+// Wait until the renderer runs the editor's current text, so a scrub lands
+// on a program the hot reload has finished compiling.
+async function waitForCompiledEditorText(page) {
+    await page.waitForFunction(() => {
+        const compiled = window.__poly?.renderer?.canvasRenderer?.currentDsl
+        return compiled === document.getElementById('dsl-editor').getTextarea().value
+    }, null, { timeout: 30000 })
+}
 
-    // Calculate position of literal "75"
+// Type `text` through real key presses, at a person's steady pace, with the
+// caret at the end of `line`. The presses carry their own times, so a loaded
+// machine cannot stretch the pauses between them into separate undo steps.
+async function typeAtEndOfLine(page, line, text) {
+    await page.evaluate((line) => {
+        const ta = document.getElementById('dsl-editor').getTextarea()
+        const lines = ta.value.split('\n')
+        const index = lines.indexOf(line)
+        if (index < 0) throw new Error(`line not found: ${line}`)
+        const offset = lines.slice(0, index + 1).join('\n').length
+        ta.focus()
+        ta.setSelectionRange(offset, offset)
+    }, line)
+    await typeAtHumanPace(page, text)
+    await waitForCompiledEditorText(page)
+}
+
+// Real Alt+drag scrub of the scale literal 20px to the right. Returns the
+// literal the scrub wrote.
+async function scrubScale(page) {
     const coords = await page.evaluate(() => {
         const ed = document.getElementById('dsl-editor')
         const span = [...ed.querySelectorAll('*')].find(el => el.textContent === '75' || el.textContent === '75,')
         const rect = span.getBoundingClientRect()
         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
     })
-    const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
-
-    // Two marker edits through the real keyboard path, far enough apart to
-    // count as separate typing bursts.
-    await page.evaluate(() => {
-        const ta = document.getElementById('dsl-editor').getTextarea()
-        ta.focus()
-        ta.setSelectionRange(ta.value.length, ta.value.length)
-    })
-    await page.keyboard.type(' // first note')
-    // Wait out the hot-reload compile and the burst-separation window.
-    await page.waitForTimeout(3600)
-    await page.keyboard.type(' // second note')
-    // Wait out the hot-reload compile so the scrub's program state matches.
-    await page.waitForTimeout(1600)
-
-    // Real Alt+drag scrub of the scale literal (75 -> 95).
     await page.mouse.move(coords.x, coords.y)
     await page.keyboard.down('Alt')
     await page.mouse.down()
@@ -405,34 +411,67 @@ test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page 
     await page.waitForTimeout(100)
     await page.mouse.up()
     await page.keyboard.up('Alt')
-    await page.waitForTimeout(200)
+    const scale = (await page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)).match(/scale: ([0-9.]+),/)?.[1]
+    expect(scale, 'the scrub left no scale literal').toBeTruthy()
+    expect(scale).not.toBe('75')
+    return scale
+}
+
+test('an Alt+drag scrub leaves the editor\'s native undo usable', async ({ page }) => {
+    // Two typing bursts plus the scrub run long on a loaded machine.
+    test.slow()
+    await page.goto(PAGE_URL)
+    await waitForApp(page)
+    const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
+
+    // Two marker edits through the real keyboard path on the program's last
+    // line, far enough apart to count as separate typing bursts.
+    await typeAtEndOfLine(page, 'render(o0)', ' // first note')
+    // Wait out the burst-separation window.
+    await page.waitForTimeout(3600)
+    await typeAtEndOfLine(page, 'render(o0) // first note', ' // second note')
+
+    // Real Alt+drag scrub of the scale literal (75 -> 95).
+    const scale = await scrubScale(page)
+    expect(scale).toBe('95')
 
     // The scrub wrote its new value and kept the user's edits.
     const scrubbed = await readValue()
-    expect(scrubbed).toContain('scale: 95')
-    expect(scrubbed).toContain('// first note')
-    expect(scrubbed).toContain('// second note')
+    expect(scrubbed).toBe(SKETCH.replace('scale: 75,', 'scale: 95,') + ' // first note // second note')
 
-    // One Ctrl+Z undoes the user's last typed edit while the scrub keeps
+    // One Ctrl/Cmd+Z undoes the user's last typed edit while the scrub keeps
     // its new value: the scrub's programmatic writes are transparent to the
     // native undo stack.
-    await page.keyboard.press('Control+z')
-    await page.waitForTimeout(150)
-    const undone = await readValue()
-    expect(undone).not.toContain('// second note')
-    expect(undone).toContain('// first note')
-    expect(undone).toContain('scale: 95')
-    expect(undone).toContain('perlin(')
+    await page.keyboard.press('ControlOrMeta+z')
+    expect(await readValue()).toBe(SKETCH.replace('scale: 75,', 'scale: 95,') + ' // first note')
 
     // The next press steps further back through the typing while the
     // scrubbed value stays in place.
-    await page.keyboard.press('Control+z')
-    await page.waitForTimeout(150)
-    const undoneAgain = await readValue()
-    expect(undoneAgain).not.toContain('note')
-    expect(undoneAgain).toContain('scale: 95')
-    expect(undoneAgain).toContain('perlin(')
+    await page.keyboard.press('ControlOrMeta+z')
+    expect(await readValue()).toBe(SKETCH.replace('scale: 75,', 'scale: 95,'))
 })
+
+// The note goes at the end of the program's first line, of a line in its
+// middle, and of its last line.
+for (const [where, line] of [['first', 'search synth, filter'], ['middle', '  .write(o0)'], ['last', 'render(o0)']]) {
+    test(`an Alt+drag scrub keeps its value when Ctrl+Z removes a note on the ${where} line`, async ({ page }) => {
+        test.slow()
+        await page.goto(PAGE_URL)
+        await waitForApp(page)
+        const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
+
+        await typeAtEndOfLine(page, line, ' // user note')
+        const typed = SKETCH.replace(line, `${line} // user note`)
+        expect(await readValue()).toBe(typed)
+
+        const scale = await scrubScale(page)
+        expect(await readValue()).toBe(typed.replace('scale: 75,', `scale: ${scale},`))
+
+        // One Ctrl/Cmd+Z removes the typed note and keeps the scrubbed value.
+        await page.keyboard.press('ControlOrMeta+z')
+        expect(await readValue()).toBe(SKETCH.replace('scale: 75,', `scale: ${scale},`))
+    })
+}
 
 test('scrubber tooltip stays inside the viewport when dragged to its edges', async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 550 })

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+import { typeAtHumanPace } from './keyboardTyping.js'
 
 
 installHandfishLocal(test)
@@ -19,129 +20,146 @@ const SKETCH = [
 ].join('\n')
 const PAGE_URL = `/?dsl=${encodeURIComponent(SKETCH)}`
 
+// The user's note goes at the end of the program's first line, of a line in
+// its middle, and of its last line.
+const NOTE_LINES = [
+    ['first', 'search synth, filter'],
+    ['middle', '  .write(o0)'],
+    ['last', 'render(o0)'],
+]
+
 async function waitForApp(page) {
-    await page.waitForFunction(() => !!(window.__poly && document.getElementById('dsl-editor')?.value), null, { timeout: 30000 })
-    await page.waitForTimeout(500)
+    await page.waitForFunction(() => window.__poly?.renderer?.isRunning === true && !!document.getElementById('dsl-editor')?.value, null, { timeout: 30000 })
 }
 
-test("a parameter edit from the effect panel leaves the editor's native undo usable", async ({ page }) => {
-    test.slow()
-    await page.goto(PAGE_URL)
-    await waitForApp(page)
-    const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
+const readValue = page => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
 
-    // Marker edit through the real keyboard path.
-    await page.evaluate(() => {
+// Wait until the renderer runs the editor's current text. The panel writes
+// back only over the program it was built from, so a parameter edit made
+// before the hot reload lands would not reach the editor.
+async function waitForCompiledEditorText(page) {
+    await page.waitForFunction(() => {
+        const compiled = window.__poly?.renderer?.canvasRenderer?.currentDsl
+        return compiled === document.getElementById('dsl-editor').getTextarea().value
+    }, null, { timeout: 30000 })
+}
+
+// Type `text` through real key presses, at a person's steady pace, with the
+// caret at the end of `line`. The presses carry their own times, so a loaded
+// machine cannot stretch the pauses between them into separate undo steps.
+async function typeAtEndOfLine(page, line, text) {
+    await page.evaluate((line) => {
         const ta = document.getElementById('dsl-editor').getTextarea()
+        const lines = ta.value.split('\n')
+        const index = lines.indexOf(line)
+        if (index < 0) throw new Error(`line not found: ${line}`)
+        const offset = lines.slice(0, index + 1).join('\n').length
         ta.focus()
-        ta.setSelectionRange(ta.value.length, ta.value.length)
-    })
-    await page.keyboard.type(' // user note')
-    // Wait out the hot-reload compile so the panel's program state matches.
-    await page.waitForTimeout(1600)
-    expect(await readValue()).toContain('// user note')
+        ta.setSelectionRange(offset, offset)
+    }, line)
+    await typeAtHumanPace(page, text)
+    await waitForCompiledEditorText(page)
+}
 
-    // Open the effect panel on the perlin call. 'effectclick' is the
-    // synthetic-dispatch path the editor itself uses for real clicks.
-    await page.evaluate(() => {
-        const ed = document.getElementById('dsl-editor')
-        const dsl = ed.value
-        const idx = dsl.indexOf('perlin')
-        ed.dispatchEvent(new CustomEvent('effectclick', { detail: { caretOffset: idx + 1, dsl }, bubbles: true }))
-    })
+// Open the effect panel with a real click on the effect's name in the editor.
+async function openPanelFor(page, name) {
+    const at = await page.evaluate((name) => {
+        const display = document.querySelector('#dsl-editor .code-editor-display')
+        const el = [...display.querySelectorAll('*')].find(e => e.children.length === 0 && e.textContent === name)
+        if (!el) return null
+        const rect = el.getBoundingClientRect()
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    }, name)
+    expect(at, `${name} is not shown in the editor`).not.toBeNull()
+    await page.mouse.click(at.x, at.y)
     await expect(page.locator('#effect-controls-panel')).toBeVisible()
+}
 
-    // Real pointer interaction with the panel moves focus off the editor, as
-    // when a user works the panel after typing. Click the title bar.
-    await page.locator('#effect-controls-panel .ec-name').click()
+// Drag the panel's slider for `param` with real pointer input, from its thumb
+// to `fraction` of its track. Returns the slider's value after the drag.
+async function dragPanelSlider(page, param, fraction) {
+    const track = await page.evaluate((param) => {
+        const slider = [...document.querySelectorAll('#effect-controls-panel slider-value')]
+            .find(s => document.getElementById(s.getAttribute('aria-labelledby'))?.textContent.trim() === param)
+        const input = slider?.querySelector('input[type=range]')
+        if (!input) return null
+        const rect = input.getBoundingClientRect()
+        return { x: rect.x, y: rect.y + rect.height / 2, width: rect.width, min: Number(input.min), max: Number(input.max), value: Number(input.value) }
+    }, param)
+    expect(track, `no ${param} slider in the panel`).not.toBeNull()
+    const thumb = track.x + track.width * (track.value - track.min) / (track.max - track.min)
+    await page.mouse.move(thumb, track.y)
+    await page.mouse.down()
+    await page.mouse.move(track.x + track.width * fraction, track.y, { steps: 8 })
+    await page.mouse.up()
+    return page.evaluate((param) => {
+        const slider = [...document.querySelectorAll('#effect-controls-panel slider-value')]
+            .find(s => document.getElementById(s.getAttribute('aria-labelledby'))?.textContent.trim() === param)
+        return Number(slider.value)
+    }, param)
+}
 
-    // Change the scale parameter through the panel's slider: its value is set
-    // and its input event dispatched — the same handler a pointer drag drives.
-    await page.evaluate(() => {
-        const sliders = [...document.querySelectorAll('#effect-controls-panel slider-value')]
-        const scale = sliders.find(s => Number(s.value) === 75)
-        if (!scale) throw new Error('scale slider (value 75) not found')
-        scale.value = 40
-        scale.dispatchEvent(new Event('input', { bubbles: true }))
+// Wait for the panel's write to reach the editor and return the scale literal
+// it wrote.
+async function writtenScale(page, value) {
+    await expect.poll(() => readValue(page)).not.toContain('scale: 75,')
+    const literal = (await readValue(page)).match(/scale: ([0-9.]+),/)?.[1]
+    expect(literal, 'the panel wrote no scale literal').toBeTruthy()
+    expect(Number(literal)).toBeCloseTo(value, 5)
+    return literal
+}
+
+for (const [where, line] of NOTE_LINES) {
+    test(`a parameter edit from the effect panel leaves the editor's native undo usable (note on the ${where} line)`, async ({ page }) => {
+        test.slow()
+        await page.goto(PAGE_URL)
+        await waitForApp(page)
+
+        // Marker edit through the real keyboard path.
+        await typeAtEndOfLine(page, line, ' // user note')
+        const typed = SKETCH.replace(line, `${line} // user note`)
+        expect(await readValue(page)).toBe(typed)
+
+        // Change the scale parameter with a real drag of the panel's slider.
+        await openPanelFor(page, 'perlin')
+        const value = await dragPanelSlider(page, 'scale', 0.3)
+        expect(value).not.toBe(75)
+        const scale = await writtenScale(page, value)
+
+        // The panel edit changed the value and nothing else: the user's note
+        // stays where it was typed. Soft, so the undo below is checked too.
+        expect.soft(await readValue(page)).toBe(typed.replace('scale: 75,', `scale: ${scale},`))
+
+        // Return to the editor (a real click placing the caret) and undo:
+        // one Ctrl/Cmd+Z removes the typed note and keeps the panel's value.
+        await page.locator('#dsl-editor').click()
+        await page.keyboard.press('ControlOrMeta+z')
+        expect(await readValue(page)).toBe(SKETCH.replace('scale: 75,', `scale: ${scale},`))
     })
-    await page.waitForTimeout(400)
-
-    // The panel edit rewrote the program and kept the user's edit.
-    const edited = await readValue()
-    expect(edited).toContain('scale: 40')
-    expect(edited).toContain('// user note')
-
-    // Return to the editor (a real click placing the caret) and undo: one
-    // Ctrl+Z removes the user's typed edit — the panel's programmatic
-    // rewrite is transparent to the native undo stack.
-    await page.locator('#dsl-editor').click()
-    await page.keyboard.press('Control+z')
-    await page.waitForTimeout(150)
-    const undone = await readValue()
-    expect(undone.trimEnd()).not.toContain("// user")
-    expect(undone).toContain('perlin(')
-})
+}
 
 test('chained panel edits keep the single-press undo transparent', async ({ page }) => {
     test.slow()
     await page.goto(PAGE_URL)
     await waitForApp(page)
-    const readValue = () => page.evaluate(() => document.getElementById('dsl-editor').getTextarea().value)
 
-    // Marker edit through the real keyboard path, on its own line so the
-    // panel's DSL regeneration keeps it in place.
-    await page.evaluate(() => {
-        const ta = document.getElementById('dsl-editor').getTextarea()
-        ta.focus()
-        ta.setSelectionRange(ta.value.length, ta.value.length)
-    })
-    await page.keyboard.type('\n// panel note')
-    // Wait out the hot-reload compile so the panel's program state matches.
-    await page.waitForTimeout(1600)
-    expect(await readValue()).toContain('// panel note')
+    // Marker edit through the real keyboard path, on its own line.
+    await typeAtEndOfLine(page, 'render(o0)', '\n// panel note')
+    expect(await readValue(page)).toBe(`${SKETCH}\n// panel note`)
 
-    // Open the effect panel on the perlin call.
-    await page.evaluate(() => {
-        const ed = document.getElementById('dsl-editor')
-        const dsl = ed.value
-        const idx = dsl.indexOf('perlin')
-        ed.dispatchEvent(new CustomEvent('effectclick', { detail: { caretOffset: idx + 1, dsl }, bubbles: true }))
-    })
-    await expect(page.locator('#effect-controls-panel')).toBeVisible()
-    await page.locator('#effect-controls-panel .ec-name').click()
+    // Two separate real drags of the scale slider: the second write must
+    // chain onto the first instead of leaving it as a stack entry Ctrl+Z has
+    // to undo first.
+    await openPanelFor(page, 'perlin')
+    const first = await writtenScale(page, await dragPanelSlider(page, 'scale', 0.3))
+    const second = await dragPanelSlider(page, 'scale', 0.6)
+    await expect.poll(() => readValue(page)).not.toContain(`scale: ${first},`)
+    const scale = await writtenScale(page, second)
+    expect.soft(await readValue(page)).toBe(`${SKETCH}\n// panel note`.replace('scale: 75,', `scale: ${scale},`))
 
-    // Two consecutive panel edits: the second must chain onto the first
-    // instead of leaving it as a stack entry Ctrl+Z has to undo first.
-    await page.evaluate(() => {
-        const sliders = [...document.querySelectorAll('#effect-controls-panel slider-value')]
-        const scale = sliders.find(s => Number(s.value) === 75)
-        if (!scale) throw new Error('scale slider (value 75) not found')
-        scale.value = 40
-        scale.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await page.waitForTimeout(400)
-    expect(await readValue()).toContain('scale: 40')
-    await page.evaluate(() => {
-        const sliders = [...document.querySelectorAll('#effect-controls-panel slider-value')]
-        const scale = sliders.find(s => Number(s.value) === 40)
-        if (!scale) throw new Error('scale slider (value 40) not found')
-        scale.value = 60
-        scale.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await page.waitForTimeout(400)
-
-    // The chained edits rewrote the program and kept the user's edit.
-    const edited = await readValue()
-    expect(edited).toContain('scale: 60')
-    expect(edited).toContain('// panel note')
-
-    // One Ctrl+Z still removes the user's typed edit — and the chained
-    // panel value stays in place, remapped onto the text without it.
+    // One Ctrl/Cmd+Z removes the user's typed edit and the chained panel
+    // value stays in place.
     await page.locator('#dsl-editor').click()
-    await page.keyboard.press('Control+z')
-    await page.waitForTimeout(150)
-    const undone = await readValue()
-    expect(undone).not.toContain('// panel')
-    expect(undone).toContain('scale: 60')
-    expect(undone).toContain('perlin(')
+    await page.keyboard.press('ControlOrMeta+z')
+    expect(await readValue(page)).toBe(SKETCH.replace('scale: 75,', `scale: ${scale},`))
 })

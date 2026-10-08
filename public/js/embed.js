@@ -29,7 +29,7 @@ import { importFromUrlDialog } from './ui/import-from-url-dialog.js'
 import { commandPalette } from './ui/commandPalette.js'
 import { buildPaletteActions } from './ui/paletteActions.js'
 import { formatDsl } from './ui/formatter.js'
-import { insertAtCursor, getSelectionOrBlock, blockRangeAt, installUndoTransparency, noteProgrammaticWrite, clearProgrammaticWrites, runAsTrackedWrite } from './ui/editorActions.js'
+import { insertAtCursor, getSelectionOrBlock, blockRangeAt, installUndoTransparency, noteProgrammaticWrite, clearProgrammaticWrites, runAsTrackedWrite, patchProgramText } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
 import { getCursorIdleHider } from './ui/cursorIdle.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
@@ -1999,7 +1999,14 @@ function setupProgramState() {
         // drops media() urls. Carry them back from the current editor text so a
         // parameter tweak doesn't silently strip the image on save/share/re-run.
         // The engine's currentDsl stays the stripped version (what it compiled).
-        const editorDsl = (renderer._imageTools?.restoreMediaUrls || restoreMediaUrls)(dslEditor.value, newDsl)
+        const regeneratedDsl = (renderer._imageTools?.restoreMediaUrls || restoreMediaUrls)(dslEditor.value, newDsl)
+        // Write only the code the edit changed. The regenerated program moves
+        // or drops the user's comments; written whole, it would cost the user
+        // those comments, and Ctrl/Cmd+Z could not undo their typing without
+        // also undoing the parameter. The whole program is the fallback when
+        // no patch keeps every comment in place.
+        const patchedDsl = typeof patchProgramText === 'function' ? patchProgramText(dslEditor.value, regeneratedDsl) : null
+        const editorDsl = patchedDsl ?? regeneratedDsl
         if (editorDsl === dslEditor.value) return
         suppressDslReact = true
         try {
