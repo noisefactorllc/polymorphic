@@ -65,6 +65,25 @@ test('isEnabled follows the engine UI condition grammar', () => {
     assert.strictEqual(isEnabled(undefined, {}), true)
 })
 
+test('isEnabled keeps a gate open while an automation drives its condition', () => {
+    const lfo = { type: 'Oscillator', min: 1, max: 5 }
+    const knob = { type: 'Midi', channel: 1 }
+    const beat = { _ast: { type: 'Audio' } }
+    const bound = { _varRef: 'osc1', value: 0 }
+    const focal = { and: ['viewMode', { param: 'aperture', gt: 0 }] }
+    for (const aperture of [lfo, knob, beat, bound]) {
+        assert.strictEqual(isEnabled(focal, { viewMode: 2, aperture }), true)
+    }
+    assert.strictEqual(isEnabled(focal, { viewMode: 0, aperture: lfo }), false)
+    assert.strictEqual(isEnabled(focal, { viewMode: 2, aperture: 0 }), false)
+    const refract = { and: [{ param: 'refractAAmt', gt: 0 }, { param: 'blendMode', neq: 100 }] }
+    assert.strictEqual(isEnabled(refract, { refractAAmt: lfo, blendMode: 100 }), false)
+    assert.strictEqual(isEnabled(refract, { refractAAmt: lfo, blendMode: 10 }), true)
+    assert.strictEqual(isEnabled({ not: { param: 'a', eq: 1 } }, { a: lfo }), true)
+    assert.strictEqual(isEnabled({ or: [{ param: 'a', eq: 1 }, { param: 'b', gt: 2 }] }, { a: 0, b: lfo }), true)
+    assert.strictEqual(isEnabled('flag', { flag: bound }), true)
+})
+
 test('isEnabled compares resource parameters by name', () => {
     const globals = { tex: { type: 'surface' } }
     const gate = { param: 'tex', neq: 'none' }

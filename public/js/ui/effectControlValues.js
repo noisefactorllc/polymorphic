@@ -90,18 +90,42 @@ export function resourceName(value) {
  * compares, several operators AND together; `{ and }`, `{ or }`, `{ not }`
  * combine. Resource parameters compare by name, so `{ neq: 'none' }` works
  * whichever form the reference takes in program state.
+ *
+ * A parameter driven by an oscillator, MIDI, audio or a variable has no
+ * single value to test, so a condition on it is unknown, and only a
+ * condition that is false whatever the source does disables the control.
  * @param {string|object} condition - The `enabledBy` value
  * @param {Record<string, *>} values - The step's current parameter values
  * @param {Record<string, object>} [globals] - The effect's parameter specs
  * @returns {boolean}
  */
 export function isEnabled(condition, values, globals = {}) {
-    if (typeof condition === 'string') return truthy(valueOf(condition, values, globals))
+    return evaluate(condition, values, globals) !== false
+}
+
+/** @returns {boolean|null} null when the result depends on an automated value */
+function evaluate(condition, values, globals) {
+    if (typeof condition === 'string') {
+        if (isAutomated(values?.[condition])) return null
+        return truthy(valueOf(condition, values, globals))
+    }
     if (!condition || typeof condition !== 'object') return true
-    if (Array.isArray(condition.or)) return condition.or.some(c => isEnabled(c, values, globals))
-    if (Array.isArray(condition.and)) return condition.and.every(c => isEnabled(c, values, globals))
-    if (condition.not !== undefined) return !isEnabled(condition.not, values, globals)
+    if (Array.isArray(condition.or)) {
+        const results = condition.or.map(c => evaluate(c, values, globals))
+        if (results.includes(true)) return true
+        return results.includes(null) ? null : false
+    }
+    if (Array.isArray(condition.and)) {
+        const results = condition.and.map(c => evaluate(c, values, globals))
+        if (results.includes(false)) return false
+        return results.includes(null) ? null : true
+    }
+    if (condition.not !== undefined) {
+        const result = evaluate(condition.not, values, globals)
+        return result === null ? null : !result
+    }
     if (!condition.param) return true
+    if (isAutomated(values?.[condition.param])) return null
 
     const value = valueOf(condition.param, values, globals)
     const ops = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'notIn']
@@ -148,6 +172,14 @@ export function gateValues(values, globals, lookupEnum) {
         if (path) out[name] = path
     }
     return out
+}
+
+function isAutomated(value) {
+    if (!value || typeof value !== 'object') return false
+    return !!(value._varRef
+        || value.type === 'Oscillator' || value._ast?.type === 'Oscillator'
+        || value.type === 'Midi' || value._ast?.type === 'Midi'
+        || value.type === 'Audio' || value._ast?.type === 'Audio')
 }
 
 function same(a, b) {
