@@ -175,9 +175,15 @@ test('a failed native input keeps its selected identity and the enable button pe
     // the way the harness's grant path does.
     await clickSyncAudioConnectRidingHelloDeadline(page)
     await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_fail_after_2')
+    // The panel formats the device's own failure through the SDK's
+    // classification as "Sync audio: Audio source unavailable, busy,
+    // disconnected, or permission denied", and a lifecycle close can arrive
+    // through related formatting ("Sync audio: control connection closed").
+    // Match the classified failure message so a close can never stand in for
+    // the intended fixture failure.
     for (let attempt = 0; attempt < 2; attempt++) {
-        await clickSyncAudioEnableRidingHelloDeadline(page, 'Sync audio:')
-        await expect(page.locator('[data-id=audio-status]')).toContainText('Sync audio:')
+        await clickSyncAudioEnableRidingHelloDeadline(page, 'Audio source unavailable')
+        await expect(page.locator('[data-id=audio-status]')).toContainText('Audio source unavailable')
         await expect(page.locator('[data-id=audio-toggle]')).toHaveText('enable')
         await expect(page.locator('[data-id=audio-device]')).toHaveValue('sync-audio:audio_fail_after_2')
     }
@@ -188,7 +194,7 @@ test('a permission-denied native input reports the denial and a working source s
     await page.evaluate(() => window.__poly.liveInputsPanel.open())
     await clickSyncAudioConnectRidingHelloDeadline(page)
     await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_permission_denied')
-    await clickSyncAudioEnableRidingHelloDeadline(page, /audio input failed: (?!control connection closed)/)
+    await clickSyncAudioEnableRidingHelloDeadline(page, /audio input failed: (?!.*control connection closed)/)
     // The daemon rejects the open with "Audio permission denied"; the panel
     // surfaces it as an audio-input failure, keeps the enable button on
     // "enable" for an explicit retry, and never falls back to the microphone.
