@@ -9,6 +9,7 @@
  */
 
 import { registerEscapeable, unregisterEscapeable } from 'handfish'
+import { isHandfishControlFocus, isOverlayOpen } from './shortcutGuard.js'
 
 const STYLES_ID = 'shortcuts-dialog-styles'
 if (!document.getElementById(STYLES_ID)) {
@@ -209,6 +210,12 @@ class ShortcutsDialog {
             if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 const tag = (e.target?.tagName || '').toUpperCase()
                 if (tag === 'TEXTAREA' || tag === 'INPUT') return
+                // With the dialog already open, ? still toggles it closed.
+                // Otherwise the key belongs to a focused handfish control
+                // trigger (select-dropdown type-ahead, toggle switch,
+                // menu-bar trigger) or to an open overlay: pressing ? behind
+                // the View menu stacked the dialog over the still-open menu.
+                if (!this._open && (isHandfishControlFocus() || isOverlayOpen())) return
                 e.preventDefault()
                 this.toggle()
             }

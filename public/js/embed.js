@@ -40,6 +40,7 @@ import { snapshotHistory } from './ui/snapshotHistory.js'
 import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
 import { shortcutsDialog } from './ui/shortcutsDialog.js'
+import { isHandfishControlFocus, isOverlayOpen } from './ui/shortcutGuard.js'
 import { outputPicker, switchOutputSurface, surfacesWrittenInDsl, effectiveRenderTarget } from './ui/outputPicker.js'
 import { initializeSyncOutputController, createSyncOutputConnectionProvider } from './syncOutput.js'
 import { createSyncOutputDialog } from './ui/syncOutputDialog.js'
@@ -2477,6 +2478,12 @@ async function startShader() {
             if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
             if (e.key !== 't' && e.key !== 'T') return
             if (isEditingFocus()) return
+            // A focused handfish control trigger (select-dropdown type-ahead,
+            // toggle switch, menu-bar trigger) owns the key, and so does an
+            // open overlay: tapping tempo behind the View menu retimed the
+            // performance while the user was picking a parameter value or
+            // reading a menu.
+            if (isHandfishControlFocus() || isOverlayOpen()) return
             tempoController.tap()
         })
         // Wire recorder state into status row. "standard" preset records at
@@ -2694,6 +2701,12 @@ function setupMenuBar() {
                     // digit the user meant for the editor.
                     if (!bootFocusSeed) return
                 }
+                // A focused handfish control trigger (select-dropdown
+                // type-ahead, toggle switch, menu-bar trigger) owns the digit,
+                // and so does an open overlay: recalling a scene behind the
+                // shortcuts dialog or an open menu silently replaced the
+                // program while the user was working with that surface.
+                if (isHandfishControlFocus() || isOverlayOpen()) return
                 const dsl = scenes.load(slot)
                 if (dsl) renderer.images = scenes.images(slot)
                 if (dsl && dslEditor) {
