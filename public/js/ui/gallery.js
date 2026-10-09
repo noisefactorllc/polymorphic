@@ -392,7 +392,7 @@ export async function pickRandomExample() {
 async function loadBlasterFeed({ force = false } = {}) {
     const stale = (Date.now() - cachedBlasterFetchedAt) > BLASTER_CACHE_MS
     if (cachedBlasterFeed && !force && !stale) return cachedBlasterFeed
-    const res = await fetch(`${BLASTER_FEED_URL}?page=0&limit=100`, { cache: 'no-store' })
+    const res = await fetch(`${BLASTER_FEED_URL}?page=0&limit=250`, { cache: 'no-store' })
     if (!res.ok) throw new Error(`Blaster feed HTTP ${res.status}`)
     const data = await res.json()
     cachedBlasterFeed = data?.compositions || []
