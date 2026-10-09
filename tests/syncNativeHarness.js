@@ -175,11 +175,13 @@ export function installSenderTransportCut(getEndpoint) {
     }
 }
 
-// Everything a receiver leg needs before the acceptance poll: viewport
-// routing, the observed-socket bundle override, the full-app boot, and the
-// connect/enable lifecycle with its bounded deadline-close retries.
-export function createNativeReceiverConnect(setup, getEndpoint) {
-    return async function connectNativeReceiver(page, backend, viewport = null, endpointGetter = null) {
+// Everything a receiver leg needs before output starts: the observed-socket
+// bundle override, the full-app boot, and the audio connect/enable lifecycle
+// with its bounded deadline-close retries. The audio grant it publishes is
+// the one the video output reuses — the routed client refuses to pair again
+// for video, so any video path that re-pairs fails the run.
+export function createNativeAudioGrant(setup, getEndpoint) {
+    return async function connectNativeAudioGrant(page, backend, viewport = null, endpointGetter = null) {
         const receiverEndpoint = endpointGetter || getEndpoint
         if (viewport) {
             // The app floors CSS×DPR for the canvas buffer, so an odd CSS
@@ -248,6 +250,13 @@ export function createNativeReceiverConnect(setup, getEndpoint) {
                 if (attempt === 2 || !status.includes('control connection closed')) throw error
             }
         }
+    }
+}
+
+export function createNativeReceiverConnect(setup, getEndpoint) {
+    const connectNativeAudioGrant = createNativeAudioGrant(setup, getEndpoint)
+    return async function connectNativeReceiver(page, backend, viewport = null, endpointGetter = null) {
+        await connectNativeAudioGrant(page, backend, viewport, endpointGetter)
         await page.evaluate(async () => {
             const sync = await import('/js/sync/audioInput.js')
             await sync.connectSyncAudio()
@@ -258,7 +267,38 @@ export function createNativeReceiverConnect(setup, getEndpoint) {
     }
 }
 
-export async function acceptNativeReceiverBytes(page) {
+// Drives the Sync output lifecycle through the product's real dialog
+// controls — menu open, then the dialog's own check → connect → start
+// clicks — instead of direct controller calls, so the browser-level path is
+// what runs. Returns the action/state locators for the spec's stop and
+// reconnect clicks.
+export function createNativeOutputDialogDrive(setup, getEndpoint) {
+    const connectNativeAudioGrant = createNativeAudioGrant(setup, getEndpoint)
+    return async function driveNativeOutputDialog(page, backend = 'webgl2') {
+        await connectNativeAudioGrant(page, backend)
+        await page.evaluate(() => document.getElementById('syncOutputMenuItem').click())
+        const dialog = page.locator('#syncOutputDialog')
+        await expect(dialog).toBeVisible()
+        const action = page.locator('#syncOutputAction')
+        const state = page.locator('#syncOutputStateText')
+        // Opening from idle runs the availability check itself; wait for the
+        // action it lands on.
+        await expect(action).toHaveText('Connect Sync', { timeout: 15_000 })
+        await action.click()
+        await expect(state).toHaveText('Connected', { timeout: 15_000 })
+        await expect(action).toHaveText('Start sending')
+        await action.click()
+        await expect(state).toHaveText('Sending', { timeout: 15_000 })
+        await expect(page.locator('#syncOutputLiveBadge')).toBeVisible()
+        return { action, state, dialog }
+    }
+}
+
+// Poll the native receiver until it has accepted real rendered bytes from
+// the live sender: the acceptance checksum must match one frame the browser
+// actually sent, with zero rejects and zero failures. Returns the accepted
+// stats. The page's output/audio stay live afterwards.
+export async function pollReceiverAccepted(page) {
     const receiverStatus = () => page.evaluate(async () => {
         const output = window.__poly.syncOutputController
         const client = output._client, sender = output._sender
@@ -305,7 +345,16 @@ export async function acceptNativeReceiverBytes(page) {
     const stats = await page.evaluate(() => window.nativeReceiverStats)
     expect(Number(stats.rejected)).toBe(0)
     expect(Number(stats.failed)).toBe(0)
-    await page.evaluate(() => window.__poly.syncOutputController.stop())
+    return stats
+}
+
+// Full receiver acceptance plus the lifecycle tail: stop the output (through
+// the UI when `stop` is given), then a synthetic pagehide must disable the
+// enabled audio input and leave the output controller idle.
+export async function acceptNativeReceiverBytes(page, { stop } = {}) {
+    await pollReceiverAccepted(page)
+    if (stop) await stop(page)
+    else await page.evaluate(() => window.__poly.syncOutputController.stop())
     expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(true)
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
     expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)

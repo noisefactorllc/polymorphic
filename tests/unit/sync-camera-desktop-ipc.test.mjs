@@ -53,7 +53,8 @@ function makeTempRingFile(fs, os, path) {
         ringPath,
         // Publishes one complete frame into the ring, mirroring the writer's
         // seqlock: odd sequence while the payload is written, even after.
-        writeFrame(fs, sequence, presentationTimeUs) {
+        // `fill` distinguishes a later overwrite from the original payload.
+        writeFrame(fs, sequence, presentationTimeUs, fill = 0xab) {
             const slotIndex = Number(sequence % BigInt(FRAME_RING_SLOTS))
             const slotHeaderOffset = 32 + slotIndex * 32
             const payloadOffset = HEADER_BYTES + slotIndex * FRAME_SLOT_BYTES
@@ -65,7 +66,7 @@ function makeTempRingFile(fs, os, path) {
             slotHeader.writeUInt32LE(CANVAS_HEIGHT, 20)
             slotHeader.writeUInt32LE(CANVAS_WIDTH * 4, 24)
             fs.writeSync(fd, slotHeader, 0, 32, slotHeaderOffset)
-            fs.writeSync(fd, Buffer.alloc(16, 0xab), 0, 16, payloadOffset)
+            fs.writeSync(fd, Buffer.alloc(16, fill), 0, 16, payloadOffset)
             const seqBuf = Buffer.alloc(8)
             seqBuf.writeBigUInt64LE(sequence, 0)
             fs.writeSync(fd, seqBuf, 0, 8, 16)
@@ -166,29 +167,55 @@ test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent co
             assert.equal(window.sent[0].channel, 'sync-camera:frame')
         }
 
+        // Deferred consumers must observe their delivered bytes unchanged
+        // across a full wrap of the three-slot ring: frame 1 lives in slot
+        // 1 until frame 4 rewrites it, frame 2 lives in slot 2 until frame 5
+        // rewrites it, and frame 3 passes through slot 0. A shell that
+        // delivered a reused slot buffer — or handed one subscriber's copy
+        // to both — would surface the newer 0xcd payload here instead of
+        // each window's own stable copy.
+        for (let sequence = 3n; sequence <= 5n; sequence++) {
+            fixture.writeFrame(fs, sequence, sequence * 1000n, 0xcd)
+            poll()
+        }
+        // The overwrite actually happened: all three slots now begin with
+        // the 0xcd payload, and the wrap delivered frames 3–5 to both
+        // windows by sequence.
+        for (const slot of reader.slotBuffers) {
+            assert.equal(slot.subarray(0, 16).equals(Buffer.alloc(16, 0xcd)), true)
+        }
+        for (const window of [windowA, windowB]) {
+            assert.deepEqual(window.sent.slice(0, 5).map(({ frame }) => frame.sequence), [1, 2, 3, 4, 5])
+            for (const frame of window.sent.slice(0, 2).map(({ frame }) => frame)) {
+                assert.equal(frame.buffer.subarray(0, 16).equals(Buffer.alloc(16, 0xab)), true,
+                    `frame ${frame.sequence} must keep its own bytes after its ring slot is reused`)
+                assert.equal(frame.buffer.includes(0xcd), false)
+            }
+        }
+
         // One window going away must not disturb the other consumer.
         windowA.destroy()
         assert.equal(reader.subscribers.size, 1)
-        fixture.writeFrame(fs, 3n, 3000n)
+        fixture.writeFrame(fs, 6n, 6000n)
         poll()
-        assert.equal(windowA.sent.length, 2)
-        assert.ok(windowB.sent.some(({ frame }) => frame.sequence === 3))
+        assert.equal(windowA.sent.length, 5)
+        assert.ok(windowB.sent.some(({ frame }) => frame.sequence === 6))
 
         // The last consumer unsubscribing stops the shared reader entirely.
         ipc.emit('sync-camera:stop', { sender: windowB })
         assert.equal(reader.active, false)
         assert.equal(reader.fd, null)
         const deliveredAfterStop = windowB.sent.length
-        fixture.writeFrame(fs, 4n, 4000n)
+        fixture.writeFrame(fs, 7n, 7000n)
         poll()
         assert.equal(windowB.sent.length, deliveredAfterStop)
 
         // A returning consumer restarts the shared reader from a fresh watermark.
         ipc.emit('sync-camera:start', { sender: windowB })
         assert.equal(reader.active, true)
-        fixture.writeFrame(fs, 5n, 5000n)
+        fixture.writeFrame(fs, 8n, 8000n)
         poll()
-        assert.ok(windowB.sent.some(({ frame }) => frame.sequence === 5))
+        assert.ok(windowB.sent.some(({ frame }) => frame.sequence === 8))
         ipc.emit('sync-camera:stop', { sender: windowB })
         assert.equal(reader.active, false)
         assert.equal(reader.fd, null)

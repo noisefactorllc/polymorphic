@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, acceptNativeReceiverBytes, installSenderTransportCut } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, createNativeOutputDialogDrive, acceptNativeReceiverBytes, pollReceiverAccepted, installSenderTransportCut } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const cut = installSenderTransportCut(getEndpoint)
 const setup = createSetup(getEndpoint)
 const connectNativeReceiver = createNativeReceiverConnect(setup, getEndpoint)
+const driveNativeOutputDialog = createNativeOutputDialogDrive(setup, getEndpoint)
 
 for (const channels of [1, 2, 8, 32]) {
     test(`native ${channels}-channel audio reaches every shader channel and releases capture`, async ({ page }) => {
@@ -205,4 +206,48 @@ test('a permission-denied native input reports the denial and a working source s
             .then(devices => devices.find(source => source.id === 'sync-audio:audio_permission_denied')?.name)))
         .toBe('Restricted device · Sync')
     await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.disable())
+})
+
+test('the Sync output dialog drives connect, start, stop, and reconnect against the native receiver', async ({ page }) => {
+    test.slow()
+    // The brief requires real browser controls for the output lifecycle, so
+    // every state transition here is a click on the product's own dialog —
+    // menu open, check on open, Connect Sync, Start sending — never a direct
+    // controller call. The audio grant is still earned through the live-inputs
+    // panel (the harness), and the video client refuses to pair again, so the
+    // dialog's connect must reuse the shared grant.
+    const { action, state, dialog } = await driveNativeOutputDialog(page, 'webgl2')
+    // The counters the dialog renders are the controller's real local stats:
+    // actual sender frames, not fake SDK calls.
+    await expect.poll(async () => Number(await page.locator('#syncOutputSent').textContent()), { timeout: 15_000 })
+        .toBeGreaterThan(0)
+    // The native receiver accepts real rendered bytes while the dialog runs
+    // the output.
+    await pollReceiverAccepted(page)
+    // Stop through the dialog's own Stop sending button: the output keeps the
+    // connected client and lands on Ready with the connect action offered
+    // again for an explicit reconnect.
+    await expect(action).toHaveText('Stop sending')
+    await action.click()
+    await expect(state).toHaveText('Ready', { timeout: 15_000 })
+    // Reconnect through the same controls and send again.
+    await expect(action).toHaveText('Connect Sync')
+    await action.click()
+    await expect(state).toHaveText('Connected', { timeout: 15_000 })
+    await expect(action).toHaveText('Start sending')
+    await action.click()
+    await expect(state).toHaveText('Sending', { timeout: 15_000 })
+    await expect(page.locator('#syncOutputLiveBadge')).toBeVisible()
+    await pollReceiverAccepted(page)
+    // Stop again through the dialog, then close it. A synthetic pagehide must
+    // afterwards disable the still-enabled audio input and idle the output.
+    await expect(action).toHaveText('Stop sending')
+    await action.click()
+    await expect(state).toHaveText('Ready', { timeout: 15_000 })
+    await expect(page.locator('#syncOutputFailed')).toHaveText('0')
+    await page.click('#syncOutputCloseBtn')
+    await expect(dialog).not.toBeVisible()
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
+    await expect.poll(() => page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)
+    await expect.poll(() => page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
 })
