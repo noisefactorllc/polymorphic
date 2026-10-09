@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -68,6 +69,25 @@ test('every production SDK import points at a pinned snapshot with checksums', a
         const sums = await readFile(resolve(root, `public/js/sync/sdk/${version}/SHA256SUMS`), 'utf8')
         assert.match(sums, /^[a-f0-9]{64}  browser\//m,
             `snapshot ${version} must keep its immutable manifest`)
+    }
+})
+
+test('every vendored snapshot byte matches its SHA256SUMS manifest', async () => {
+    // The manifest's existence is checked above; this closes the enforcement
+    // gap: a silently edited vendored module must fail the suite instead of
+    // shipping under a manifest that still names the original bytes.
+    for (const version of Object.values(PINNED_SNAPSHOTS)) {
+        const sums = await readFile(resolve(root, `public/js/sync/sdk/${version}/SHA256SUMS`), 'utf8')
+        const lines = sums.split('\n').filter(line => line.trim().length > 0)
+        assert.ok(lines.length > 0, `snapshot ${version} manifest is empty`)
+        for (const line of lines) {
+            const [hash, relative] = line.trim().split(/\s+/)
+            assert.match(hash, /^[a-f0-9]{64}$/, `snapshot ${version}: bad manifest line ${JSON.stringify(line)}`)
+            const bytes = await readFile(resolve(root, `public/js/sync/sdk/${version}`, relative))
+            const actual = createHash('sha256').update(bytes).digest('hex')
+            assert.equal(actual, hash,
+                `snapshot ${version}: ${relative} no longer matches its pinned hash`)
+        }
     }
 })
 

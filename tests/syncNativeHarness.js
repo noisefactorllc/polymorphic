@@ -103,6 +103,47 @@ export function createSetup(getEndpoint) {
 // would — an abrupt teardown with no WebSocket close frame, so the daemon
 // reaps the sender from the data socket it owns and the browser surfaces an
 // abnormal (1006) closure. Control and audio traffic never touches the cut.
+// Restricted runners (the macOS GPU host broker) only permit explicit
+// fixed loopback ports (43117-43126), so an ephemeral listen(0) fails with
+// EPERM there. Bind in candidate order [NM_TS_PORT, ephemeral, fixed range],
+// each attempt a fresh server with a one-shot error handler; the request
+// handler and assertions stay untouched.
+const FIXED_FALLBACK_PORTS = [43117, 43118, 43119, 43120, 43121, 43122, 43123, 43124, 43125, 43126]
+let fixedFallbackCursor = 0
+
+function listenWithFallback(server, preferredPort = 0) {
+    const candidates = []
+    if (preferredPort === 0) {
+        const override = Number.parseInt(process.env.NM_TS_PORT ?? '', 10)
+        if (Number.isInteger(override) && override > 0 && override <= 65535) candidates.push(override)
+        candidates.push(0)
+        for (let i = 0; i < FIXED_FALLBACK_PORTS.length; i++) {
+            candidates.push(FIXED_FALLBACK_PORTS[(fixedFallbackCursor + i) % FIXED_FALLBACK_PORTS.length])
+        }
+        fixedFallbackCursor = (fixedFallbackCursor + 1) % FIXED_FALLBACK_PORTS.length
+    } else {
+        candidates.push(preferredPort)
+    }
+    return new Promise((resolve, reject) => {
+        const attempt = (index, lastError) => {
+            if (index >= candidates.length) {
+                reject(lastError ?? new Error(`could not bind on any candidate port (${candidates.join(', ')})`))
+                return
+            }
+            const onError = err => {
+                server.close()
+                attempt(index + 1, err)
+            }
+            server.once('error', onError)
+            server.listen(candidates[index], '127.0.0.1', () => {
+                server.removeListener('error', onError)
+                resolve(server.address().port)
+            })
+        }
+        attempt(0, null)
+    })
+}
+
 export function installSenderTransportCut(getEndpoint) {
     let forwarder = null, control = null, cutPort = null
     const dataConnections = new Set()
@@ -152,14 +193,8 @@ export function installSenderTransportCut(getEndpoint) {
             destroyDataConnections()
         })
         await Promise.all([
-            new Promise((resolve, reject) => {
-                forwarder.once('error', reject)
-                forwarder.listen(0, '127.0.0.1', resolve)
-            }),
-            new Promise((resolve, reject) => {
-                control.once('error', reject)
-                control.listen(0, '127.0.0.1', resolve)
-            }),
+            listenWithFallback(forwarder),
+            listenWithFallback(control),
         ])
         cutPort = control.address().port
     })
