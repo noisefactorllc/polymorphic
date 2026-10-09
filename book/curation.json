@@ -17,7 +17,10 @@
     "synth/scope": "needs microphone access, which a reader turning pages should not be asked for",
     "synth/spectrum": "needs microphone access, which a reader turning pages should not be asked for",
     "render/meshLoader": "loads geometry into textures and draws nothing on its own",
-    "render/meshRender": "the mesh path is a proof of concept and paints one flat tone here"
+    "render/meshRender": "the mesh path is a proof of concept and paints one flat tone here",
+    "points/heightGrid": "the effect arrived upstream after the last book pass and its page has not been written yet",
+    "render/renderLandscape3d": "the effect arrived upstream after the last book pass and its page has not been written yet",
+    "synth3d/heightmap3d": "the effect arrived upstream after the last book pass and its page has not been written yet"
   },
   "programs": {
     "filter/blur": {

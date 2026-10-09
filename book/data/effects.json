@@ -2052,10 +2052,10 @@
         "antialiasing"
       ],
       "starter": false,
-      "explicit": false,
+      "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .fxaa()\n  .write(o0)\n\nrender(o0)",
+      "program": "search filter, synth\n\npattern(type: stripes, scale: 10, rotation: 30, smoothness: 0.001, bgColor: #666666)\n  .fxaa()\n  .write(o0)\nrender(o0)",
       "params": [
         {
           "name": "strength",
@@ -3922,7 +3922,7 @@
         "color"
       ],
       "starter": false,
-      "explicit": false,
+      "explicit": true,
       "curated": true,
       "curatedWhy": "auto levels does nothing to a picture that already fills the range, and nothing visible at all without the flat original beside it: washed out on the right, stretched on the left",
       "program": "search filter, mixer, synth\n\nperlin(scale: 55, octaves: 3, colorMode: rgb, speed: 0)\n  .adjust(contrast: 0.08, brightness: 1.5)\n  .write(o0)\n\nread(o0)\n  .normalize()\n  .split(tex: read(o0), rotation: 90)\n  .write(o1)\n\nrender(o1)\n",
@@ -4914,7 +4914,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nnoise(ridges: true, colorMode: mono)\n.prismaticAberration(modulate: true)\n.write(o0)\nrender(o0)",
+      "program": "search filter, synth\n\nnoise(ridges: true)\n.prismaticAberration(modulate: true)\n.write(o0)\nrender(o0)",
       "params": [
         {
           "name": "aberration",
@@ -5729,7 +5729,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\npattern(type: dots, smoothness: 0.04)\n  .sharpen(amount: 5)\n  .write(o0)\nrender(o0)",
+      "program": "search filter, synth\n\npattern(type: dots, smoothness: 0.04, rotation: 15)\n  .sharpen(amount: 5)\n  .write(o0)\nrender(o0)",
       "params": [
         {
           "name": "amount",
@@ -5878,7 +5878,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nmodPattern()\n.smooth(type: blur, radius: 4)\n.write(o0)\nrender(o0)",
+      "program": "search filter, synth\n\npattern(type: stripes, scale: 5, rotation: 88, smoothness: 0.001, bgColor: #808080)\n.smooth(type: blur, radius: 4)\n.write(o0)\nrender(o0)",
       "params": [
         {
           "name": "type",
@@ -6282,7 +6282,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nperlin()\n  .spookyTicker()\n  .write(o0)\nrender(o0)",
+      "program": "search filter, synth\n\nsolid(color: #101820)\n  .spookyTicker()\n  .write(o0)\nrender(o0)",
       "params": [
         {
           "name": "rows",
@@ -6547,7 +6547,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nperlin(scale: 100)\n  .strayHair()\n  .write(o0)\nrender(o0)",
+      "program": "search filter, synth\n\nperlin(scale: 100)\n  .strayHair(density: 1, alpha: 1)\n  .write(o0)\nrender(o0)",
       "params": [
         {
           "name": "density",
@@ -7788,10 +7788,10 @@
         "artist"
       ],
       "starter": false,
-      "explicit": false,
+      "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search filter, synth\n\nnoise(seed: 1, ridges: true)\n  .unsharpMask()\n  .write(o0)\n\nrender(o0)",
+      "program": "search filter, synth\n\nnoise(scaleX: 20, scaleY: 20, octaves: 4)\n  .unsharpMask()\n  .write(o0)\nrender(o0)",
       "params": [
         {
           "name": "amount",
@@ -8553,6 +8553,16 @@
         {
           "name": "tex",
           "label": "source b",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "baseTex",
+          "label": "mask background",
           "type": "surface",
           "control": null,
           "default": "none",
@@ -9958,7 +9968,7 @@
       "explicit": false,
       "curated": true,
       "curatedWhy": "pointsRender viewMode was emitted as raw integer 1 instead of the enum choice ortho matching the prose",
-      "program": "search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .attractor()\n  .pointsRender(viewMode: ortho)\n  .write(o0)\n\nrender(o0)",
+      "program": "search points, synth, render\n\nnoise()\n  .pointsEmit()\n  .attractor()\n  .pointsRender(viewMode: ortho)\n  .write(o0)\n\nrender(o0)\n",
       "params": [
         {
           "name": "stateSize",
@@ -10025,7 +10035,7 @@
       "explicit": true,
       "curated": true,
       "curatedWhy": "upstream defaultProgram passed numeric 512 instead of enum choice x512 to pointsEmit",
-      "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: x512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)",
+      "program": "search points, synth, render\n\nperlin()\n  .pointsEmit(stateSize: x512)\n  .buddhabrot()\n  .pointsRender(intensity: 99)\n  .write(o0)\n\nrender(o0)\n",
       "params": [
         {
           "name": "stateSize",
@@ -10979,8 +10989,8 @@
           "type": "int",
           "control": "dropdown",
           "default": 1,
-          "min": null,
-          "max": null,
+          "min": 0,
+          "max": 7,
           "choices": [
             "texture",
             "circle",
@@ -11101,11 +11111,12 @@
           "type": "int",
           "control": "dropdown",
           "default": 0,
-          "min": null,
-          "max": null,
+          "min": 0,
+          "max": 2,
           "choices": [
             "flat",
-            "ortho"
+            "ortho",
+            "perspective"
           ]
         },
         {
@@ -11166,6 +11177,66 @@
           "default": 0,
           "min": -50,
           "max": 50,
+          "choices": null
+        },
+        {
+          "name": "posZ",
+          "label": "pos z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -200,
+          "max": 200,
+          "choices": null
+        },
+        {
+          "name": "fieldOfView",
+          "label": "field of view",
+          "type": "float",
+          "control": "slider",
+          "default": 60,
+          "min": 10,
+          "max": 150,
+          "choices": null
+        },
+        {
+          "name": "sizeDistance",
+          "label": "size fade distance",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 500,
+          "choices": null
+        },
+        {
+          "name": "brightnessDistance",
+          "label": "brightness fade distance",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 500,
+          "choices": null
+        },
+        {
+          "name": "aperture",
+          "label": "aperture",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 20,
+          "choices": null
+        },
+        {
+          "name": "focalDistance",
+          "label": "focal dist",
+          "type": "float",
+          "control": "slider",
+          "default": 80,
+          "min": 1,
+          "max": 500,
           "choices": null
         }
       ]
@@ -11304,11 +11375,12 @@
           "type": "int",
           "control": "dropdown",
           "default": 0,
-          "min": null,
-          "max": null,
+          "min": 0,
+          "max": 2,
           "choices": [
             "flat",
-            "ortho"
+            "ortho",
+            "perspective"
           ]
         },
         {
@@ -11369,6 +11441,26 @@
           "default": 0,
           "min": -50,
           "max": 50,
+          "choices": null
+        },
+        {
+          "name": "posZ",
+          "label": "pos z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -200,
+          "max": 200,
+          "choices": null
+        },
+        {
+          "name": "fieldOfView",
+          "label": "field of view",
+          "type": "float",
+          "control": "slider",
+          "default": 60,
+          "min": 10,
+          "max": 150,
           "choices": null
         },
         {
@@ -11714,7 +11806,7 @@
       "explicit": true,
       "curated": false,
       "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\nnoise3d()\n.renderLit3d(specularIntensity: 2, shininess: 256)\n.write(o0)\nrender(o0)",
+      "program": "search synth3d, filter3d, render\n\nnoise3d()\n.renderLit3d(specularIntensity: 2, shininess: 64)\n.write(o0)\nrender(o0)",
       "params": [
         {
           "name": "volumeSize",
@@ -12075,7 +12167,7 @@
       "slug": "cell",
       "func": "cell",
       "title": "Cell",
-      "description": "Cellular/Voronoi noise with distance metrics",
+      "description": "Cellular/Voronoi noise with selectable cell shapes",
       "tags": [
         "noise",
         "geometric"
@@ -16101,7 +16193,7 @@
           "name": "colorMode",
           "label": "color mode",
           "type": "int",
-          "control": "dropdown",
+          "control": null,
           "default": 0,
           "min": null,
           "max": null,
@@ -16200,6 +16292,63 @@
     }
   ],
   "excludedEffects": [
+    {
+      "id": "points/heightGrid",
+      "func": "heightGrid",
+      "params": [
+        {
+          "name": "heightTex",
+          "label": "height map",
+          "type": "surface",
+          "control": null,
+          "default": "inputTex",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "diffuseTex",
+          "label": "diffuse map",
+          "type": "surface",
+          "control": null,
+          "default": "inputTex",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "gridScale",
+          "label": "grid width",
+          "type": "float",
+          "control": "slider",
+          "default": 80,
+          "min": 1,
+          "max": 400,
+          "choices": null
+        },
+        {
+          "name": "heightScale",
+          "label": "height",
+          "type": "float",
+          "control": "slider",
+          "default": 20,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "heightOffset",
+          "label": "height offset",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    },
     {
       "id": "render/meshLoader",
       "func": "meshLoader",
@@ -16465,6 +16614,249 @@
           "choices": [
             "solid",
             "wireframe"
+          ]
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "render/renderLandscape3d",
+      "func": "renderLandscape3d",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": null,
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "threshold",
+          "label": "density threshold",
+          "type": "float",
+          "control": null,
+          "default": 0.5,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "densitySource",
+          "label": "density source",
+          "type": "int",
+          "control": null,
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "geometry"
+          ]
+        },
+        {
+          "name": "zoom",
+          "label": "zoom",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.25,
+          "max": 4,
+          "choices": null
+        },
+        {
+          "name": "panX",
+          "label": "pan x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -1,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "panY",
+          "label": "pan y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -1,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "lightDirection",
+          "label": "light direction",
+          "type": "vec3",
+          "control": "vector3",
+          "default": [
+            -0.4,
+            0.85,
+            0.6
+          ],
+          "min": -1,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "ambient",
+          "label": "ambient light",
+          "type": "float",
+          "control": "slider",
+          "default": 0.35,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "diffuseIntensity",
+          "label": "diffuse light",
+          "type": "float",
+          "control": "slider",
+          "default": 0.85,
+          "min": 0,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "specularIntensity",
+          "label": "specular light",
+          "type": "float",
+          "control": "slider",
+          "default": 0.12,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "background color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.025,
+            0.045,
+            0.075
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "background opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "viewMode",
+          "label": "view",
+          "type": "int",
+          "control": "dropdown",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "choices": [
+            "ortho",
+            "perspective"
+          ]
+        },
+        {
+          "name": "rotateX",
+          "label": "rotate x",
+          "type": "float",
+          "control": "slider",
+          "default": 0.3,
+          "min": 0,
+          "max": 6.283185,
+          "choices": null
+        },
+        {
+          "name": "rotateY",
+          "label": "rotate y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 6.283185,
+          "choices": null
+        },
+        {
+          "name": "rotateZ",
+          "label": "rotate z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 6.283185,
+          "choices": null
+        },
+        {
+          "name": "viewScale",
+          "label": "zoom",
+          "type": "float",
+          "control": null,
+          "default": 0.8,
+          "min": 0.1,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "posX",
+          "label": "pos x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -50,
+          "max": 50,
+          "choices": null
+        },
+        {
+          "name": "posY",
+          "label": "pos y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -50,
+          "max": 50,
+          "choices": null
+        },
+        {
+          "name": "posZ",
+          "label": "pos z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -200,
+          "max": 200,
+          "choices": null
+        },
+        {
+          "name": "fieldOfView",
+          "label": "field of view",
+          "type": "float",
+          "control": "slider",
+          "default": 60,
+          "min": 10,
+          "max": 150,
+          "choices": null
+        },
+        {
+          "name": "filtering",
+          "label": "filtering",
+          "type": "int",
+          "control": "dropdown",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "choices": [
+            "isosurface",
+            "voxel"
           ]
         }
       ],
@@ -20984,6 +21376,68 @@
           "default": 1,
           "min": 0.1,
           "max": 5,
+          "choices": null
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth3d/heightmap3d",
+      "func": "heightmap3d",
+      "params": [
+        {
+          "name": "heightTex",
+          "label": "height image",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "tex",
+          "label": "color image",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "heightScale",
+          "label": "height scale",
+          "type": "float",
+          "control": "slider",
+          "default": 0.35,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "baseHeight",
+          "label": "base height",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 1,
           "choices": null
         }
       ],
