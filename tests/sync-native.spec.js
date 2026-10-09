@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, createNativeOutputDialogDrive, acceptNativeReceiverBytes, pollReceiverAccepted, installSenderTransportCut } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, createNativeOutputDialogDrive, acceptNativeReceiverBytes, pollReceiverAccepted, installSenderTransportCut, clickSyncAudioConnectRidingHelloDeadline, clickSyncAudioEnableRidingHelloDeadline, enableSyncAudioInputRidingHelloDeadline } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const cut = installSenderTransportCut(getEndpoint)
@@ -169,11 +169,14 @@ test('a real sender transport close is recovered through the acceptance poll', a
 test('a failed native input keeps its selected identity and the enable button permits retry', async ({ page }) => {
     await setup(page, true)
     await page.evaluate(() => window.__poly.liveInputsPanel.open())
-    await page.click('[data-id=sync-audio-connect]')
-    await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+    // The connect opens its own control connection, so the daemon's 1 s
+    // control-hello deadline can close it on a saturated page; the panel
+    // surfaces that close for an explicit retry. Ride out exactly that close
+    // the way the harness's grant path does.
+    await clickSyncAudioConnectRidingHelloDeadline(page)
     await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_fail_after_2')
     for (let attempt = 0; attempt < 2; attempt++) {
-        await page.click('[data-id=audio-toggle]')
+        await clickSyncAudioEnableRidingHelloDeadline(page, 'Sync audio:')
         await expect(page.locator('[data-id=audio-status]')).toContainText('Sync audio:')
         await expect(page.locator('[data-id=audio-toggle]')).toHaveText('enable')
         await expect(page.locator('[data-id=audio-device]')).toHaveValue('sync-audio:audio_fail_after_2')
@@ -183,10 +186,9 @@ test('a failed native input keeps its selected identity and the enable button pe
 test('a permission-denied native input reports the denial and a working source stays selectable', async ({ page }) => {
     await setup(page, true)
     await page.evaluate(() => window.__poly.liveInputsPanel.open())
-    await page.click('[data-id=sync-audio-connect]')
-    await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+    await clickSyncAudioConnectRidingHelloDeadline(page)
     await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_permission_denied')
-    await page.click('[data-id=audio-toggle]')
+    await clickSyncAudioEnableRidingHelloDeadline(page, /audio input failed: (?!control connection closed)/)
     // The daemon rejects the open with "Audio permission denied"; the panel
     // surfaces it as an audio-input failure, keeps the enable button on
     // "enable" for an explicit retry, and never falls back to the microphone.
@@ -196,7 +198,7 @@ test('a permission-denied native input reports the denial and a working source s
     // The denial is transient to that source: a healthy fixture on the same
     // daemon still opens and reaches its channels, and the selection moves.
     await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_2')
-    await page.click('[data-id=audio-toggle]')
+    await enableSyncAudioInputRidingHelloDeadline(page)
     await expect(page.locator('[data-id=audio-toggle]')).toHaveText('disable')
     await expect.poll(() => page.evaluate(() =>
         window.__poly.liveInputsPanel._innerRenderer?.audioState

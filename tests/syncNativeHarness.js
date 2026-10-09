@@ -215,6 +215,67 @@ export function installSenderTransportCut(getEndpoint) {
 // with its bounded deadline-close retries. The audio grant it publishes is
 // the one the video output reuses — the routed client refuses to pair again
 // for video, so any video path that re-pairs fails the run.
+// The daemon enforces a 1 s control-hello deadline on every new control
+// connection. On a CPU-saturated headless page (SwiftShader WebGL2 boot at
+// odd viewports) the SDK's hello can land after that deadline, the daemon
+// closes the socket (1008), and the panel surfaces "control connection
+// closed" for an explicit retry — the same retry the enable button offers
+// after a failed native input. Retry that one lifecycle close a bounded
+// number of times; every other status must still reach the expected text
+// within its own wait.
+export async function clickSyncAudioConnectRidingHelloDeadline(page) {
+    for (let attempt = 0; ; attempt++) {
+        await page.click('[data-id=sync-audio-connect]')
+        try {
+            await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+            break
+        } catch (error) {
+            const status = await page.locator('[data-id=sync-audio-status]').textContent()
+            if (attempt === 2 || status !== 'control connection closed') throw error
+        }
+    }
+}
+
+// The enable attempt opens its own control connection, so the daemon's 1 s
+// hello deadline can close it on a saturated page before the source's own
+// failure is observed; the panel then reports the close instead. Click
+// enable again a bounded number of times for exactly that lifecycle close,
+// waiting for the source's expected failure each time; any other status is
+// surfaced as-is for the spec's assertions. The expected failure may be a
+// RegExp so a source whose panel text overlaps the close's wording can
+// still exclude the close itself.
+export async function clickSyncAudioEnableRidingHelloDeadline(page, expectedFailure) {
+    for (let close = 0; ; close++) {
+        await page.click('[data-id=audio-toggle]')
+        try {
+            await expect(page.locator('[data-id=audio-status]')).toContainText(expectedFailure, { timeout: 10_000 })
+            return
+        } catch (error) {
+            const status = await page.locator('[data-id=audio-status]').textContent()
+            if (close === 2 || !status.includes('control connection closed')) throw error
+        }
+    }
+}
+
+// The enable attempt opens its own control connection, so the daemon's 1 s
+// hello deadline can close it on a saturated page before the source opens;
+// the panel then reports the close and leaves the button on "enable". Click
+// enable again a bounded number of times for exactly that lifecycle close,
+// waiting for the successful open each time; any other status is surfaced
+// as-is for the spec's assertions.
+export async function enableSyncAudioInputRidingHelloDeadline(page) {
+    for (let close = 0; ; close++) {
+        await page.click('[data-id=audio-toggle]')
+        try {
+            await expect(page.locator('[data-id=audio-toggle]')).toHaveText('disable', { timeout: 10_000 })
+            return
+        } catch (error) {
+            const status = await page.locator('[data-id=audio-status]').textContent()
+            if (close === 2 || !status.includes('control connection closed')) throw error
+        }
+    }
+}
+
 export function createNativeAudioGrant(setup, getEndpoint) {
     return async function connectNativeAudioGrant(page, backend, viewport = null, endpointGetter = null) {
         const receiverEndpoint = endpointGetter || getEndpoint
@@ -251,24 +312,7 @@ export function createNativeAudioGrant(setup, getEndpoint) {
         await setup(page, true, backend)
         expect(await page.evaluate(() => window.__poly.renderer.backend)).toBe(backend)
         await page.evaluate(() => window.__poly.liveInputsPanel.open())
-        // The daemon enforces a 1 s control-hello deadline on every new control
-        // connection. On a CPU-saturated headless page (SwiftShader WebGL2 boot
-        // at odd viewports) the SDK's hello can land after that deadline, the
-        // daemon closes the socket (1008), and the panel surfaces
-        // "control connection closed" for an explicit retry — the same retry
-        // the enable button offers after a failed native input. Retry that one
-        // lifecycle close a bounded number of times; every other status must
-        // still reach the expected text within its own wait.
-        for (let attempt = 0; ; attempt++) {
-            await page.click('[data-id=sync-audio-connect]')
-            try {
-                await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
-                break
-            } catch (error) {
-                const status = await page.locator('[data-id=sync-audio-status]').textContent()
-                if (attempt === 2 || status !== 'control connection closed') throw error
-            }
-        }
+        await clickSyncAudioConnectRidingHelloDeadline(page)
         await page.selectOption('[data-id=audio-device]', 'sync-audio:audio_2')
         // The enable attempt opens its own control connection, so the same
         // hello deadline can abort it; the panel then reports the failure and
