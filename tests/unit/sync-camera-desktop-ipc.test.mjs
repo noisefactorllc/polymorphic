@@ -156,10 +156,13 @@ test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent co
             const frame = window.sent[0].frame
             assert.equal(frame.width, CANVAS_WIDTH)
             assert.equal(frame.height, CANVAS_HEIGHT)
-            // The reader reuses its slot buffers, so the desktop must clone per
-            // delivery (Electron's webContents.send does) and the product copies
-            // the delivered bytes into a WebCodecs VideoFrame before queueing.
-            assert.equal(frame.buffer, reader.slotBuffers[Number(1n % BigInt(FRAME_RING_SLOTS))])
+            // The reader reuses its slot buffers, so the shell delivers one
+            // stable copy of the slot bytes per frame — never the buffer it
+            // will overwrite on a later poll — and the product copies the
+            // delivered bytes into a WebCodecs VideoFrame before queueing.
+            const slot = reader.slotBuffers[Number(1n % BigInt(FRAME_RING_SLOTS))]
+            assert.notEqual(frame.buffer, slot)
+            assert.equal(frame.buffer.equals(slot.subarray(0, frame.buffer.length)), true)
             assert.equal(window.sent[0].channel, 'sync-camera:frame')
         }
 
