@@ -151,6 +151,8 @@ function stubPipBuilders(picker) {
             running: true,
             disposed: false,
             loseContext: null,
+            start() { renderer.running = true },
+            stop() { renderer.running = false },
             async dispose({ loseContext } = {}) {
                 renderer.disposed = true
                 renderer.loseContext = loseContext === true
@@ -251,6 +253,71 @@ test('while the picker is off a DSL rewrite builds no renderers and clears stale
     assert.strictEqual(picker._previews.size, 0, 'a disabled picker must not spawn previews for new surfaces')
     assert.strictEqual(made.length, 2, 'no additional pip renderer is built while off')
     assert.strictEqual(picker._activeSurface, 3, 'the active surface still tracks the program while off')
+})
+
+test('a disable that lands mid-build stops loops promptly and never starts the in-flight pip', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: true })
+    const built = []
+    // Mirrors the real _createPip contract: the awaited build happens first,
+    // then the pre-start gate re-checks _userEnabled before starting the loop.
+    picker._createPip = async (idx) => {
+        await new Promise(resolve => setTimeout(resolve, 30))
+        const renderer = {
+            running: false,
+            started: false,
+            disposed: false,
+            loseContext: null,
+            start() { renderer.started = true; renderer.running = true },
+            stop() { renderer.running = false },
+            async dispose({ loseContext } = {}) {
+                renderer.disposed = true
+                renderer.loseContext = loseContext === true
+                renderer.running = false
+            },
+        }
+        const removed = { value: false }
+        const pip = {
+            removed,
+            classList: { toggle() {} },
+            setAttribute() {},
+            remove() { removed.value = true },
+        }
+        built.push({ idx, renderer, removed })
+        if (picker._userEnabled) renderer.start()
+        return { pip, canvas: {}, renderer }
+    }
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+    assert.strictEqual(picker._previews.size, 2)
+
+    // A DSL rewrite adds a new surface and its pip build enters its awaited
+    // compile; the user switches the picker off while that build is in flight.
+    const rebuild = picker.setDsl('noise().write(o0)\ngradient().write(o3)\n\nrender(o3)')
+    await new Promise(resolve => setTimeout(resolve, 10))
+    assert.strictEqual(picker.setEnabled(false), false)
+
+    // Prompt stop: the already-built pip loops are stopped synchronously,
+    // not after the in-flight build resolves.
+    for (const entry of [...picker._previews.values()]) {
+        assert.strictEqual(entry.renderer.running, false, 'existing pip loop stops the moment the picker is disabled')
+    }
+
+    await picker._pending
+
+    assert.strictEqual(picker._previews.size, 0, 'no preview survives a disable, even one built mid-flight')
+    const inFlight = built.find(b => b.idx === 3)
+    assert.ok(inFlight, 'the in-flight pip build ran to completion')
+    assert.strictEqual(inFlight.renderer.started, false, 'the in-flight pip loop never started')
+    assert.strictEqual(inFlight.renderer.disposed, true, 'the in-flight pip renderer is disposed')
+    assert.strictEqual(inFlight.renderer.loseContext, true)
+    assert.strictEqual(inFlight.removed.value, true, 'the in-flight pip element never appears')
+    for (const b of built.filter(b => b.idx !== 3)) {
+        assert.strictEqual(b.renderer.started, true, `o${b.idx} ran while the picker was on`)
+        assert.strictEqual(b.renderer.disposed, true, `o${b.idx} renderer disposed by the disable`)
+        assert.strictEqual(b.removed.value, true, `o${b.idx} pip element removed by the disable`)
+    }
+    await rebuild
 })
 
 test('an enabled picker still drops the pip of a surface that stops being written', async () => {

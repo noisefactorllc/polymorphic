@@ -174,11 +174,19 @@ class OutputPicker {
         try {
             if (typeof localStorage !== 'undefined') localStorage.setItem(ENABLED_KEY, this._userEnabled ? '1' : '0')
         } catch {}
+        if (!this._userEnabled) {
+            // Stop the hidden preview loops right away rather than waiting for
+            // any in-flight pip build to finish; the queued step below then
+            // disposes them and drops their pips.
+            for (const [, entry] of this._previews) {
+                try { entry.renderer?.stop() } catch {}
+            }
+        }
         this._refreshVisibility()
         // Serialize through the same single-flight queue as setDsl so a disable
-        // cannot race an in-flight pip build: the queued step stops the hidden
-        // preview renderers when the picker turns off and recreates previews
-        // for the current surfaces when it turns back on.
+        // cannot race an in-flight pip build: the queued step disposes the
+        // hidden preview renderers when the picker turns off and recreates
+        // previews for the current surfaces when it turns back on.
         this._pending = (this._pending || Promise.resolve())
             .then(() => this._applyEnabled())
             .catch(err => console.debug('[OutputPicker] setEnabled chain:', err))
@@ -234,9 +242,16 @@ class OutputPicker {
         // disabled picker must not build hidden renderers at all
         if (this._userEnabled) {
             for (const idx of surfaces) {
-                if (!this._previews.has(idx)) {
-                    this._previews.set(idx, await this._createPip(idx))
+                if (this._previews.has(idx)) continue
+                const entry = await this._createPip(idx)
+                if (!this._userEnabled) {
+                    // The picker was disabled while this pip built: never
+                    // install or start it
+                    try { await entry.renderer?.dispose({ loseContext: true }) } catch {}
+                    entry.pip?.remove()
+                    continue
                 }
+                this._previews.set(idx, entry)
             }
         }
         // Re-sort DOM order to match surface index
@@ -313,7 +328,9 @@ class OutputPicker {
             const ids = effects.map(e => e.effectId)
             if (ids.length > 0) await renderer.loadEffects(ids)
             await renderer.compile(surfaceDsl)
-            renderer.start()
+            // A disable that landed while this pip compiled must never see its
+            // loop start; the caller drops the whole entry instead.
+            if (this._userEnabled) renderer.start()
         } catch (err) {
             console.debug('[OutputPicker] pip compile failed:', err?.message || err)
             if (renderer) {
