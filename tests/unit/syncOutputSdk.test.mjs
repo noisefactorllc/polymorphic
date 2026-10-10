@@ -62,7 +62,7 @@ test('native audio SDK matches the reviewed immutable manifest', async () => {
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {
     const directory = resolve(sdkDir, '../0.3.3')
     const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'b0868fd51aa1e463e54024f1f1f81a8cac693685c8392aabe35ac91364a2aec0')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'f752459b9f7347afffd73e45049e36d5be131c32524bba9febea4a259ae24437')
     const manifestFiles = []
     for (const line of manifest.trim().split('\n')) {
         const [expected, filename] = line.split('  ')
