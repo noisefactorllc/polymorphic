@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test'
 
-test('selected Sync camera reaches a nonzero media step, retries after failure, and releases capture', async ({ page }) => {
-    const dsl = 'search synth\nperlin().write(o1)\nmedia().write(o0)\nrender(o0)'
+// Page setup shared by the Sync camera lifecycle specs: a fake native shared
+// session, a fake enumerated device list, and a canvas captureStream standing
+// in for the virtual camera's getUserMedia track.
+async function prepareCameraPage(page, dsl) {
     await page.goto('/?dsl=' + encodeURIComponent(dsl))
     await page.waitForFunction(() => window.__poly?.renderer && window.__poly?.liveInputsPanel?._panel)
     await page.evaluate(async () => {
@@ -47,22 +49,29 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
             context.drawImage(window.__poly.renderer.canvas, 0, 0, 1, 1)
             return [...context.getImageData(0, 0, 1, 1).data]
         }
+        state.listDevice = () => { state.devices = [{ kind: 'videoinput', label: 'Sync Camera', deviceId: 'sync-camera' }] }
+        state.unlistDevice = () => { state.devices = [] }
     })
+}
+
+test('selected Sync camera reaches a nonzero media step, auto-reopens after a failure, and releases capture', async ({ page }) => {
+    const dsl = 'search synth\nperlin().write(o1)\nmedia().write(o0)\nrender(o0)'
+    await prepareCameraPage(page, dsl)
     await expect(page.locator('[data-id=camera-device] option[value=sync-camera]')).toHaveCount(0)
     await page.evaluate(() => {
-        window.cameraTest.devices = [{ kind: 'videoinput', label: 'Sync Camera', deviceId: 'sync-camera' }]
+        window.cameraTest.listDevice()
         navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
     })
     await expect(page.locator('[data-id=camera-device] option[value=sync-camera]')).toHaveText('Sync Camera')
     await page.selectOption('[data-id=camera-device]', 'sync-camera')
     await page.evaluate(() => {
-        window.cameraTest.devices = []
+        window.cameraTest.unlistDevice()
         navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
     })
     await expect(page.locator('[data-id=camera-device]')).toHaveValue('sync-camera')
     await expect(page.locator('[data-id=camera-device] option[value=sync-camera]')).toHaveText('Sync Camera (unavailable)')
     await page.evaluate(() => {
-        window.cameraTest.devices = [{ kind: 'videoinput', label: 'Sync Camera', deviceId: 'sync-camera' }]
+        window.cameraTest.listDevice()
         navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
     })
     await expect(page.locator('[data-id=camera-device] option[value=sync-camera]')).toHaveText('Sync Camera')
@@ -72,13 +81,57 @@ test('selected Sync camera reaches a nonzero media step, retries after failure, 
     await page.evaluate(() => { window.cameraTest.frame(1000, 'red'); window.cameraTest.frame(1000, 'green') })
     await expect.poll(() => page.evaluate(() => window.cameraTest.uploads)).toEqual([[0, 0, 255, 255], [0, 255, 0, 255]])
     await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
+    // A stale frame fails the session; its device is still enumerated, so the
+    // source retires and reopens on its own — no manual reselect.
     await page.evaluate(() => window.cameraTest.frame(100))
-    await expect(page.locator('[data-id=source-status]')).toContainText('Select webcam to retry')
+    await expect(page.locator('[data-id=source-status]')).toContainText('Reconnecting when the camera returns')
     expect(await page.evaluate(() => window.cameraTest.tracks[0].readyState)).toBe('ended')
-    await page.click('[data-source=webcam]')
-    await expect.poll(() => page.evaluate(() => window.cameraTest.starts)).toBe(2)
+    await expect.poll(() => page.evaluate(() => window.cameraTest.starts), { timeout: 15000 }).toBe(2)
+    await expect(page.locator('[data-id=source-status]')).toContainText('Sync Camera streaming')
     await page.evaluate(() => { window.cameraTest.frame(3000); window.cameraTest.frame(4000) })
     await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([255, 0, 0, 255])
+    await page.click('[data-source=stop]')
+    expect(await page.evaluate(() => window.cameraTest.stops)).toBe(2)
+    expect(await page.evaluate(() => window.cameraTest.tracks.every(track => track.readyState === 'ended'))).toBe(true)
+})
+
+test('an unplugged Sync camera waits while its device is gone and reopens when it returns', async ({ page }) => {
+    const dsl = 'search synth\nperlin().write(o1)\nmedia().write(o0)\nrender(o0)'
+    await prepareCameraPage(page, dsl)
+    await page.evaluate(() => {
+        window.cameraTest.listDevice()
+        navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
+    })
+    await page.selectOption('[data-id=camera-device]', 'sync-camera')
+    await page.click('[data-source=webcam]')
+    await expect.poll(() => page.evaluate(() => window.cameraTest.starts)).toBe(1)
+    await expect.poll(() => page.evaluate(() => window.__poly.renderer.mediaStepIndex), { timeout: 15000 }).toBeGreaterThan(0)
+    await page.evaluate(() => { window.cameraTest.frame(1000); window.cameraTest.frame(2000, 'green') })
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
+    // Unplug: the device leaves the list and the track ends (a device
+    // removal ends its live tracks). The source retires, no reopen fires
+    // while the camera is missing.
+    await page.evaluate(() => {
+        window.cameraTest.unlistDevice()
+        navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
+        const track = window.cameraTest.tracks[0]
+        track.stop()
+        track.dispatchEvent(new Event('ended'))
+    })
+    await expect(page.locator('[data-id=source-status]')).toContainText('Reconnecting when the camera returns')
+    await page.waitForTimeout(900)
+    expect(await page.evaluate(() => window.cameraTest.starts)).toBe(1)
+    expect(await page.evaluate(() => window.cameraTest.stops)).toBe(1)
+    // The camera is enumerated again: the source reopens through the same
+    // path and delivers fresh frames without a manual reselect.
+    await page.evaluate(() => {
+        window.cameraTest.listDevice()
+        navigator.mediaDevices.dispatchEvent(new Event('devicechange'))
+    })
+    await expect.poll(() => page.evaluate(() => window.cameraTest.starts), { timeout: 15000 }).toBe(2)
+    await expect.poll(() => page.evaluate(() => window.__poly.renderer.mediaStepIndex), { timeout: 15000 }).toBeGreaterThan(0)
+    await page.evaluate(() => { window.cameraTest.frame(5000); window.cameraTest.frame(6000, 'green') })
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
     await page.click('[data-source=stop]')
     expect(await page.evaluate(() => window.cameraTest.stops)).toBe(2)
     expect(await page.evaluate(() => window.cameraTest.tracks.every(track => track.readyState === 'ended'))).toBe(true)

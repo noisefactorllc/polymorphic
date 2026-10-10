@@ -1,6 +1,7 @@
 import { SharedAudio } from '../audio.js'
 import { connectSyncAudio, refreshSyncAudioDevices, isSyncAudioSource } from '../sync/audioInput.js'
 import { createSyncCameraSession } from '../sync/cameraSession.js'
+import { watchCameraReturn } from './cameraReopen.js'
 import { storeImageFile } from '../programImages.js'
 
 /**
@@ -22,6 +23,17 @@ let _bundlePromise = null
 function loadBundle() {
     if (!_bundlePromise) _bundlePromise = import('../noisemaker/bundle.js')
     return _bundlePromise
+}
+
+/**
+ * A getUserMedia failure whose camera is missing, not refused: the exact
+ * selected device is not enumerated (NotFoundError, its legacy name, or an
+ * unsatisfiable exact constraint). Permission denials are not missing devices.
+ */
+function isMissingCameraDevice(error) {
+    return error?.name === 'NotFoundError' ||
+        error?.name === 'DevicesNotFoundError' ||
+        error?.name === 'OverconstrainedError'
 }
 
 /**
@@ -639,6 +651,7 @@ class LiveInputsPanel {
         this._sourceLoopGen = 0
         this._sourceGeneration = 0
         this._cameraQueue = null
+        this._cameraReopen = null
         this._sourceCleanup = Promise.resolve()
     }
 
@@ -695,10 +708,24 @@ class LiveInputsPanel {
         if (kind === 'stop') { this._setSourceStatus('none'); return }
         try {
             if (kind === 'webcam' || kind === 'screen') {
-                const deviceId = this._cameraSelect?.value
-                const stream = kind === 'webcam'
-                    ? await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true, audio: false })
-                    : await navigator.mediaDevices.getDisplayMedia({ video: true })
+                const deviceId = this._cameraSelect?.value || ''
+                let stream
+                try {
+                    stream = kind === 'webcam'
+                        ? await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true, audio: false })
+                        : await navigator.mediaDevices.getDisplayMedia({ video: true })
+                } catch (error) {
+                    // A camera missing at start is waited for and opened when
+                    // it appears, the way the Sync platform's render path
+                    // reopens a lost or missing camera. Permission denials and
+                    // every other failure keep the manual-retry behavior.
+                    if (kind === 'webcam' && isMissingCameraDevice(error) && generation === this._sourceGeneration) {
+                        this._armCameraReopen(deviceId, btn)
+                        this._setSourceStatus('camera unavailable; reconnecting when it returns.', 'error')
+                        return
+                    }
+                    throw error
+                }
                 if (generation !== this._sourceGeneration) { stream.getTracks().forEach(track => track.stop()); return }
                 this._currentStream = stream
                 this._videoEl.srcObject = stream
@@ -713,7 +740,11 @@ class LiveInputsPanel {
                         onError: error => {
                             if (generation !== this._sourceGeneration) return
                             void this._stopActiveSource()
-                            this._setSourceStatus(`${error.message}. Select webcam to retry.`, 'error')
+                            // An errored or unplugged camera retires its stream
+                            // and reopens when the device is enumerated again;
+                            // a still-listed device reopens after one probe.
+                            this._armCameraReopen(deviceId, btn)
+                            this._setSourceStatus(`${error.message}. Reconnecting when the camera returns.`, 'error')
                         }
                     })
                     if (generation !== this._sourceGeneration) { await queue?.stop(); return }
@@ -771,6 +802,10 @@ class LiveInputsPanel {
     _stopActiveSource() {
         this._sourceGeneration++
         this._activeSourceKind = null
+        if (this._cameraReopen) {
+            this._cameraReopen.stop()
+            this._cameraReopen = null
+        }
         const queue = this._cameraQueue
         this._cameraQueue = null
         if (queue) this._sourceCleanup = Promise.all([this._sourceCleanup, queue.stop()]).then(() => {})
@@ -799,6 +834,28 @@ class LiveInputsPanel {
 
     _markActiveSourceBtn(btn) {
         this._panel?.querySelectorAll('.source-btn').forEach(b => b.classList.toggle('active', b === btn))
+    }
+
+    /**
+     * Watch the device list for the selected camera's return and reactivate
+     * the webcam source through the normal path when it is enumerated again.
+     * A user stop or another source selection bumps the source generation and
+     * cancels the watch through _stopActiveSource.
+     */
+    _armCameraReopen(deviceId, btn) {
+        this._cameraReopen?.stop()
+        const generation = this._sourceGeneration
+        this._cameraReopen = watchCameraReturn({
+            deviceId: deviceId || null,
+            isCurrent: () => generation === this._sourceGeneration,
+            onReturn: () => {
+                if (generation !== this._sourceGeneration) return
+                this._activateSource('webcam', btn).catch(error => {
+                    console.error('[LiveInputs] Camera reopen failed:', error)
+                    this._setSourceStatus(`failed: ${error.message || error}`, 'error')
+                })
+            },
+        })
     }
 
     _setSourceStatus(text, cls = '') {
