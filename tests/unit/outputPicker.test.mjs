@@ -124,3 +124,146 @@ test('switchOutputSurface stays linear on an unterminated render( with a long ru
     switchOutputSurface(hostile, 1)
     assert.ok(Date.now() - start < 2000, 'render() matching must not backtrack exponentially')
 })
+
+// --- enable/disable state machine ---
+//
+// The pip builders are stubbed so the state machine is exercised without a
+// DOM or WebGL: each fake renderer reports running until dispose() stops it.
+
+function fakePickerShell() {
+    const classes = new Set()
+    return {
+        classes,
+        el: {
+            appendChild() {},
+            classList: {
+                toggle(name, force) { if (force) classes.add(name); else classes.delete(name) },
+                contains: name => classes.has(name),
+            },
+        },
+    }
+}
+
+function stubPipBuilders(picker) {
+    const made = []
+    picker._createPip = async (idx) => {
+        const renderer = {
+            running: true,
+            disposed: false,
+            loseContext: null,
+            async dispose({ loseContext } = {}) {
+                renderer.disposed = true
+                renderer.loseContext = loseContext === true
+                renderer.running = false
+            },
+        }
+        const removed = { value: false }
+        const pip = {
+            removed,
+            classList: { toggle() {} },
+            setAttribute() {},
+            remove() { removed.value = true },
+        }
+        made.push({ idx, renderer, removed })
+        return { pip, canvas: {}, renderer }
+    }
+    return made
+}
+
+function freshPickerState(picker, { enabled, dsl = '' }) {
+    picker._el = fakePickerShell().el
+    picker._previews = new Map()
+    picker._dsl = dsl
+    picker._activeSurface = null
+    picker._userEnabled = enabled
+    picker._pending = null
+}
+
+const MULTI_SURFACE_DSL = 'noise().write(o0)\ngradient().write(o1)\n\nrender(o0)'
+
+test('a disabled picker builds no preview renderers for a written program', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: false })
+    const made = stubPipBuilders(picker)
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+
+    assert.strictEqual(made.length, 0, 'no pip renderer may be built while the picker is off')
+    assert.strictEqual(picker._previews.size, 0)
+    assert.ok(!picker._el.classList.contains('visible'))
+})
+
+test('switching the picker off stops and disposes its preview render loops', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: true })
+    const made = stubPipBuilders(picker)
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+    assert.strictEqual(picker._previews.size, 2)
+    for (const entry of picker._previews.values()) {
+        assert.strictEqual(entry.renderer.running, true, 'pip render loop starts with the picker on')
+    }
+
+    assert.strictEqual(picker.setEnabled(false), false)
+    await picker._pending
+
+    assert.strictEqual(picker._previews.size, 0, 'every hidden preview is dropped when the picker turns off')
+    for (const m of made) {
+        assert.strictEqual(m.renderer.disposed, true, `o${m.idx} pip renderer must be disposed`)
+        assert.strictEqual(m.renderer.loseContext, true, `o${m.idx} pip GL context must be released`)
+        assert.strictEqual(m.renderer.running, false, `o${m.idx} pip render loop must be stopped`)
+        assert.strictEqual(m.removed.value, true, `o${m.idx} pip element must leave the DOM`)
+    }
+    assert.ok(!picker._el.classList.contains('visible'))
+})
+
+test('switching the picker back on recreates previews for the current surfaces', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: true })
+    const made = stubPipBuilders(picker)
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+    picker.setEnabled(false)
+    await picker._pending
+    assert.strictEqual(picker._previews.size, 0)
+
+    assert.strictEqual(picker.setEnabled(true), true)
+    await picker._pending
+
+    assert.strictEqual(picker._previews.size, 2, 'previews are recreated for the surfaces still written')
+    assert.deepStrictEqual([...picker._previews.keys()].sort(), [0, 1])
+    for (const entry of picker._previews.values()) {
+        assert.strictEqual(entry.renderer.running, true, 'recreated pip render loops are running again')
+    }
+})
+
+test('while the picker is off a DSL rewrite builds no renderers and clears stale ones', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: true })
+    const made = stubPipBuilders(picker)
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+    picker.setEnabled(false)
+    await picker._pending
+
+    await picker.setDsl('noise().write(o0)\ngradient().write(o3)\n\nrender(o3)')
+
+    assert.strictEqual(picker._previews.size, 0, 'a disabled picker must not spawn previews for new surfaces')
+    assert.strictEqual(made.length, 2, 'no additional pip renderer is built while off')
+    assert.strictEqual(picker._activeSurface, 3, 'the active surface still tracks the program while off')
+})
+
+test('an enabled picker still drops the pip of a surface that stops being written', async () => {
+    const picker = outputPicker
+    freshPickerState(picker, { enabled: true })
+    const made = stubPipBuilders(picker)
+
+    await picker.setDsl(MULTI_SURFACE_DSL)
+    await picker.setDsl('noise().write(o0)\n\nrender(o0)')
+
+    assert.strictEqual(picker._previews.size, 1)
+    assert.ok(picker._previews.has(0))
+    const dropped = made.find(m => m.idx === 1)
+    assert.strictEqual(dropped.renderer.disposed, true, 'the o1 pip renderer is disposed with its surface')
+    assert.strictEqual(dropped.removed.value, true)
+})

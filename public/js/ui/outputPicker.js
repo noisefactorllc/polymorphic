@@ -175,7 +175,22 @@ class OutputPicker {
             if (typeof localStorage !== 'undefined') localStorage.setItem(ENABLED_KEY, this._userEnabled ? '1' : '0')
         } catch {}
         this._refreshVisibility()
+        // Serialize through the same single-flight queue as setDsl so a disable
+        // cannot race an in-flight pip build: the queued step stops the hidden
+        // preview renderers when the picker turns off and recreates previews
+        // for the current surfaces when it turns back on.
+        this._pending = (this._pending || Promise.resolve())
+            .then(() => this._applyEnabled())
+            .catch(err => console.debug('[OutputPicker] setEnabled chain:', err))
         return this._userEnabled
+    }
+
+    async _applyEnabled() {
+        if (this._userEnabled) {
+            await this._setDslImpl(this._dsl)
+        } else {
+            await this._disposePreviews()
+        }
     }
 
     toggle() { return this.setEnabled(!this._userEnabled) }
@@ -205,25 +220,29 @@ class OutputPicker {
         this._dsl = dsl
         const surfaces = surfacesWrittenInDsl(dsl)
         this._activeSurface = effectiveRenderTarget(dsl)
-        // Drop pips for surfaces no longer in use
+        // Drop pips for surfaces no longer in use — or all of them when the
+        // picker is disabled, so no hidden preview renderer keeps rendering
         for (const idx of [...this._previews.keys()]) {
-            if (!surfaces.includes(idx)) {
+            if (!this._userEnabled || !surfaces.includes(idx)) {
                 const p = this._previews.get(idx)
                 try { await p.renderer?.dispose({ loseContext: true }) } catch {}
                 p.pip?.remove()
                 this._previews.delete(idx)
             }
         }
-        // Add pips for new surfaces
-        for (const idx of surfaces) {
-            if (!this._previews.has(idx)) {
-                this._previews.set(idx, await this._createPip(idx))
+        // Add pips for new surfaces only while the picker is enabled; a
+        // disabled picker must not build hidden renderers at all
+        if (this._userEnabled) {
+            for (const idx of surfaces) {
+                if (!this._previews.has(idx)) {
+                    this._previews.set(idx, await this._createPip(idx))
+                }
             }
         }
         // Re-sort DOM order to match surface index
         for (const idx of surfaces) {
             const entry = this._previews.get(idx)
-            if (entry?.pip) this._el.appendChild(entry.pip)
+            if (this._el && entry?.pip) this._el.appendChild(entry.pip)
         }
         // Mark the active pip
         for (const [idx, entry] of this._previews) {
@@ -232,7 +251,16 @@ class OutputPicker {
             entry.pip.setAttribute('aria-label', `Surface o${idx}` + (isActive ? ' (active)' : ''))
         }
         // Hidden by default; user toggles via View menu (persisted in localStorage)
-        this._el.classList.toggle('visible', this._userEnabled && surfaces.length > 0)
+        this._el?.classList.toggle('visible', this._userEnabled && surfaces.length > 0)
+    }
+
+    /** Dispose every live preview renderer and its pip element. */
+    async _disposePreviews() {
+        for (const [, entry] of this._previews) {
+            try { await entry.renderer?.dispose({ loseContext: true }) } catch {}
+            entry.pip?.remove()
+        }
+        this._previews.clear()
     }
 
     async _createPip(idx) {
@@ -307,11 +335,7 @@ class OutputPicker {
 
     async dispose() {
         this._pending = null
-        for (const [, entry] of this._previews) {
-            try { await entry.renderer?.dispose({ loseContext: true }) } catch {}
-            entry.pip?.remove()
-        }
-        this._previews.clear()
+        await this._disposePreviews()
         this._el?.remove()
         this._el = null
     }
