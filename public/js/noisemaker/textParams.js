@@ -28,8 +28,8 @@ export const TEXT_DEFAULTS = {
     posY: 0.5,
     color: '#ffffff',
     rotation: 0,
-    bgColor: '#000000',
-    bgOpacity: 0,
+    matteColor: '#000000',
+    matteOpacity: 0,
     justify: 'center'
 }
 
@@ -105,11 +105,6 @@ function num(value, fallback) {
  * @returns {object} Parameters for the text canvas
  */
 function paramsFromArgs(args = {}) {
-    // `matteColor`/`matteOpacity` are the effect's own parameter names;
-    // `bgColor`/`bgOpacity` are the documented aliases. Accept either.
-    const bgColor = firstDefined(args.matteColor, args.bgColor, TEXT_DEFAULTS.bgColor)
-    const bgOpacity = firstDefined(args.matteOpacity, args.bgOpacity, TEXT_DEFAULTS.bgOpacity)
-
     return {
         text: String(firstDefined(args.text, TEXT_DEFAULTS.text)),
         font: String(firstDefined(args.font, TEXT_DEFAULTS.font)),
@@ -119,8 +114,8 @@ function paramsFromArgs(args = {}) {
         rotation: num(firstDefined(args.rotation, TEXT_DEFAULTS.rotation), TEXT_DEFAULTS.rotation),
         justify: String(firstDefined(args.justify, TEXT_DEFAULTS.justify)),
         color: toRgb(firstDefined(args.color, TEXT_DEFAULTS.color)),
-        bgColor: toRgb(bgColor),
-        bgOpacity: num(bgOpacity, TEXT_DEFAULTS.bgOpacity)
+        matteColor: toRgb(firstDefined(args.matteColor, TEXT_DEFAULTS.matteColor)),
+        matteOpacity: num(firstDefined(args.matteOpacity, TEXT_DEFAULTS.matteOpacity), TEXT_DEFAULTS.matteOpacity)
     }
 }
 

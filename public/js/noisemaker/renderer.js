@@ -395,11 +395,11 @@ export class PolymorphicRenderer {
 
         const ctx = canvas.getContext('2d')
 
-        // Clear with background color
-        const bgColor = params.bgColor
+        // Clear with the matte color
+        const matteColor = params.matteColor
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-        if (params.bgOpacity > 0) {
-            ctx.fillStyle = `rgba(${Math.round(bgColor[0] * 255)}, ${Math.round(bgColor[1] * 255)}, ${Math.round(bgColor[2] * 255)}, ${params.bgOpacity})`
+        if (params.matteOpacity > 0) {
+            ctx.fillStyle = `rgba(${Math.round(matteColor[0] * 255)}, ${Math.round(matteColor[1] * 255)}, ${Math.round(matteColor[2] * 255)}, ${params.matteOpacity})`
             ctx.fillRect(0, 0, canvas.width, canvas.height)
         }
 

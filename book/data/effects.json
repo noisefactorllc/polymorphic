@@ -17002,10 +17002,7 @@
           "choices": null
         }
       ],
-      "aliases": {
-        "backgroundColor": "bgColor",
-        "backgroundOpacity": "bgAlpha"
-      }
+      "aliases": null
     },
     {
       "id": "synth/remap",

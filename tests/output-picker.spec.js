@@ -5,7 +5,7 @@ installHandfishLocal(test)
 
 // A two-surface program: with the picker on, one live preview renderer runs
 // per written surface (o0 and o1).
-const DSL = 'search synth, render\n\nnoise(xScale: 80, yScale: 80).write(o0)\nnoise(xScale: 40, yScale: 40).write(o1)\n\nrender(o0)'
+const DSL = 'search synth, render\n\nnoise(scaleX: 80, scaleY: 80).write(o0)\nnoise(scaleX: 40, scaleY: 40).write(o1)\n\nrender(o0)'
 
 // The hidden preview renderers' live state, read through the app's own debug
 // surface (`window.__poly.outputPicker`): one entry per written surface whose
@@ -104,7 +104,7 @@ test('a disable that lands while a pip is still building stops existing loops pr
         }
     })
 
-    const RACE_DSL = 'search synth, render\n\nnoise(xScale: 80, yScale: 80).write(o0)\nnoise(xScale: 40, yScale: 40).write(o1)\ngradient().write(o2)\n\nrender(o0)'
+    const RACE_DSL = 'search synth, render\n\nnoise(scaleX: 80, scaleY: 80).write(o0)\nnoise(scaleX: 40, scaleY: 40).write(o1)\ngradient().write(o2)\n\nrender(o0)'
 
     // Start building the o2 pip and wait until its compile is parked on the
     // gate: the build is now deterministically in flight.

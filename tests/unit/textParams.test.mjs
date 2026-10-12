@@ -130,18 +130,22 @@ test('empty text renders as empty, not as the default', () => {
     assert.equal(params.text, '')
 })
 
-test('matte params drive the background, under either spelling', () => {
+test('matte params drive the background, under their canonical names only', () => {
     const [canonical] = textEffectsFromParsed([
         { name: 'text', fullName: 'filter.text', args: { text: 'hi', matteColor: '#112233', matteOpacity: 0.5 }, stepIndex: 0, temp: 0 }
     ])
-    assert.deepEqual(canonical.params.bgColor, toRgb('#112233'))
-    assert.equal(canonical.params.bgOpacity, 0.5)
+    assert.deepEqual(canonical.params.matteColor, toRgb('#112233'))
+    assert.equal(canonical.params.matteOpacity, 0.5)
 
-    const [alias] = textEffectsFromParsed([
+    // Noisemaker v1.0.289 retired the bgColor/bgOpacity aliases: the compiler
+    // rejects them, so they never reach the matte.
+    const [retired] = textEffectsFromParsed([
         { name: 'text', fullName: 'filter.text', args: { text: 'hi', bgColor: '#112233', bgOpacity: 0.5 }, stepIndex: 0, temp: 0 }
     ])
-    assert.deepEqual(alias.params.bgColor, canonical.params.bgColor)
-    assert.equal(alias.params.bgOpacity, 0.5)
+    assert.deepEqual(retired.params.matteColor, toRgb(TEXT_DEFAULTS.matteColor))
+    assert.equal(retired.params.matteOpacity, TEXT_DEFAULTS.matteOpacity)
+    assert.equal(retired.params.bgColor, undefined)
+    assert.equal(retired.params.bgOpacity, undefined)
 })
 
 test('an authored color survives whichever form the compiler emits', () => {
