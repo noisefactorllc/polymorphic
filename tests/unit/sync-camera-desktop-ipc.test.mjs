@@ -51,6 +51,20 @@ function makeTempRingFile(fs, os, path) {
     fs.closeSync(fd)
     return {
         ringPath,
+        // Re-creates a removed ring file with its header, as the Sync daemon
+        // does when it starts after the shell already looked for the ring.
+        recreate() {
+            const fd = fs.openSync(ringPath, 'w+')
+            const header = Buffer.alloc(HEADER_BYTES)
+            header.writeUInt32LE(SYNC_MAGIC, 0)
+            header.writeUInt32LE(SYNC_VERSION, 4)
+            header.writeUInt32LE(FRAME_RING_SLOTS, 8)
+            header.writeUInt32LE(FRAME_SLOT_BYTES, 12)
+            header.writeBigUInt64LE(0n, 16) // newest
+            header.writeBigUInt64LE(0n, 24) // last_demand_us
+            fs.writeSync(fd, header, 0, HEADER_BYTES, 0)
+            fs.closeSync(fd)
+        },
         // Publishes one complete frame into the ring, mirroring the writer's
         // seqlock: odd sequence while the payload is written, even after.
         // `fill` distinguishes a later overwrite from the original payload.
@@ -93,6 +107,7 @@ function fakeIpcMain() {
             const index = all.indexOf(fn)
             if (index >= 0) all.splice(index, 1)
         },
+        listenerCount: (channel) => (listeners.get(channel) || []).length,
         emit: (channel, event) => {
             for (const fn of [...(listeners.get(channel) || [])]) fn(event)
         },
@@ -217,6 +232,108 @@ test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent co
         poll()
         assert.ok(windowB.sent.some(({ frame }) => frame.sequence === 8))
         ipc.emit('sync-camera:stop', { sender: windowB })
+        assert.equal(reader.active, false)
+        assert.equal(reader.fd, null)
+    } finally {
+        if (reader) {
+            try { reader.subscribers.clear() } catch {}
+            try { reader.stop() } catch {}
+        }
+        fixture.cleanup()
+    }
+})
+
+test('a failed desktop-shell ring start leaves no subscriber for a later successful start',
+    { skip: skipReason || false }, () => {
+    if (!mod) return
+    const fs = require('node:fs')
+    const fixture = makeTempRingFile(fs, require('node:os'), require('node:path'))
+    let reader = null
+    try {
+        // No ring file yet: the Sync daemon has not created it, so the shell's
+        // start must report unavailable. It must also register nothing — a
+        // subscriber added before the ring opens would stay registered, and a
+        // later successful start could then never stop the shared reader once
+        // the real subscriber leaves.
+        fs.unlinkSync(fixture.ringPath)
+        const ipc = fakeIpcMain()
+        reader = wireSyncCameraIpc({
+            ipcMain: ipc,
+            reader: new SyncCameraShmReader({ ringPath: fixture.ringPath })
+        })
+        const window = fakeWebContents()
+        ipc.emit('sync-camera:start', { sender: window })
+        assert.equal(reader.subscribers.size, 0)
+        assert.equal(reader.active, false)
+
+        // The daemon comes up and creates the ring; the renderer retries.
+        fixture.recreate()
+        ipc.emit('sync-camera:start', { sender: window })
+        assert.equal(reader.active, true)
+        assert.equal(reader.subscribers.size, 1)
+        fixture.writeFrame(fs, 1n, 1000n)
+        reader._poll()
+        assert.equal(window.sent.length, 1)
+        assert.equal(window.sent[0].frame.sequence, 1)
+
+        // The one real subscriber leaving stops the shared reader entirely;
+        // a stale failed-start subscriber would keep it alive here.
+        ipc.emit('sync-camera:stop', { sender: window })
+        assert.equal(reader.active, false)
+        assert.equal(reader.fd, null)
+        assert.equal(reader.subscribers.size, 0)
+    } finally {
+        if (reader) {
+            try { reader.subscribers.clear() } catch {}
+            try { reader.stop() } catch {}
+        }
+        fixture.cleanup()
+    }
+})
+
+test('a destroyed renderer drops the shell stop listener without disturbing the surviving consumer',
+    { skip: skipReason || false }, () => {
+    if (!mod) return
+    const fs = require('node:fs')
+    const fixture = makeTempRingFile(fs, require('node:os'), require('node:path'))
+    let reader = null
+    try {
+        const ipc = fakeIpcMain()
+        reader = wireSyncCameraIpc({
+            ipcMain: ipc,
+            reader: new SyncCameraShmReader({ ringPath: fixture.ringPath })
+        })
+        const windowA = fakeWebContents()
+        const windowB = fakeWebContents()
+        ipc.emit('sync-camera:start', { sender: windowA })
+        ipc.emit('sync-camera:start', { sender: windowB })
+        assert.equal(reader.subscribers.size, 2)
+        assert.equal(ipc.listenerCount('sync-camera:stop'), 2)
+
+        // The shell keeps ipcMain listeners alive for the whole process, and
+        // the desktop app can outlive every window, so a renderer that dies
+        // without an explicit stop must drop its own stop listener — a stale
+        // listener pinned to a dead webContents would leak on every window
+        // cycle.
+        windowA.destroy()
+        assert.equal(ipc.listenerCount('sync-camera:stop'), 1)
+        assert.equal(reader.subscribers.size, 1)
+
+        // A further explicit stop from the dead renderer must not disturb the
+        // surviving consumer's subscription.
+        ipc.emit('sync-camera:stop', { sender: windowA })
+        assert.equal(reader.subscribers.size, 1)
+        assert.equal(reader.active, true)
+        fixture.writeFrame(fs, 1n, 1000n)
+        reader._poll()
+        assert.equal(windowA.sent.length, 0)
+        assert.equal(windowB.sent.length, 1)
+        assert.equal(windowB.sent[0].frame.sequence, 1)
+
+        // The surviving consumer's explicit stop removes the last listener
+        // and stops the shared reader.
+        ipc.emit('sync-camera:stop', { sender: windowB })
+        assert.equal(ipc.listenerCount('sync-camera:stop'), 0)
         assert.equal(reader.active, false)
         assert.equal(reader.fd, null)
     } finally {
