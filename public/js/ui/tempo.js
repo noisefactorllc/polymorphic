@@ -16,6 +16,14 @@
  *      the renderer. The 'manual'/'midi' source preference persists exactly as
  *      before (polymorphic.bpm.source).
  *
+ *   3. BPM persistence — the shared component persists only the divider (its
+ *      storage-key contract), so the controller persists the BPM itself under
+ *      polymorphic.bpm: written whenever the scheduler reports a BPM change in
+ *      manual mode, and applied at init (before the first scheduled frame) so
+ *      a reload restores the tempo the user left. While following an external
+ *      MIDI clock the BPM is re-derived from the clock, so nothing is stored
+ *      or restored.
+ *
  * The default loop duration is "one bar at the current BPM, where one bar is
  * four beats", stretched by the user-selected divider:
  *   120 BPM, /1 → 2.0s loopDuration → osc(speed: 1) cycles once per bar.
@@ -27,6 +35,7 @@
 import { MidiClock } from './midiClock.js'
 
 const SOURCE_STORAGE_KEY = 'polymorphic.bpm.source'
+const BPM_STORAGE_KEY = 'polymorphic.bpm'
 
 // Re-exported from the component's contract so unit tests and any callers have
 // a single source of truth. One bar = four beats, scaled by an integer divider.
@@ -65,11 +74,25 @@ class TempoController {
         this._renderer = opts.renderer
         this._source = this._loadSource()
 
+        // Restore the persisted BPM before anything else reads the tempo: the
+        // shared component starts its scheduler at the boot default (120) on
+        // connect, and init runs in the same tick, so no frame is scheduled at
+        // the wrong tempo. Manual source only — while following an external
+        // MIDI clock the BPM is re-derived from the clock.
+        if (this._source === 'manual' && this._scheduler) {
+            const stored = this._loadBpm()
+            if (stored !== null) this._scheduler.bpm = stored
+        }
+
         // Drive the renderer's loopDuration from the scheduler. The component's
         // own beat clock is independent of the renderer, so we wire timing here:
-        // BPM and divider changes both restretch one bar.
+        // BPM and divider changes both restretch one bar. BPM changes in manual
+        // mode (edit, tap tempo) are also persisted.
         this._applyToRenderer()
-        this._scheduler?.onChange(() => this._applyToRenderer())
+        this._scheduler?.onChange((bpm) => {
+            this._persistBpm(bpm)
+            this._applyToRenderer()
+        })
         this._scheduler?.onDividerChange(() => this._applyToRenderer())
 
         // Re-emit source so subscribers can render the initial state.
@@ -111,7 +134,12 @@ class TempoController {
         this._source = source
         this._saveSource(source)
         if (source === 'midi') this._enableMidi()
-        else this._disableMidi()
+        else {
+            this._disableMidi()
+            // Back in manual: the current tempo (e.g. the last clock-detected
+            // BPM) becomes the user's editable tempo again, so anchor it.
+            if (this._scheduler) this._persistBpm(this._scheduler.bpm)
+        }
         for (const cb of this._sourceListeners) cb(this._source)
     }
 
@@ -184,6 +212,29 @@ class TempoController {
 
     _saveSource(source) {
         try { localStorage.setItem(SOURCE_STORAGE_KEY, source) } catch { /* ignore */ }
+    }
+
+    /**
+     * Manual-mode BPM persistence. Called on every scheduler BPM change while
+     * the source is manual (input edit, tap tempo); MIDI-clock changes are
+     * skipped so the stored value keeps describing the last manual tempo.
+     */
+    _persistBpm(bpm) {
+        if (this._source !== 'manual') return
+        const n = Number(bpm)
+        if (!Number.isFinite(n) || n <= 0) return
+        this._saveBpm(n)
+    }
+
+    _loadBpm() {
+        try {
+            const n = Number(localStorage.getItem(BPM_STORAGE_KEY))
+            return Number.isFinite(n) && n > 0 ? n : null
+        } catch { return null }
+    }
+
+    _saveBpm(bpm) {
+        try { localStorage.setItem(BPM_STORAGE_KEY, String(bpm)) } catch { /* ignore */ }
     }
 }
 

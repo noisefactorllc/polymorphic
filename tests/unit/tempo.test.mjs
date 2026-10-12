@@ -110,3 +110,97 @@ test('tap is ignored in midi source (clock follows external)', () => {
         tempoController.setSource('manual')   // restore for any later tests
     })
 })
+
+// --- BPM persistence --------------------------------------------------------
+// The shared <tempo-bar> persists only the divider, so the controller stores
+// the BPM itself (polymorphic.bpm) and restores it at init. These use a
+// scheduler stub whose bpm setter mirrors the real BeatScheduler: clamp to the
+// component's 20–400 range and fire the change listeners on an actual change.
+
+function bpmSchedulerStub({ bpm = 120, divider = 4 } = {}) {
+    const s = {
+        divider,
+        barSeconds: () => computeBarSeconds(s._bpm, s.divider),
+        onDividerChange() {},
+        _changeListeners: [],
+        onChange(cb) { s._changeListeners.push(cb) },
+    }
+    Object.defineProperty(s, 'bpm', {
+        get: () => s._bpm,
+        set: (v) => {
+            const n = Number(v)
+            if (!Number.isFinite(n) || n <= 0) return
+            const clamped = Math.max(20, Math.min(400, n))
+            if (clamped === s._bpm) return
+            s._bpm = clamped
+            for (const cb of s._changeListeners) cb(clamped)
+        },
+    })
+    s._bpm = bpm
+    return s
+}
+
+test('init restores the persisted BPM in manual source', () => {
+    withLocalStorage((store) => {
+        store.set('polymorphic.bpm', '96')
+        const scheduler = bpmSchedulerStub()
+        tempoController.init({ tempoBar: { scheduler }, renderer: null })
+        assert.strictEqual(scheduler.bpm, 96)
+        assert.strictEqual(tempoController.getBpm(), 96)
+        // The restored tempo is live: the renderer's loop is restretched too.
+        assert.strictEqual(tempoController.barSeconds(), computeBarSeconds(96, 4))
+    })
+})
+
+test('init ignores a garbage stored BPM and keeps the boot default', () => {
+    withLocalStorage((store) => {
+        store.set('polymorphic.bpm', 'not-a-number')
+        const scheduler = bpmSchedulerStub()
+        tempoController.init({ tempoBar: { scheduler }, renderer: null })
+        assert.strictEqual(scheduler.bpm, 120)
+    })
+})
+
+test('manual BPM changes (edit or tap re-anchor) are persisted', () => {
+    withLocalStorage((store) => {
+        const scheduler = bpmSchedulerStub()
+        tempoController.init({ tempoBar: { scheduler }, renderer: null })
+        assert.strictEqual(store.get('polymorphic.bpm'), undefined)
+
+        scheduler.bpm = 96                   // typed into the tempo bar input
+        assert.strictEqual(store.get('polymorphic.bpm'), '96')
+
+        scheduler.bpm = 63.5                 // tap tempo can land off-grid
+        assert.strictEqual(store.get('polymorphic.bpm'), '63.5')
+    })
+})
+
+test('init restores nothing and persists nothing while following MIDI', () => {
+    withLocalStorage((store) => {
+        store.set('polymorphic.bpm.source', 'midi')
+        store.set('polymorphic.bpm', '96')
+        const scheduler = bpmSchedulerStub()
+        tempoController.init({ tempoBar: { scheduler }, renderer: null })
+        // The clock re-derives the BPM; the stored manual tempo is not applied.
+        assert.strictEqual(scheduler.bpm, 120)
+
+        scheduler.bpm = 150                  // detected from the external clock
+        assert.strictEqual(store.get('polymorphic.bpm'), '96')
+    })
+})
+
+test('switching back to manual re-anchors the current tempo', () => {
+    withLocalStorage((store) => {
+        const scheduler = bpmSchedulerStub()
+        tempoController.init({ tempoBar: { scheduler }, renderer: null })
+
+        scheduler.bpm = 96
+        tempoController.setSource('midi')
+        scheduler.bpm = 150                  // clock-detected tempo
+        assert.strictEqual(store.get('polymorphic.bpm'), '96')
+
+        tempoController.setSource('manual')
+        assert.strictEqual(store.get('polymorphic.bpm'), '150')
+        assert.strictEqual(scheduler.bpm, 150)
+    })
+})

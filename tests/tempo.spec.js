@@ -105,6 +105,29 @@ test('divider persists via the storage-key (localStorage)', async ({ page }) => 
   expect(divider).toBe(8)
 })
 
+test('BPM persists across a reload (localStorage)', async ({ page }) => {
+  await page.goto(PAGE_URL)
+  await waitForApp(page)
+
+  // Change the BPM through the real tempo-bar input (the component applies it
+  // on input/change and the controller persists it in manual source).
+  const bpmInput = page.locator('#tempo-bar .tempo-bar__bpm')
+  await bpmInput.fill('96')
+  await bpmInput.blur()
+
+  const before = await page.evaluate(() => document.getElementById('tempo-bar').scheduler.bpm)
+  expect(before).toBe(96)
+
+  // Reload: the restored tempo must equal the one the user left.
+  await page.reload()
+  await waitForApp(page)
+
+  const after = await page.evaluate(() => document.getElementById('tempo-bar').scheduler.bpm)
+  expect(after).toBe(before)
+  const stored = await page.evaluate(() => localStorage.getItem('polymorphic.bpm'))
+  expect(Number(stored)).toBe(before)
+})
+
 test('T key routes to tap tempo (manual source) and is gated by editor focus', async ({ page }) => {
   await page.goto(PAGE_URL)
   await waitForApp(page)

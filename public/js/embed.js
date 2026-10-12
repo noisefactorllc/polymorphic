@@ -2438,7 +2438,9 @@ async function startShader() {
         // four beat dots, phase reset + slider all live in the element, and its
         // BeatScheduler runs the beat clock. We host it inside the status row so
         // it inherits the row's show/hide (performance/embed mode) behaviour.
-        // The divider persists under polymorphic's existing localStorage key.
+        // The divider persists under polymorphic's existing localStorage key;
+        // the controller persists the BPM itself (polymorphic.bpm) and the
+        // manual/midi source preference (polymorphic.bpm.source).
         const tempoBar = document.createElement('tempo-bar')
         tempoBar.id = 'tempo-bar'
         tempoBar.setAttribute('bpm', '120')
