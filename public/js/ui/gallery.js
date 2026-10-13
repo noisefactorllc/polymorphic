@@ -451,6 +451,7 @@ class Gallery {
         this._previewsByCard = new Map()
         this._observer = null
         this._activeCards = []  // most-recently-visible first (LRU eviction)
+        this._warmUpQueue = Promise.resolve()
     }
 
     /** @param {object} opts @param {(example:object) => void} opts.onLoad */
@@ -536,6 +537,8 @@ class Gallery {
             // thumbnail — the screenshot serves that role until hover.
             skipWarmUp: !!opts.absolute,
             warmedUp: false,
+            warmUpPending: false,
+            inView: false,
             hovered: false,
             longPressed: false,
         })
@@ -546,11 +549,14 @@ class Gallery {
         if (!this._observer) {
             this._observer = new IntersectionObserver((entries) => {
                 for (const entry of entries) {
+                    const previewEntry = this._previewsByCard.get(entry.target)
+                    if (previewEntry) previewEntry.inView = entry.isIntersecting
                     if (entry.isIntersecting) {
                         this._warmUpPreview(entry.target)
                     } else {
                         const e = this._previewsByCard.get(entry.target)
                         if (e?.preview) this._deactivatePreview(entry.target)
+                        if (e && !e.snapshotImg) e.warmedUp = false
                     }
                 }
             }, { root: null, threshold: 0.1 })
@@ -578,6 +584,10 @@ class Gallery {
             if (!entry) return
             entry.hovered = false
             if (!entry.longPressed) this._deactivatePreview(card)
+            if (entry.inView && !entry.snapshotImg) {
+                entry.warmedUp = false
+                this._warmUpPreview(card)
+            }
         })
 
         let longPressTimer = null
@@ -623,6 +633,10 @@ class Gallery {
                 entry.longPressed = false
                 if (!entry.hovered) this._deactivatePreview(card)
             }
+            if (entry?.inView && !entry.snapshotImg) {
+                entry.warmedUp = false
+                this._warmUpPreview(card)
+            }
         }
         card.addEventListener('touchend', onTouchEnd, { passive: true })
         card.addEventListener('touchcancel', onTouchEnd, { passive: true })
@@ -648,38 +662,62 @@ class Gallery {
      * brief animation that runs while we wait for the first frame — they
      * just see the still snapshot appear once it's ready.
      */
-    async _warmUpPreview(card) {
+    _warmUpPreview(card) {
         const entry = this._previewsByCard.get(card)
-        if (!entry || entry.warmedUp) return
-        entry.warmedUp = true
-        if (entry.skipWarmUp) return
-        if (entry.preview || entry.hovered || entry.longPressed) return
+        if (!entry || entry.warmedUp || entry.warmUpPending) return
+        if (entry.skipWarmUp || entry.snapshotImg) {
+            entry.warmedUp = true
+            return
+        }
+        entry.warmUpPending = true
 
-        entry.warmingUp = true
-        await this._activatePreview(card)
-        // Two rAFs so the GL pipeline has actually painted a frame before
-        // we capture; one rAF only gets the first compositing tick.
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+        // Only one background warm-up owns a renderer at a time. A visible
+        // batch larger than the context cap must not evict its first cards
+        // before they have compiled and captured a frame.
+        this._warmUpQueue = this._warmUpQueue.then(async () => {
+            if (this._previewsByCard.get(card) !== entry || !this._open || !entry.inView) {
+                entry.warmedUp = false
+                return
+            }
+            if (entry.preview || entry.hovered || entry.longPressed) {
+                entry.warmedUp = !!(entry.snapshotImg || entry.preview?._ready)
+                return
+            }
+            entry.warmedUp = true
+            entry.warmingUp = true
+            await this._activatePreview(card)
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
-        const after = this._previewsByCard.get(card)
-        if (!after) {
+            const after = this._previewsByCard.get(card)
+            if (after !== entry) return
+            if (!after.inView && !after.snapshotImg) {
+                after.warmedUp = false
+                return
+            }
+            if (after.hovered || after.longPressed) {
+                if (after.canvas) after.canvas.style.visibility = ''
+                return
+            }
+            if (after.preview) this._deactivatePreview(card)
+        }).catch(err => {
+            console.debug('[Gallery] warm-up failed:', err?.message || err)
+        }).finally(() => {
             entry.warmingUp = false
-            return
-        }
-        // User started interacting during the warm-up — promote it to a
-        // visible animation by clearing the hidden flag on the live canvas.
-        if (after.hovered || after.longPressed) {
-            after.warmingUp = false
-            if (after.canvas) after.canvas.style.visibility = ''
-            return
-        }
-        if (after.preview) this._deactivatePreview(card)
-        after.warmingUp = false
+            entry.warmUpPending = false
+            // A card can return while its cancelled compile is still settling.
+            if (!entry.warmedUp && entry.inView && !entry.preview && !entry.hovered && !entry.longPressed &&
+                this._open && this._previewsByCard.get(card) === entry) this._warmUpPreview(card)
+        })
+        return this._warmUpQueue
     }
 
     async _activatePreview(card) {
         const entry = this._previewsByCard.get(card)
-        if (!entry || entry.preview) return
+        if (!entry) return
+        if (entry.preview) {
+            if ((entry.hovered || entry.longPressed) && entry.canvas) entry.canvas.style.visibility = ''
+            return
+        }
         // LRU bookkeeping — bump to front; evict tail past the cap so we
         // don't outrun the browser's WebGL context limit (~16).
         this._activeCards = this._activeCards.filter(c => c !== card)
@@ -705,7 +743,7 @@ class Gallery {
         // capture works off the GL drawing buffer regardless of CSS, so
         // the user sees only the resulting still, never the brief frames
         // that run while we wait for first paint.
-        if (entry.warmingUp) canvas.style.visibility = 'hidden'
+        if (entry.warmingUp && !entry.hovered && !entry.longPressed) canvas.style.visibility = 'hidden'
         entry.thumbContainer.appendChild(canvas)
         entry.canvas = canvas
         const preview = new LivePreview(canvas, entry.dsl, {

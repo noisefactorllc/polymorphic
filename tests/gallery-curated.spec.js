@@ -226,3 +226,80 @@ test('random curated startup retains shader context through an edit and reload',
     await page.waitForFunction(() => window.__poly?.renderer?.isRunning)
     expect(await page.evaluate(() => window.__poly.renderer._currentDsl)).toBe(edited)
 })
+
+
+test('every visible curated card paints a still thumbnail before hover', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 1000 })
+    await boot(page)
+    await page.evaluate(() => window.__poly.gallery.open())
+    await page.waitForFunction(() => {
+        const entries = [...window.__poly.gallery._previewsByCard.values()]
+        return entries.filter(e => e.warmedUp).length >= 9 && entries.every(e => !e.warmingUp && !e.warmUpPending)
+    })
+    const results = await page.evaluate(async () => {
+        const results = []
+        for (const [card, entry] of window.__poly.gallery._previewsByCard) {
+            if (!entry.warmedUp) continue
+            const title = card.querySelector('.gallery-card-title').textContent
+            const image = entry.snapshotImg
+            if (!image) { results.push({ title, colors: 0 }); continue }
+            await image.decode()
+            const canvas = document.createElement('canvas')
+            canvas.width = image.naturalWidth; canvas.height = image.naturalHeight
+            const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+            const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+            const colors = new Set()
+            for (let i = 0; i < pixels.length; i += 4) colors.add((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2])
+            results.push({ title, colors: colors.size })
+        }
+        return results
+    })
+    expect(results.filter(r => r.colors < 2)).toEqual([])
+    await page.evaluate(() => window.__poly.gallery.close())
+})
+
+
+async function delayFirstPreviewManifest(page) {
+    let release
+    const gate = new Promise(resolve => { release = resolve })
+    let blocked = false
+    await page.route('**/effects/manifest.json', async route => {
+        if (!blocked) { blocked = true; await gate }
+        await route.continue()
+    })
+    return { release, isBlocked: () => blocked }
+}
+
+test('hover promotes a queued curated preview to a visible canvas', async ({ page }) => {
+    await boot(page)
+    const gate = await delayFirstPreviewManifest(page)
+    try {
+        await page.evaluate(() => window.__poly.gallery.open())
+        await expect.poll(gate.isBlocked).toBe(true)
+        const card = page.locator('.gallery-card').nth(1)
+        await card.hover()
+        await expect(card.locator('.gallery-card-preview-canvas')).toBeVisible()
+        await page.waitForFunction(() => [...window.__poly.gallery._previewsByCard.values()][1]?.preview?._ready)
+    } finally {
+        gate.release()
+        await page.evaluate(() => window.__poly.gallery.close())
+    }
+})
+
+test('a curated warm-up cancelled during loading retries when scrolled into view', async ({ page }) => {
+    await boot(page)
+    const gate = await delayFirstPreviewManifest(page)
+    try {
+        await page.evaluate(() => window.__poly.gallery.open())
+        await expect.poll(gate.isBlocked).toBe(true)
+        await page.locator('.gallery-body').evaluate(el => { el.scrollTop = el.scrollHeight })
+        await page.waitForFunction(() => [...window.__poly.gallery._previewsByCard.values()][0]?.inView === false)
+        gate.release()
+        await page.evaluate(() => window.__poly.gallery._warmUpQueue)
+        await page.locator('.gallery-body').evaluate(el => { el.scrollTop = 0 })
+        await expect(page.locator('.gallery-card').first().locator('.gallery-card-snapshot')).toBeVisible({ timeout: 30000 })
+    } finally {
+        gate.release()
+        await page.evaluate(() => window.__poly.gallery.close())
+    }
+})
