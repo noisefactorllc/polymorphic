@@ -35,7 +35,7 @@ import { getCursorIdleHider } from './ui/cursorIdle.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
 import { recorder } from './ui/recorder.js'
 import { perfOverlay } from './ui/perfOverlay.js'
-import { gallery, pickRandomExample } from './ui/gallery.js'
+import { gallery, pickRandomExample, loadCuratedExample, requiresWebGL2 } from './ui/gallery.js'
 import { snapshotHistory } from './ui/snapshotHistory.js'
 import { tempoController } from './ui/tempo.js'
 import { statusRow } from './ui/statusRow.js'
@@ -2253,6 +2253,7 @@ function snapshotForward() {
 async function startShader() {
     let dsl = null
     let title = null
+    let curatedExample = null
 
     // Check for ?code= parameter to load from sharing API
     const code = getCodeFromUrl()
@@ -2272,6 +2273,24 @@ async function startShader() {
         }
     }
 
+    // A curated reference supplies portable definitions even when the URL
+    // carries an edited DSL. A shared composition retains its own definitions.
+    const params = new URLSearchParams(window.location.search)
+    const curatedId = params.get('curated')
+    if (!code && curatedId) {
+        try {
+            curatedExample = await loadCuratedExample(curatedId)
+        } catch (err) {
+            console.warn('[Polymorphic] Curated program load failed:', err)
+        }
+    }
+    const restoreCuratedSelection = !!curatedExample && params.get('curatedLoad') === '1'
+    if (params.has('curatedLoad')) {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('curatedLoad')
+        window.history.replaceState(null, '', url)
+    }
+
     // Fall back to other DSL sources
     if (!dsl) {
         dsl = getDslFromUrl()
@@ -2281,8 +2300,13 @@ async function startShader() {
     // Falls back to the bundled DEFAULT_DSL if the gallery fetch fails.
     if (!dsl) {
         try {
-            const example = await pickRandomExample()
-            if (example?.dsl) dsl = example.dsl
+            curatedExample = curatedExample || await pickRandomExample()
+            if (curatedExample?.dsl) {
+                dsl = curatedExample.dsl
+                const url = new URL(window.location.href)
+                url.searchParams.set('curated', curatedExample.id)
+                window.history.replaceState(null, '', url)
+            }
         } catch (err) {
             console.warn('[Polymorphic] Random example load failed:', err)
         }
@@ -2298,7 +2322,8 @@ async function startShader() {
     // Determine backend preference: ?backend= URL param wins, else localStorage,
     // else default WebGL2.
     const storedBackend = (() => { try { return localStorage.getItem('polymorphic-backend') } catch { return null } })()
-    const { urlBackend, preferWebGPU } = resolveBackendPreference(window.location.search, storedBackend)
+    const { urlBackend, preferWebGPU: requestedWebGPU } = resolveBackendPreference(window.location.search, storedBackend)
+    const preferWebGPU = requestedWebGPU && !requiresWebGL2(curatedExample)
 
     // Graphics context loss recovery (Domain 4): a GPU reset (driver update,
     // GPU process crash, tab backgrounded under memory pressure) fires
@@ -2383,6 +2408,10 @@ async function startShader() {
 
         // Initialize the renderer
         await renderer.init()
+
+        if (requestedWebGPU && requiresWebGL2(curatedExample)) {
+            showToast('This program uses WebGL2 custom shaders', 'info')
+        }
 
         // Notify user if WebGPU was requested (via URL param or stored preference)
         // but the environment does not support it and fell back to WebGL2.
@@ -2542,6 +2571,16 @@ async function startShader() {
         }
 
         await joinOnlineSessionFromUrlIfPresent()
+        if (restoreCuratedSelection && dslEditor) {
+            // Resume the explicit selection after the existing session joins:
+            // its initial document can arrive before the old client's update.
+            dslEditor.value = dsl
+            originalDsl = dsl
+            await publishLocalDsl('gallery')
+            const selected = await recompileShader()
+            if (!selected.success) showCompilerError(selected.error)
+            else hideCompilerError()
+        }
 
         // Handle resize — coalesce bursts of resize events into at most one
         // canvas resize per frame. Dragging a window edge fires `resize` many
@@ -2725,20 +2764,7 @@ function setupMenuBar() {
     })
     // Pointer interaction ends the boot focus seed too (see endBootFocusSeed).
     document.addEventListener('pointerdown', endBootFocusSeed, { capture: true })
-    gallery.init({
-        onLoad: (example) => {
-            if (!dslEditor) return
-            // A shared composition brings the images its program names.
-            for (const image of example.images || []) {
-                if (renderer && !renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
-            }
-            dslEditor.value = example.dsl
-            originalDsl = example.dsl
-            publishLocalDsl('gallery')
-            scheduleHotReload()
-            dslEditor.focus()
-        }
-    })
+    gallery.init({ onLoad: loadGalleryExample })
     
     // Listen for fullscreen changes
     document.addEventListener('fullscreenchange', () => {
@@ -3030,13 +3056,7 @@ function setupCommandPalette() {
         openGallery: () => gallery.open(),
         shuffleExample: async () => {
             const ex = await pickRandomExample()
-            if (ex && dslEditor) {
-                dslEditor.value = ex.dsl
-                originalDsl = ex.dsl
-                publishLocalDsl('shuffle')
-                scheduleHotReload()
-                dslEditor.focus()
-            }
+            if (ex) loadGalleryExample(ex, 'shuffle')
         },
         snapshotBack: () => snapshotBack(),
         snapshotForward: () => snapshotForward(),
@@ -3053,11 +3073,54 @@ function setupCommandPalette() {
     for (const a of actions) commandPalette.registerAction(a)
 }
 
+async function loadGalleryExample(example, reason = 'gallery') {
+    if (!dslEditor) return
+    const url = new URL(window.location.href)
+    if (example.id) {
+        url.searchParams.delete('dsl')
+        url.searchParams.delete('code')
+        url.searchParams.set('curated', example.id)
+        loadedFromShareCode = false
+    } else {
+        url.searchParams.delete('curated')
+    }
+    if (urlStampTimeout) {
+        clearTimeout(urlStampTimeout)
+        urlStampTimeout = null
+    }
+    const changeBackend = renderer?.backend === 'webgpu' && requiresWebGL2(example)
+    if (changeBackend) {
+        // A canvas cannot change its context type. Reload through the existing
+        // backend option and retain the selected collection reference.
+        url.searchParams.set('backend', 'webgl2')
+        if (url.searchParams.has('seance') && onlineAdapter?.isOnline()) {
+            url.searchParams.set('curatedLoad', '1')
+        }
+    }
+    for (const image of example.images || []) {
+        if (renderer && !renderer.images.some(asset => asset.id === image.id)) renderer.images.push(image)
+    }
+    dslEditor.value = example.dsl
+    originalDsl = example.dsl
+    if (!changeBackend) window.history.replaceState(null, '', url)
+    await publishLocalDsl(reason)
+    if (changeBackend) {
+        window.location.assign(url)
+        return
+    }
+    scheduleHotReload()
+    dslEditor.focus()
+}
+
 /** Switch shader backend by setting a localStorage flag and reloading. */
 function switchBackend(target) {
     try { localStorage.setItem('polymorphic-backend', target) } catch { /* ignore */ }
     showToast(`Switching to ${target}…`, 'info')
-    setTimeout(() => window.location.reload(), 300)
+    setTimeout(() => {
+        const url = new URL(window.location.href)
+        url.searchParams.set('backend', target)
+        window.location.assign(url)
+    }, 300)
 }
 
 /**

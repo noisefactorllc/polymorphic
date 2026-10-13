@@ -17,7 +17,7 @@
  * the landing page feels welcoming.
  */
 
-import { loadFromCode } from '../sharingLoader.js'
+import { loadFromCode, registerPortableEffect, getLoadedPortableEffects, portableDefinition } from '../sharingLoader.js'
 import { CanvasRenderer, extractEffectNamesFromDsl } from '../noisemaker/bundle.js'
 import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
 import {
@@ -327,10 +327,16 @@ class LivePreview {
         })
         try {
             await this._renderer.loadManifest()
+            if (this._disposed) return
             // Strip media() urls the engine rejects (matches the main renderer).
+            if (this._opts.example) {
+                await prepareExample(this._opts.example, { preview: true, isCancelled: () => this._disposed })
+            }
+            if (this._disposed) return
             const engineDsl = stripMediaUrlArg(this._dsl)
             const effects = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
-            const ids = effects.map(e => e.effectId)
+            // Portable shaders are already registered; they have no CDN bundle.
+            const ids = effects.map(e => e.effectId).filter(id => !id.startsWith('user/'))
             if (ids.length > 0) await this._renderer.loadEffects(ids)
             await this._renderer.compile(engineDsl)
             if (this._disposed) return
@@ -356,6 +362,27 @@ class LivePreview {
     get error() { return this._error }
 }
 
+// Registration is serialized because the engine's user-effect registry is shared
+// by the main renderer and card renderers. Reuse unchanged definitions.
+let preparation = Promise.resolve()
+export function prepareExample(example, { preview = false, isCancelled = () => false } = {}) {
+    const ready = preparation.then(async () => {
+        for (const effect of example.effects || []) {
+            if (isCancelled()) return example
+            const definition = { ...portableDefinition(effect), shaders: effect.shaders || {} }
+            const id = `user/${definition.func}`
+            const retained = getLoadedPortableEffects().get(id)
+            if (JSON.stringify(retained) !== JSON.stringify(definition)) {
+                if (preview && retained) throw new Error(`Preview preserves active effect: ${id}`)
+                await registerPortableEffect(effect)
+            }
+        }
+        return example
+    })
+    preparation = ready.catch(() => {})
+    return ready
+}
+
 let cachedExamples = null
 let cachedBlasterFeed = null
 let cachedBlasterFetchedAt = 0
@@ -377,11 +404,21 @@ export async function loadExamples() {
     return cachedExamples
 }
 
+export function requiresWebGL2(example) {
+    return (example?.effects || []).some(effect =>
+        (effect.passes || []).some(pass => !effect.shaders?.[pass.program]?.wgsl?.trim()))
+}
+
+export async function loadCuratedExample(id) {
+    const example = (await loadExamples()).find(entry => entry.id === id)
+    return example ? prepareExample(example) : null
+}
+
 /** @returns {Promise<{title:string, dsl:string} | null>} */
 export async function pickRandomExample() {
     const list = await loadExamples()
     if (!list.length) return null
-    return list[Math.floor(Math.random() * list.length)]
+    return prepareExample(list[Math.floor(Math.random() * list.length)])
 }
 
 /**
@@ -492,6 +529,7 @@ class Gallery {
             preview: null,
             canvas: null,
             snapshotImg: null,
+            example: opts.example,
             absolute: !!opts.absolute,
             // Blaster cards already show a static screenshot underneath, so
             // they don't need a one-shot warm-up render to populate a still
@@ -671,6 +709,7 @@ class Gallery {
         entry.thumbContainer.appendChild(canvas)
         entry.canvas = canvas
         const preview = new LivePreview(canvas, entry.dsl, {
+            example: entry.example,
             onError: (err) => console.debug('[Gallery] preview error:', err?.message || err)
         })
         entry.preview = preview
@@ -933,12 +972,11 @@ class Gallery {
 
     _shuffle() {
         if (this._activeTab === 'curated') {
-            loadExamples().then(list => {
-                if (!list.length) return
-                const ex = list[Math.floor(Math.random() * list.length)]
-                this._onLoad(ex)
+            pickRandomExample().then(async ex => {
+                if (!ex) return
+                await this._onLoad(ex)
                 this.close()
-            })
+            }).catch(err => console.error('[Gallery] shuffle failed:', err))
         } else if (this._activeTab === 'noisedeck-examples') {
             loadNoisedeckExamples().then(async (listing) => {
                 if (!listing?.files?.length) return
@@ -975,11 +1013,24 @@ class Gallery {
         card.appendChild(thumbDiv)
         card.appendChild(body)
 
-        card.addEventListener('click', () => {
-            this._onLoad(ex)
-            this.close()
+        card.addEventListener('click', async () => {
+            card.classList.add('loading')
+            try {
+                await prepareExample(ex)
+                await this._onLoad(ex)
+                this.close()
+            } catch (err) {
+                card.classList.remove('loading')
+                console.error('[Gallery] Failed to load curated program:', err)
+                if (!body.querySelector('.gallery-load-error')) {
+                    const message = document.createElement('span')
+                    message.className = 'gallery-load-error'
+                    message.textContent = 'load failed'
+                    body.appendChild(message)
+                }
+            }
         })
-        if (ex.dsl) this._registerPreview(card, thumbDiv, ex.dsl)
+        if (ex.dsl) this._registerPreview(card, thumbDiv, ex.dsl, { example: ex })
         return card
     }
 
