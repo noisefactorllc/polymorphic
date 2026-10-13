@@ -108,7 +108,19 @@ export function createSetup(getEndpoint) {
 // EPERM there. Bind in candidate order [NM_TS_PORT, ephemeral, fixed range],
 // each attempt a fresh server with a one-shot error handler; the request
 // handler and assertions stay untouched.
+// The fixed range must exclude ports this run already owns: the page origin
+// (serve-book) and the daemon. On macOS a specific 127.0.0.1 bind succeeds
+// next to an existing wildcard bind on the same port and then wins all
+// loopback traffic, so binding the page origin here would silently steal
+// every page request (they would surface as daemon 400 responses).
+const excludedFallbackPorts = new Set()
+try {
+    const originPort = Number(new URL(daemonOrigin).port)
+    if (Number.isInteger(originPort) && originPort > 0) excludedFallbackPorts.add(originPort)
+} catch { /* Non-URL daemon origin; nothing to exclude. */ }
+if (daemonPort) excludedFallbackPorts.add(Number(daemonPort))
 const FIXED_FALLBACK_PORTS = [43117, 43118, 43119, 43120, 43121, 43122, 43123, 43124, 43125, 43126]
+    .filter(port => !excludedFallbackPorts.has(port))
 let fixedFallbackCursor = 0
 
 function listenWithFallback(server, preferredPort = 0) {
