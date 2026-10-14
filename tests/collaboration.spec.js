@@ -44,8 +44,8 @@ const ONLINE_FEATURE = 'onlineCollaboration'
 test.describe.configure({ mode: 'serial' })
 test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
 
-test.beforeAll(async () => {
-  seance = await startSeanceServer()
+test.beforeAll(async ({ browser }, testInfo) => {
+  seance = await startSeanceServer({ origin: testInfo.project.use.baseURL })
 })
 
 test.afterAll(async () => {

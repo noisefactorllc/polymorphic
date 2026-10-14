@@ -121,14 +121,45 @@ async function waitForHealthy(url, exitCode, logs) {
     throw new Error(`Timed out waiting for Seance:\n${logs()}`)
 }
 
-function getFreePort() {
+// Restricted runners (the macOS GPU host broker) only permit explicit fixed
+// loopback ports (43117-43126), so an ephemeral listen(0) fails with EPERM
+// there. Try ephemeral first, then the fixed range minus the ports this run
+// already owns: the page origin (serve-book, 43117) and the native audio
+// daemon (43126). On macOS a specific 127.0.0.1 bind succeeds next to an
+// existing wildcard bind on the same port and then wins all loopback traffic,
+// so binding a port the app serves would silently steal page requests.
+const SEANCE_FIXED_FALLBACK_PORTS = [43118, 43119, 43120, 43121, 43122, 43123, 43124, 43125]
+
+function tryListen(port) {
+    const server = net.createServer()
+    server.unref()
     return new Promise((resolve, reject) => {
-        const server = net.createServer()
-        server.unref()
-        server.on('error', reject)
-        server.listen(0, '127.0.0.1', () => {
+        const onError = err => {
+            server.close()
+            reject(err)
+        }
+        server.once('error', onError)
+        server.listen(port, '127.0.0.1', () => {
             const address = server.address()
+            server.removeListener('error', onError)
             server.close(() => resolve(address.port))
         })
     })
+}
+
+async function getFreePort() {
+    try {
+        return await tryListen(0)
+    } catch (error) {
+        if (error.code !== 'EPERM') throw error
+        let lastError = error
+        for (const port of SEANCE_FIXED_FALLBACK_PORTS) {
+            try {
+                return await tryListen(port)
+            } catch (err) {
+                lastError = err
+            }
+        }
+        throw lastError
+    }
 }

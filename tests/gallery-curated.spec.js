@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
+import { routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
 
 const examples = JSON.parse(readFileSync('public/data/examples.json', 'utf8'))
 
@@ -186,13 +186,8 @@ test('explicit backend command overrides a curated fallback URL', async ({ page 
     expect(await page.evaluate(() => window.__poly.renderer._currentDsl)).toBe(bootDsl)
 })
 
-// Collaboration needs a local Seance harness; skip before the browser fixture
-// launches, the same way tests/collaboration.spec.js does.
-test.describe('with a local Seance harness', () => {
-    test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
-
-    test('online curated selection survives the WebGPU reload in its existing session', async ({ page }, testInfo) => {
-        const server = await startSeanceServer({ origin: testInfo.project.use.baseURL })
+test('online curated selection survives the WebGPU reload in its existing session', async ({ page }, testInfo) => {
+    const server = await startSeanceServer({ origin: testInfo.project.use.baseURL })
     try {
         await routeSeanceSdkLocal(page)
         const example = examples.find(e => e.code === '7INvow')
@@ -212,7 +207,6 @@ test.describe('with a local Seance harness', () => {
     } finally {
         await server.stop()
     }
-    })
 })
 
 
