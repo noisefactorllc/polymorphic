@@ -181,7 +181,7 @@ async function connectedRecoveryFixture({
     return { controller, initial, calls, renderer: stableRenderer, timers }
 }
 
-function createFixture() {
+function createFixture({ version = '0.2.19' } = {}) {
     const events = []
     const closed = deferred()
     const sender = {
@@ -244,7 +244,7 @@ function createFixture() {
         {
             async connect() {
                 events.push('connect')
-                return welcome()
+                return { ...welcome(), version }
             },
             async createSender(name, options) {
                 events.push(['createSender', name, options])
@@ -305,7 +305,7 @@ test('publishes the Polymorphic renderer through a bounded Sync sender sink', as
     assert.deepEqual(fixture.events.find((event) => event[0] === 'pair'), ['pair', 'Polymorphic'])
     const createSender = fixture.events.find((event) => event[0] === 'createSender')
     assert.equal(createSender[1], 'Polymorphic Main')
-    assert.equal(createSender[2].exportQueue, fixture.queue)
+    assert.equal(createSender[2].exportQueue.queue, fixture.queue)
     assert.equal(createSender[2].maxBufferedFrames, 1)
     assert.deepEqual(
         fixture.events.find((event) => event[0] === 'queue'),
@@ -713,4 +713,86 @@ test('stopping recovery closes an in-flight connection and late sender resources
     assert.equal(fixture.controller.state.status, 'ready')
     assert.equal(fixture.timers.timeouts.size, 0)
     assert.equal(fixture.timers.intervals.size, 0)
+})
+
+
+test('unsupported H.264 hardware falls back to the existing bounded raw sender', async t => {
+    const originals = [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream]
+    t.after(() => { [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream] = originals })
+    globalThis.VideoEncoder = class { static async isConfigSupported() { return { supported: false } } }
+    globalThis.VideoFrame = class {}
+    globalThis.WebSocketStream = class {}
+    const fixture = createFixture({ version: '0.2.131' })
+    const originalCreateClient = fixture.connectionProvider.createClient
+    fixture.connectionProvider.createClient = options => {
+        const client = originalCreateClient(options)
+        client.createH264StreamSender = () => assert.fail('unsupported encoder must not open an H.264 transport')
+        return client
+    }
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncOutput.SyncOutputController({
+        renderer: fixture.renderer, getCanvas: () => canvas,
+        connectionProvider: fixture.connectionProvider,
+        setInterval: () => 1, clearInterval() {}, setTimeout: () => 2, clearTimeout() {}
+    })
+    t.after(() => controller.dispose())
+    await controller.connect()
+    await controller.start('Raw fallback')
+    assert.equal(controller.state.status, 'sending')
+    assert.equal(controller._compressedSender, false)
+    assert.equal(fixture.events.filter(event => event[0] === 'createSender').length, 1)
+    assert.equal(fixture.attachedSink.submit('rendered-texture', 42), true)
+    await controller.stop()
+    assert.equal(controller.state.status, 'ready')
+    assert.equal(controller.state.stats.failed, 0)
+})
+
+
+test('recovery also uses raw output when the current H.264 configuration is unsupported', async t => {
+    const originals = [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream]
+    t.after(() => { [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream] = originals })
+    globalThis.VideoEncoder = class { static async isConfigSupported() { return { supported: false } } }
+    globalThis.VideoFrame = class {}; globalThis.WebSocketStream = class {}
+    const replacement = senderFixture()
+    const connection = recoveryConnection({ sender: replacement.sender })
+    connection.connect = async () => ({ ...welcome(), version: '0.2.131' })
+    connection.createH264StreamSender = () => assert.fail('unsupported format must not create H.264 transport')
+    const fixture = await connectedRecoveryFixture({ recoveryClients: [
+        recoveryProbe({ available: true, health: health() }), connection
+    ] })
+    t.after(() => fixture.controller.dispose())
+    fixture.initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    fixture.timers.fireTimeout(250)
+    await flushMicrotasks(30)
+    assert.equal(fixture.controller.state.status, 'sending')
+    assert.equal(fixture.controller._compressedSender, false)
+    assert.equal(fixture.controller._sender, replacement.sender)
+})
+
+
+test('H.264 transport failures propagate without creating a raw sender', async t => {
+    const originals = [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream]
+    t.after(() => { [globalThis.VideoEncoder, globalThis.VideoFrame, globalThis.WebSocketStream] = originals })
+    globalThis.VideoEncoder = class { static async isConfigSupported() { return { supported: true } } }
+    globalThis.VideoFrame = class {}; globalThis.WebSocketStream = class {}
+    const fixture = createFixture({ version: '0.2.131' })
+    const originalCreateClient = fixture.connectionProvider.createClient
+    const failure = Object.assign(new Error('transport unavailable'), { code: 'SYNC_CONNECTION_FAILED' })
+    fixture.connectionProvider.createClient = options => {
+        const client = originalCreateClient(options)
+        client.createH264StreamSender = async () => { throw failure }
+        return client
+    }
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncOutput.SyncOutputController({
+        renderer: fixture.renderer, getCanvas: () => canvas,
+        connectionProvider: fixture.connectionProvider,
+        setInterval: () => 1, clearInterval() {}, setTimeout: () => 2, clearTimeout() {}
+    })
+    t.after(() => controller.dispose())
+    await controller.connect()
+    await assert.rejects(controller.start('Transport failure'), error => error === failure)
+    assert.equal(fixture.events.filter(event => event[0] === 'createSender').length, 0)
+    assert.notEqual(controller.state.status, 'sending')
 })

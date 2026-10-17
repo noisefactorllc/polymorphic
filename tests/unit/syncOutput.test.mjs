@@ -109,8 +109,9 @@ test('Polymorphic connects its renderer to a bounded Sync target sink', async ()
     assert.deepEqual(calls[5], ['queue', { slots: 3 }])
     assert.equal(calls[6][0], 'createSender')
     assert.equal(calls[6][1], 'Polymorphic')
+    assert.equal(calls[6][2].exportQueue.queue, queue)
     assert.deepEqual(calls[6][2], {
-        exportQueue: queue,
+        exportQueue: calls[6][2].exportQueue,
         maxBufferedFrames: 1,
         clock
     })

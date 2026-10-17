@@ -23,10 +23,11 @@ export class SyncAudioChannels {
         this.tap.connect(context.destination) // The tap emits only silence.
     }
 
-    update(states, sensitivity = 1) {
+    update(states, sensitivity = 1, devices = [this.device]) {
         const current = new Set(states)
         for (const previous of this.states) {
             if (current.has(previous)) continue
+            previous.setDeviceInventory?.([])
             previous.disconnectDevice?.(this.device.id)
             previous.disconnectDefaultInput?.()
             previous.setRawUnavailable?.()
@@ -34,6 +35,7 @@ export class SyncAudioChannels {
         this.states = current
         for (const state of current) {
             if (!state) continue
+            state.setDeviceInventory?.(devices)
             state.registerDevice?.(this.device)
             state.registerDefaultChannels?.(this.device.channelCount)
             if (this.raw.length) state.setRaw?.(this.raw.reduce((sum, value) => sum + value, 0) / this.raw.length)
@@ -58,6 +60,7 @@ export class SyncAudioChannels {
         this.splitter.disconnect()
         for (const analyser of this.analysers) analyser.disconnect()
         for (const state of this.states) {
+            state.setDeviceInventory?.([])
             state.disconnectDevice?.(this.device.id)
             state.disconnectDefaultInput?.()
             state.setRawUnavailable?.()

@@ -242,7 +242,7 @@ export class SharedAudio {
             state.setWaveform?.(this._timeDomainData)
         }
 
-        this._nativeChannels?.update(this._audioStates.values(), sens)
+        this._nativeChannels?.update(this._audioStates.values(), sens, this._syncAudio.getSyncAudioDevices())
         if (this._onMeters) this._onMeters(this.meters)
         this._rafId = requestAnimationFrame(this._loopBound)
     }

@@ -784,10 +784,11 @@ describe('SyncOutputController sender start', () => {
         const starting = fixture.controller.start('Main output')
         assert.equal(fixture.controller.state.status, 'starting')
         assert.equal(statuses.at(-1), 'starting')
+        assert.equal(calls[1][2].exportQueue.queue, queue)
         assert.deepEqual(calls, [
             ['queue', { slots: 3 }],
             ['createSender', 'Main output', {
-                exportQueue: queue,
+                exportQueue: calls[1][2].exportQueue,
                 maxBufferedFrames: 1,
                 clock: fixture.clock
             }]
@@ -810,10 +811,11 @@ describe('SyncOutputController sender start', () => {
             failed: 1
         })
         assert.notEqual(fixture.controller.state.stats, sender.sender.stats)
+        assert.equal(calls[1][2].exportQueue.queue, queue)
         assert.deepEqual(calls.slice(0, 2), [
             ['queue', { slots: 3 }],
             ['createSender', 'Main output', {
-                exportQueue: queue,
+                exportQueue: calls[1][2].exportQueue,
                 maxBufferedFrames: 1,
                 clock: fixture.clock
             }]

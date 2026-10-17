@@ -50,13 +50,36 @@ export function supportsH264FrameGeometry(descriptor) {
         descriptor.width % 2 === 0 && descriptor.height % 2 === 0
 }
 
+// H.264 Annex A limits for High profile at the existing 50 Mbps bitrate.
+// Level 4.1 is the first level with sufficient bitrate capacity.
+const H264_LEVELS = [
+    [41, 8192, 245760], [42, 8704, 522240], [50, 22080, 589824],
+    [51, 36864, 983040], [52, 36864, 2073600],
+    [60, 139264, 4177920], [61, 139264, 8355840], [62, 139264, 16711680]
+]
+
+function h264Codec(descriptor) {
+    if (!supportsH264FrameGeometry(descriptor) ||
+        !Number.isFinite(descriptor.fps) || descriptor.fps <= 0) {
+        throw outputError('SYNC_CAPABILITY', 'Hardware H.264 output is unavailable at this resolution')
+    }
+    const columns = Math.ceil(descriptor.width / 16)
+    const rows = Math.ceil(descriptor.height / 16)
+    const macroblocks = columns * rows
+    const level = H264_LEVELS.find(([, maxFrame, maxRate]) =>
+        macroblocks <= maxFrame && macroblocks * descriptor.fps <= maxRate &&
+        columns * columns <= 8 * maxFrame && rows * rows <= 8 * maxFrame)
+    if (!level) throw outputError('SYNC_CAPABILITY', 'Hardware H.264 output is unavailable at this resolution')
+    return 'avc1.6400' + level[0].toString(16)
+}
+
 export class SyncH264CanvasSender {
     static async create({ client, name, canvas, descriptor, clock = performance, logger = globalThis.console }) {
         if (typeof client?.createH264StreamSender !== 'function') {
             throw outputError('SYNC_CAPABILITY', 'Sync SDK does not support H.264 output')
         }
         const config = {
-            codec: 'avc1.640028',
+            codec: h264Codec(descriptor),
             width: descriptor.width,
             height: descriptor.height,
             bitrate: 50_000_000,

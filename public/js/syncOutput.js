@@ -1,4 +1,5 @@
 import { SyncBridgeClient } from './sync/bundle.js'
+import { SyncExportQueue } from './syncExportQueue.js'
 import { syncCredentialStore } from './sync/credentials.js'
 import { SyncH264CanvasSender, supportsH264CanvasOutput, supportsH264FrameGeometry } from './syncH264CanvasSender.js'
 
@@ -695,6 +696,34 @@ export class SyncOutputController {
         }
     }
 
+    async _createSenderResources(resources, client, name, canvas, descriptor, welcome) {
+        let compressed = supportsH264CanvasOutput(welcome) && supportsH264FrameGeometry(descriptor)
+        if (compressed) {
+            try {
+                resources.sender = await SyncH264CanvasSender.create({
+                    client, name, canvas, descriptor, clock: this._clock, logger: this._logger
+                })
+            } catch (error) {
+                if (error?.code !== 'SYNC_CAPABILITY') throw error
+                compressed = false
+            }
+        }
+        if (!compressed) {
+            if (typeof this._renderer?.createFrameExportQueue !== 'function') {
+                throw outputError('SYNC_EXPORT_UNAVAILABLE', 'The active renderer backend cannot export frames')
+            }
+            resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+            if (!resources.queue || typeof resources.queue.close !== 'function') {
+                throw outputError('SYNC_EXPORT_UNAVAILABLE', 'The active renderer backend cannot export frames')
+            }
+            resources.queue = new SyncExportQueue(resources.queue)
+            resources.sender = await client.createSender(name, {
+                exportQueue: resources.queue, maxBufferedFrames: 1, clock: this._clock
+            })
+        }
+        return compressed
+    }
+
     async _runStart(name, lifecycleGeneration) {
         const resources = {
             queue: null,
@@ -714,7 +743,7 @@ export class SyncOutputController {
             // An odd canvas buffer cannot carry H.264 access units, so the
             // compressed path is only selectable for even frame geometry; the
             // renderer export queue serves every size.
-            const compressed = supportsH264CanvasOutput(this._welcome) && supportsH264FrameGeometry(descriptor)
+            let compressed = supportsH264CanvasOutput(this._welcome) && supportsH264FrameGeometry(descriptor)
             if (typeof this._renderer?.addSink !== 'function' ||
                 (!compressed && typeof this._renderer?.createFrameExportQueue !== 'function')) {
                 throw outputError(
@@ -752,29 +781,8 @@ export class SyncOutputController {
                 try {
                     this._assertLifecycleCurrent(lifecycleGeneration)
                     this._assertRendererIdentity(rendererIdentity)
-                    if (compressed) {
-                        resources.sender = await SyncH264CanvasSender.create({
-                            client: this._client, name, canvas: liveCanvas, descriptor, clock: this._clock,
-                            logger: this._logger
-                        })
-                    } else {
-                        resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
-                        if (!resources.queue) {
-                            throw outputError(
-                                'SYNC_EXPORT_UNAVAILABLE',
-                                'The active renderer backend cannot export frames'
-                            )
-                        }
-                        if (typeof resources.queue.close !== 'function') {
-                            throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
-                        }
-
-                        resources.sender = await this._client.createSender(name, {
-                            exportQueue: resources.queue,
-                            maxBufferedFrames: 1,
-                            clock: this._clock
-                        })
-                    }
+                    compressed = await this._createSenderResources(
+                        resources, this._client, name, liveCanvas, descriptor, this._welcome)
                     break
                 } catch (error) {
                     if (resources.queue && typeof resources.queue.close === 'function') {
@@ -1138,26 +1146,8 @@ export class SyncOutputController {
             this._assertRecoveryProvider(welcome, context.providerIds)
             context = this._adoptRecoveryRendererIdentity(context)
 
-            if (supportsH264CanvasOutput(welcome) && supportsH264FrameGeometry(context.descriptor)) {
-                resources.sender = await SyncH264CanvasSender.create({
-                    client: resources.client, name: context.senderName,
-                    canvas: context.canvas, descriptor: context.descriptor, clock: this._clock,
-                    logger: this._logger
-                })
-            } else {
-                resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
-                if (!resources.queue || typeof resources.queue.close !== 'function') {
-                    throw outputError(
-                        'SYNC_EXPORT_UNAVAILABLE',
-                        'The active renderer backend cannot export frames'
-                    )
-                }
-                resources.sender = await resources.client.createSender(context.senderName, {
-                    exportQueue: resources.queue,
-                    maxBufferedFrames: 1,
-                    clock: this._clock
-                })
-            }
+            const compressed = await this._createSenderResources(
+                resources, resources.client, context.senderName, context.canvas, context.descriptor, welcome)
             this._assertRecoveryCurrent(generation)
             validateSender(resources.sender)
             context = this._adoptRecoveryRendererIdentity(context)
@@ -1194,7 +1184,7 @@ export class SyncOutputController {
             this._liveCanvas = context.canvas
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = context.pipeline
-            this._compressedSender = supportsH264CanvasOutput(welcome)
+            this._compressedSender = compressed
             resources.client = null
             resources.queue = null
             resources.sender = null
