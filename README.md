@@ -33,8 +33,8 @@ features use Noise Factor services; they are separate from running the editor.
 Sync input and output features require a local Sync installation.
 
 The `desktop/` wrapper is used for Noise Factor's separately distributed
-desktop build. It depends on `@nf/desktop-shell` from the private scaffold
-repository and is not part of the self-hosted web setup.
+desktop build. It depends on the private `@nf/desktop-shell` package and is
+not part of the self-hosted web setup.
 
 ## Features
 

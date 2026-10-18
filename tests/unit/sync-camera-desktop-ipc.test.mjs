@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-// The desktop-shell IPC and shared-memory reader are owned by the scaffold
+// The desktop-shell IPC and shared-memory reader are owned by a private
 // repository (@nf/desktop-shell). These checks run that exact source — not a
 // mirror — when the sibling checkout is present, so a desktop contract change
 // (frame fields, sequence delivery, concurrent consumers, cleanup) cannot land
@@ -26,11 +26,11 @@ if (existsSync(shellLib)) {
     } catch (error) {
         const unavailable = (error.code === 'EACCES' || error.code === 'EPERM') ||
             (error.code === 'MODULE_NOT_FOUND' && String(error.message).includes(shellLib))
-        if (unavailable) skipReason = `scaffold desktop-shell library not readable here (${error.code})`
+        if (unavailable) skipReason = `desktop-shell library not readable here (${error.code})`
         else throw error
     }
 } else {
-    skipReason = 'scaffold desktop-shell checkout not present'
+    skipReason = 'desktop-shell checkout not present'
 }
 const { wireSyncCameraIpc, SyncCameraShmReader, SYNC_MAGIC, SYNC_VERSION, FRAME_RING_SLOTS,
     CANVAS_WIDTH, CANVAS_HEIGHT, FRAME_SLOT_BYTES, HEADER_BYTES } = mod || {}
