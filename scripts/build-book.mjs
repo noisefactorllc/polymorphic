@@ -22,7 +22,7 @@
  *
  * Output lands in dist/, NOT in public/. The standalone desktop and mobile
  * pipeline stages polymorphic/public straight from the working checkout without
- * running any build (scaffold apps/standalone-build/bin/build), so a generated
+ * running any build, so a generated
  * public/book/ would ride into three shipped apps on whichever machine happened
  * to have built it, and not on one that had not. Keeping the book out of the
  * web root makes those app payloads identical to what they are today, on every

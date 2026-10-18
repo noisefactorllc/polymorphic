@@ -121,7 +121,7 @@ async function waitForHealthy(url, exitCode, logs) {
     throw new Error(`Timed out waiting for Seance:\n${logs()}`)
 }
 
-// Restricted runners (the macOS GPU host broker) only permit explicit fixed
+// Restricted runners (the macOS GPU host) only permit explicit fixed
 // loopback ports (43117-43126), so an ephemeral listen(0) fails with EPERM
 // there. Try ephemeral first, then the fixed range minus the ports this run
 // already owns: the page origin (serve-book, 43117) and the native audio

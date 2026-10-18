@@ -103,7 +103,7 @@ export function createSetup(getEndpoint) {
 // would — an abrupt teardown with no WebSocket close frame, so the daemon
 // reaps the sender from the data socket it owns and the browser surfaces an
 // abnormal (1006) closure. Control and audio traffic never touches the cut.
-// Restricted runners (the macOS GPU host broker) only permit explicit
+// Restricted runners (the macOS GPU host) only permit explicit
 // fixed loopback ports (43117-43126), so an ephemeral listen(0) fails with
 // EPERM there. Bind in candidate order [NM_TS_PORT, ephemeral, fixed range],
 // each attempt a fresh server with a one-shot error handler; the request
