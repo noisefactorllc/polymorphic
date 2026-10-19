@@ -108,6 +108,21 @@ test('every page has a title and a one-line description', () => {
     }
 })
 
+/**
+ * GAP-001 in the engine gave filter/text's matteColor an array default so
+ * WebGL2 shows its input instead of black. The extraction records what the
+ * engine serves, so the book data must carry the channel default too. This
+ * guards against a stale extraction still holding the retired hex string.
+ */
+test('filter/text carries the engine\'s array default for matteColor', () => {
+    const effect = book.effects.find(e => e.id === 'filter/text')
+    assert.ok(effect, 'filter/text is in the book data')
+    const matte = effect.params.find(p => p.name === 'matteColor')
+    assert.ok(matte, 'matteColor is a filter/text parameter')
+    assert.deepEqual(matte.default, [0, 0, 0],
+        'matteColor must ship the engine\'s channel default, not a hex string')
+})
+
 test('every effect has prose, and it stays a page rather than an essay', async () => {
     const missing = []
     const overlong = []
