@@ -141,7 +141,8 @@ test('the owner tab runs an agent\'s commands and shows its canvas as an uploade
     expect(commands.setProgram.args.required).toEqual(['dsl'])
     expect(commands.setProgram.remote).toBe(true)
     expect(commands.getThumbnail).toMatchObject({ readOnly: true, remote: true })
-    for (const name of ['exportImage', 'listPrograms', 'saveProgram', 'loadProgram', 'deleteProgram', 'listScenes', 'saveScene', 'loadScene', 'stepHistory']) {
+    for (const name of ['exportImage', 'listPrograms', 'saveProgram', 'loadProgram', 'deleteProgram', 'listScenes', 'saveScene', 'loadScene',
+      'stepHistory', 'resetProgram', 'setView', 'setBackend', 'importComposition']) {
       expect(commands[name].remote, name).toBe(false)
     }
     const tab = described.from
@@ -157,7 +158,16 @@ test('the owner tab runs an agent\'s commands and shows its canvas as an uploade
     expect(set.body).toMatchObject({ ok: true, command: 'setProgram', result: { applied: true } })
     expect(set.body.state.program).toEqual({ chars: VALID.length, running: true, error: null })
     expect(await editorText(page)).toBe(VALID)
-    await expect.poll(async () => (await agent.documents()).find(doc => doc.id === 'main')?.text).toBe(VALID)
+    expect((await agent.documents()).find(doc => doc.id === 'main')?.text).toBe(VALID)
+
+    // Text that stayed in the editor stays private: the session reads the
+    // program it holds.
+    await page.evaluate(() => { document.getElementById('dsl-editor').value = 'search synth\n// private draft\nnoise().write(o0)\nrender(o0)' })
+    const read = await agent.request(tab, 'getProgram')
+    expect(read.body.result).toEqual({ dsl: VALID, running: true })
+    expect(read.body.state.program.chars).toBe(VALID.length)
+    expect(JSON.stringify(read.body)).not.toContain('private draft')
+    await page.evaluate(dsl => { document.getElementById('dsl-editor').value = dsl }, VALID)
 
     const refused = await agent.request(tab, 'setProgram', { dsl: 'search synth\nperlin(madeUp: 3).write(o0)\nrender(o0)' })
     expect(refused.body.ok).toBe(false)
@@ -180,11 +190,17 @@ test('the owner tab runs an agent\'s commands and shows its canvas as an uploade
     expect(uploads.some(upload => upload.type === 'image/png' && upload.body?.equals(bytes))).toBe(true)
     expect(sent.filter(frame => frame.includes(bytes.toString('base64')) || /data:image|[A-Za-z0-9+/]{200,}/.test(frame))).toEqual([])
 
+    // An image travels through a session only as bytes.
+    const inline = await agent.request(tab, 'setProgram', { dsl: 'search synth\nmedia(url: "data:image/png;base64,iVBORw0KGgo=").write(o0)\nrender(o0)' })
+    expect(inline.body.error.code).toBe('IMAGE_AS_TEXT')
+    expect(await editorText(page)).toBe(VALID)
+
     // Downloads and what the person stored stay out of the session.
     await page.evaluate(() => window.PolymorphicAgent.saveProgram({ name: 'Private sketch' }))
     for (const [command, args] of [['exportImage', {}], ['listPrograms', {}], ['loadProgram', { name: 'Private sketch' }],
       ['saveProgram', { name: 'From the session' }], ['deleteProgram', { name: 'Private sketch' }], ['listScenes', {}],
-      ['saveScene', { slot: 1 }], ['stepHistory', { direction: 'back' }], ['importComposition', { link: 'Agent1' }]]) {
+      ['saveScene', { slot: 1 }], ['stepHistory', { direction: 'back' }], ['importComposition', { link: 'Agent1' }],
+      ['resetProgram', {}], ['setView', { panel: 'editor', visible: false }], ['setBackend', { backend: 'webgpu' }]]) {
       const answer = await agent.request(tab, command, args)
       expect(answer.body.error.code, command).toBe('REMOTE_UNAVAILABLE')
       expect(JSON.stringify(answer.body), command).not.toContain('Private sketch')
@@ -288,5 +304,105 @@ test('the tab takes at most 16 images in ten minutes', async ({ page }) => {
     expect(refused.body.error.details.retryAfter).toBeGreaterThan(500)
   } finally {
     agent.close()
+  }
+})
+
+test('an image the person keeps only in this browser stays out of the session', async ({ page }) => {
+  const uploads = []
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/images')) uploads.push(request.postDataBuffer())
+  })
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const tab = (await agent.describe()).from
+    const secret = png(10, 200, 30)
+    const ref = await page.evaluate(async bytes => {
+      const { storeImageFile } = await import('/js/programImages.js')
+      return storeImageFile(new File([new Uint8Array(bytes)], 'private.png', { type: 'image/png' }))
+    }, Array.from(secret))
+    expect(ref).toBe(`image:${digest(secret)}`)
+    const dsl = `search synth\nmedia(url: "${ref}").write(o0)\nrender(o0)`
+    const refused = await agent.request(tab, 'setProgram', { dsl })
+    expect(refused.body.error).toMatchObject({ code: 'NOT_FOUND_IMAGE', details: { id: digest(secret) } })
+    expect(await editorText(page)).toBe(BASE)
+    expect(uploads.some(body => body?.equals(secret))).toBe(false)
+    // Once the image is in the session, the program runs.
+    expect(await agent.uploadImage(secret, 'image/png')).toBe(digest(secret))
+    const set = await agent.request(tab, 'setProgram', { dsl })
+    expect(set.body.ok, JSON.stringify(set.body.error)).toBe(true)
+    await expect.poll(() => centerPixel(page)).toEqual([10, 200, 30, 255])
+  } finally {
+    agent.close()
+  }
+})
+
+test('while the person uses live input, the session gets nothing from the tab', async ({ page }) => {
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const tab = (await agent.describe()).from
+    // A camera without hardware: a canvas stream stands in for the webcam.
+    await page.evaluate(() => {
+      const source = document.createElement('canvas')
+      source.width = source.height = 16
+      source.getContext('2d').fillRect(0, 0, 16, 16)
+      window.__poly.liveInputsPanel._currentStream = source.captureStream(30)
+    })
+    for (const [command, args] of [['getState', {}], ['getProgram', {}], ['getThumbnail', { maxDimension: 16 }], ['setProgram', { dsl: VALID }]]) {
+      const answer = await agent.request(tab, command, args)
+      expect(answer.body.error.code, command).toBe('REMOTE_UNAVAILABLE')
+      expect(answer.body.state, command).toBeNull()
+    }
+    expect(await editorText(page)).toBe(BASE)
+    // describe still answers, so an agent can tell why.
+    expect((await agent.describe()).from).toBe(tab)
+    await page.evaluate(() => window.__poly.liveInputsPanel.stopMediaSource())
+    expect((await agent.request(tab, 'getState')).body.ok).toBe(true)
+  } finally {
+    agent.close()
+  }
+})
+
+test('a tab that inherits the session after the person\'s tab closes does not answer', async ({ page, browser }) => {
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  const guestContext = await browser.newContext()
+  const guest = await guestContext.newPage()
+  const guestSent = []
+  const guestReceived = []
+  guest.on('websocket', socket => {
+    socket.on('framesent', frame => guestSent.push(String(frame.payload)))
+    socket.on('framereceived', frame => guestReceived.push(String(frame.payload)))
+  })
+  try {
+    await openApp(guest, { seance: code })
+    await expect.poll(() => guest.evaluate(() => window.PolymorphicAgent.getState().then(env => env.state.online))).toBe('online')
+    const creator = agent.owner()
+    expect((await agent.describe()).app).toBe('polymorphic')
+
+    // The person's tab leaves; Seance makes the guest the owner.
+    await page.close()
+    await expect.poll(() => agent.owner(), { timeout: 20000 }).not.toBe(creator)
+    expect(agent.owner()).toBeTruthy()
+
+    // The guest's tab receives the request and lets it pass: it did not take
+    // the session online.
+    const asked = await agent.send('*', 'describe')
+    await expect.poll(() => guestReceived.some(frame => frame.includes(asked))).toBe(true)
+    // One task turn in the guest page: any answer would have been sent by now.
+    await guest.evaluate(() => new Promise(resolve => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = resolve
+      channel.port2.postMessage(null)
+    }))
+    expect(guestSent.filter(frame => frame.includes('nf-agent/1'))).toEqual([])
+    expect(agent.relayed.filter(frame => frame.id === asked && frame.kind === 'response')).toEqual([])
+  } finally {
+    agent.close()
+    await guestContext.close()
   }
 })

@@ -40,7 +40,8 @@ test('llms.txt lists every error code that the agent API returns', async () => {
         const pattern = /(?:commandError|fail)\(\s*'([A-Z][A-Z_]+)'|makeFailure\(\w+,\s*'([A-Z][A-Z_]+)'/g
         for (const m of source.matchAll(pattern)) codes.add(m[1] || m[2])
     }
-    for (const code of ['INVALID_PROGRAM', 'INVALID_ARGS_UNKNOWN', 'INTERNAL_ERROR', 'REMOTE_UNAVAILABLE', 'NOT_FOUND_COMMAND', 'IMAGE_UPLOAD_FAILED']) {
+    for (const code of ['INVALID_PROGRAM', 'INVALID_ARGS_UNKNOWN', 'INTERNAL_ERROR', 'REMOTE_UNAVAILABLE', 'NOT_FOUND_COMMAND',
+        'IMAGE_UPLOAD_FAILED', 'IMAGE_LIMIT', 'IMAGE_AS_TEXT', 'NOT_FOUND_IMAGE']) {
         assert.ok(codes.has(code), `the code scan no longer finds ${code}`)
     }
     const llms = await readFile(LLMS_PATH, 'utf8')
@@ -56,8 +57,8 @@ test('llms.txt describes the Seance route before the browser routes', async () =
     assert.ok(at('curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs') > 0)
     assert.ok(at('node seance-agent.mjs join') < at('## Control Polymorphic in a browser you drive'))
     assert.ok(at('## Control Polymorphic in a browser you drive') < at('1. WebMCP'))
-    assert.ok(at('1. WebMCP') < at('2. Browser actions'))
-    assert.ok(at('2. Browser actions') < at('3. Page JavaScript'))
+    assert.ok(at('1. WebMCP') < at('2. Page JavaScript'))
+    assert.ok(!llms.includes('agent=1'), 'the page has no command form')
     assert.ok(llms.includes('https://noisemaker.app/llms-full.txt'))
     assert.doesNotMatch(llms, /[\u2013\u2014]/, 'no em or en dashes')
 })
@@ -101,11 +102,13 @@ test('commands that need the person at the browser or reach their stored data ar
     const local = COMMAND_GROUPS.flatMap(group => Object.entries(group.commands))
         .filter(([, entry]) => entry.remote === false).map(([name]) => name).sort()
     // Seance relays every answer to everyone in the session, and any writer
-    // can send commands, so saved programs, scenes, the stored program history
-    // and custom shader code stay with the person at the browser.
+    // can send commands, so what the person keeps in this browser (saved
+    // programs, scenes, the program history, custom shader code) and what acts
+    // on their browser rather than the shared program stay with the person.
     assert.deepEqual(local, [
         'deleteProgram', 'exportImage', 'importComposition', 'listPrograms', 'listScenes', 'loadProgram',
-        'loadScene', 'saveProgram', 'saveScene', 'setFullscreen', 'setRecording', 'stepHistory', 'useLiveInput',
+        'loadScene', 'resetProgram', 'saveProgram', 'saveScene', 'setBackend', 'setFullscreen', 'setRecording',
+        'setView', 'stepHistory', 'useLiveInput',
     ])
     const full = await readFile(LLMS_FULL_PATH, 'utf8')
     const llms = await readFile(LLMS_PATH, 'utf8')

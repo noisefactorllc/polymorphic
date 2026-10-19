@@ -21,8 +21,9 @@ import { chromium } from 'playwright'
 // Chromium only exposes under --enable-unsafe-webgpu, and whose readbacks only
 // complete when Dawn runs over ANGLE Vulkan. --use-angle=vulkan changes WebGL
 // rasterization for every test in the run (SVG-in-canvas specs regress), so the
-// Vulkan stack applies only to the webgpu receiver spec through its own
-// project, and the general project keeps the launch arguments it always had.
+// Vulkan stack applies only to the WebGPU specs (the Sync receiver and the
+// agent API's WebGPU readback) through their own project, and the general
+// project keeps the launch arguments it always had.
 // On Linux without a system Vulkan driver (and without an operator-provided
 // ICD) that project runs over the SwiftShader driver bundled with Chromium;
 // with a system driver the default WebGPU path already serves the webgpu spec.
@@ -47,6 +48,8 @@ const softwareVulkan = operatorIcd || Boolean(bundledIcd)
 const baseArgs = process.platform === 'darwin'
   ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist']
   : ['--enable-unsafe-swiftshader']
+// Specs that need a WebGPU adapter.
+const WEBGPU_SPECS = /(sync-native-webgpu|agent-webgpu)\.spec\.js/
 const vulkanArgs = process.platform === 'darwin'
   ? baseArgs
   : [...baseArgs, '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan', '--disable-gpu-sandbox']
@@ -71,12 +74,12 @@ export default defineConfig({
   projects: softwareVulkan ? [
     {
       name: 'chromium',
-      testIgnore: /sync-native-webgpu\.spec\.js/,
+      testIgnore: WEBGPU_SPECS,
       use: { baseURL: 'http://localhost:3017', launchOptions: { args: baseArgs } },
     },
     {
       name: 'sync-native-webgpu',
-      testMatch: /sync-native-webgpu\.spec\.js/,
+      testMatch: WEBGPU_SPECS,
       use: {
         baseURL: 'http://localhost:3017',
         launchOptions: bundledIcd

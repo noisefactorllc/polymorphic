@@ -41,9 +41,9 @@ export function commandError(code, message, details = {}) {
     return err
 }
 
-function safeSnapshot(ctx) {
+function safeSnapshot(ctx, call) {
     try {
-        return buildSnapshot(ctx)
+        return buildSnapshot(ctx, call)
     } catch (err) {
         console.warn('[agent] snapshot failed:', err)
         return null
@@ -71,15 +71,21 @@ export function registerCommand(agent, name, handler) {
         const ctx = agent._ctx
         try {
             await agent.ready
+            // While the tab holds what a session must not see (live camera,
+            // screen or video input), a session gets nothing from it.
+            if (call.remote && !ctx.canShare()) {
+                return { envelope: makeFailure(name, 'REMOTE_UNAVAILABLE',
+                    'The person is using live camera, screen or video input, which stays in their browser. Nothing is available through the session until they stop it.') }
+            }
             const schema = SCHEMAS[name]
             if (schema) {
                 const v = validate(args, schema)
-                if (!v.ok) return { envelope: makeFailure(name, v.code, v.message, v.details, safeSnapshot(ctx)) }
+                if (!v.ok) return { envelope: makeFailure(name, v.code, v.message, v.details, safeSnapshot(ctx, call)) }
             }
             const out = await handler(args, ctx, call)
-            return { envelope: makeSuccess(name, out.result, safeSnapshot(ctx), out.warnings || []), image: out.image || null }
+            return { envelope: makeSuccess(name, out.result, safeSnapshot(ctx, call), out.warnings || []), image: out.image || null }
         } catch (err) {
-            const state = safeSnapshot(ctx)
+            const state = safeSnapshot(ctx, call)
             if (err?.__agentError) {
                 const { code, message, details } = err.__agentError
                 return { envelope: makeFailure(name, code, message, details, state) }

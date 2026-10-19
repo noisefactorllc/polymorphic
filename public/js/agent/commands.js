@@ -13,7 +13,7 @@
 
 import { commandError } from './dispatcher.js'
 import { buildSnapshot } from './snapshot.js'
-import { readableCanvas } from './capture.js'
+import { readableCanvas, waitForReadback } from './capture.js'
 import { SURFACES } from './schemas.js'
 import { compile as compileDsl, extractEffectNamesFromDsl, getEffect } from '../noisemaker/bundle.js'
 import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
@@ -38,8 +38,22 @@ export async function getState(_args, app) {
     return { result: buildSnapshot(app) }
 }
 
-export async function getProgram(_args, app) {
-    return { result: { dsl: app.getDsl(), running: app.isRunning() } }
+/**
+ * The program that a command works on. Through a Seance session that is the
+ * text the session holds: text that stayed in the editor stays private.
+ */
+function currentProgram(app, { remote } = {}) {
+    if (!remote) return app.getDsl()
+    const text = app.sessionText()
+    if (typeof text !== 'string') {
+        throw commandError('REMOTE_UNAVAILABLE', 'The program in this session is not available yet. Try again.')
+    }
+    return text
+}
+
+export async function getProgram(_args, app, call = {}) {
+    const dsl = currentProgram(app, call)
+    return { result: { dsl, running: call.remote ? app.runs(dsl) : app.isRunning() } }
 }
 
 // The engine's media() has no `url` argument: the app reads `url` (an
@@ -90,30 +104,49 @@ function diagnose(dsl) {
 }
 
 const isError = d => d.severity === 'error'
+const IMAGE_REF = /image:([a-f0-9]{64})/g
 
 /**
  * Check a program, then run it in the editor. A program with an error
  * diagnostic changes nothing. When the renderer rejects it, the previous
  * program and images come back.
  *
+ * Through a Seance session, every image the program names must already be in
+ * the session. An image kept only in this browser would otherwise be resolved
+ * here and then shared with everyone in the session.
+ *
  * @param {string} dsl
  * @param {string} source - Why the program changed, for the online session
  * @param {object} app
- * @param {{images?: Array<object>}} [options] - The images the program comes with
+ * @param {{images?: Array<object>, remote?: boolean}} [options] - The images the
+ *   program comes with, and whether the command came through a session
  * @returns {Promise<Array<object>>} The program's warnings
  */
-async function applyProgram(dsl, source, app, { images } = {}) {
+async function applyProgram(dsl, source, app, { images, remote = false } = {}) {
     await loadProgramEffects(dsl, app)
     const diagnostics = diagnose(dsl)
     if (diagnostics.some(isError)) {
         throw commandError('INVALID_PROGRAM', 'The program does not compile. Nothing changed.', { diagnostics })
     }
+    if (remote) {
+        for (const id of new Set([...dsl.matchAll(IMAGE_REF)].map(match => match[1]))) {
+            if (!await app.sessionHasImage(id)) {
+                throw commandError('NOT_FOUND_IMAGE',
+                    `The session has no image ${id}. Add it with image-put, then name it as image:<sha256>. Nothing changed.`, { id })
+            }
+        }
+    }
     const renderer = app.renderer
-    const previous = app.getDsl()
+    const previous = currentProgram(app, { remote })
     const previousImages = renderer.images
     if (images) renderer.images = images
     const outcome = await app.runProgram(dsl, source)
-    if (outcome.success) return diagnostics
+    if (outcome.success) {
+        // While the animation plays, return once the new program has drawn a
+        // frame, so a pause or an image right after shows it.
+        if (app.isPlaying()) await waitForReadback(innerOf(app))
+        return diagnostics
+    }
     if (images) renderer.images = previousImages
     if (outcome.superseded) {
         throw commandError('CONFLICT_PROGRAM_CHANGED',
@@ -130,16 +163,16 @@ export async function validateProgram({ dsl }, app) {
     return { result: { valid: !diagnostics.some(isError), diagnostics } }
 }
 
-export async function setProgram({ dsl }, app) {
-    const diagnostics = await applyProgram(dsl, 'agent', app)
+export async function setProgram({ dsl }, app, { remote } = {}) {
+    const diagnostics = await applyProgram(dsl, 'agent', app, { remote })
     return { result: { applied: true, diagnostics } }
 }
 
-export async function formatProgram(_args, app) {
-    const before = app.getDsl()
+export async function formatProgram(_args, app, { remote } = {}) {
+    const before = currentProgram(app, { remote })
     const after = formatDsl(before)
     if (after === before) return { result: { changed: false } }
-    await applyProgram(after, 'format', app)
+    await applyProgram(after, 'format', app, { remote })
     return { result: { changed: true } }
 }
 
@@ -169,7 +202,7 @@ export async function listExamples() {
     return { result: { total: examples.length, examples } }
 }
 
-export async function loadExample({ title }, app) {
+export async function loadExample({ title }, app, { remote } = {}) {
     const example = title === undefined
         ? await pickRandomExample()
         : (await loadExamples()).find(e => e.title?.toLowerCase() === title.trim().toLowerCase())
@@ -180,7 +213,7 @@ export async function loadExample({ title }, app) {
     // A shared composition brings the images its program names.
     const extra = (example.images || []).filter(image => !app.renderer.images.some(asset => asset.id === image.id))
     const diagnostics = await applyProgram(example.dsl, title === undefined ? 'shuffle' : 'gallery', app,
-        extra.length ? { images: [...app.renderer.images, ...extra] } : {})
+        extra.length ? { images: [...app.renderer.images, ...extra], remote } : { remote })
     app.setOriginal(example.dsl)
     return { result: { title: example.title, applied: true, diagnostics } }
 }
@@ -376,8 +409,8 @@ export async function getEffectDefinition({ effectId }, app, { remote } = {}) {
     }
 }
 
-export async function setOutput({ surface }, app) {
-    const dsl = app.getDsl()
+export async function setOutput({ surface }, app, { remote } = {}) {
+    const dsl = currentProgram(app, { remote })
     let index = SURFACES.indexOf(surface)
     if (index < 0) {
         // next / previous move through the surfaces the program writes,
@@ -390,7 +423,7 @@ export async function setOutput({ surface }, app) {
     }
     const next = switchOutputSurface(dsl, index)
     if (next === dsl) return { result: { surface: SURFACES[index], changed: false } }
-    await applyProgram(next, 'output-picker', app)
+    await applyProgram(next, 'output-picker', app, { remote })
     return { result: { surface: SURFACES[index], changed: true } }
 }
 
@@ -446,10 +479,10 @@ export async function setBackend({ backend }, app) {
     return { result: { backend, reloading: true } }
 }
 
+// The image is the frame on screen. Nothing renders for it, so a paused
+// program, feedback included, stays exactly where it was.
 export async function getThumbnail({ maxDimension = 256, format = 'jpg' }, app) {
     const inner = innerOf(app)
-    // A paused canvas still shows the frame from before the last change.
-    if (!inner.isRunning) inner.render(inner.lastTime || 0)
     const live = await readableCanvas(app.canvas, inner)
     const scale = Math.min(1, maxDimension / Math.max(live.width, live.height, 1))
     const out = document.createElement('canvas')

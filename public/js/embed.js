@@ -51,7 +51,7 @@ import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import { parseErrorLocation, formatErrorLabel } from './ui/errorBanner.js'
 import { createPolymorphicOnlineAdapter } from './onlineAdapter.js'
-import { bootstrapAgent, createSeanceAgentSocket, markAgentReady } from './agent/index.js'
+import { bootstrapAgent, createSeanceAgentRelay, markAgentReady } from './agent/index.js'
 import './ui/codeEditor.js'  // Polymorphic editor CSS; handfish registers and owns the element behavior.
 import './ui/effectControls.js' // Register <effect-controls> custom element
 import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
@@ -1099,6 +1099,16 @@ async function runOnlineCompile(source) {
     return result
 }
 
+/**
+ * Whether the program may go to the online session: live camera, screen or
+ * video input stays in this browser.
+ * @returns {true|{ok: false, reason: string}}
+ */
+function publicationCheck() {
+    return liveInputsPanel.hasLiveMedia
+        ? { ok: false, reason: 'Only image sources can go online; stop the camera or video first' } : true
+}
+
 function setupOnlineCollaboration() {
     if (!onlineCollaborationEnabled) return
     if (!dslEditor || onlineAdapter) return
@@ -1106,8 +1116,7 @@ function setupOnlineCollaboration() {
         editor: dslEditor,
         dialog: seanceDialog,
         getCurrentDsl: () => dslEditor?.value || '',
-        validatePublication: () => liveInputsPanel.hasLiveMedia
-            ? { ok: false, reason: 'Only image sources can go online; stop the camera or video first' } : true,
+        validatePublication: publicationCheck,
         prepareImages: async dsl => {
             if (liveInputsPanel.hasLiveMedia) throw new Error('Only image sources can go online; stop the camera or video first')
             if (!/\burl\b/.test(dsl)) return { dsl, images: [] }
@@ -1139,8 +1148,9 @@ function setupOnlineCollaboration() {
             showToast('A remote update was refused: the program was too large', 'warning')
             console.warn('[Polymorphic] refused remote document:', inspection.reason)
         },
-        // Agents in the session send commands to this tab through the socket.
-        createSocketClass: ({ uploadImage }) => createSeanceAgentSocket({ appVersion: APP_VERSION, uploadImage }),
+        // Agents in a session this tab took online send it commands through
+        // the session's socket (agent/relay.js).
+        createAgentRelay: ({ uploadImage }) => createSeanceAgentRelay({ appVersion: APP_VERSION, uploadImage }),
     })
     onlineAdapter.wireUi()
     // "go online..." is a menu-bar item wired via its config (seanceDialog.show)
@@ -2185,8 +2195,16 @@ async function runProgramNow(dsl, source) {
         return result
     }
     hideCompilerError()
-    publishLocalDsl(source)
+    // The online session takes the program (or refuses it) before the next
+    // command, so that command reads what the session holds.
+    await publishLocalDsl(source)
     pushSnapshot(dsl)
+    // Programs that run back to back each restart the URL stamp's window, so
+    // the last one is the one stamped.
+    if (urlStampTimeout) {
+        clearTimeout(urlStampTimeout)
+        urlStampTimeout = null
+    }
     stampUrl(dsl)
     outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
     return result
@@ -2202,18 +2220,13 @@ async function runProgramNow(dsl, source) {
  * doesn't carry an old, smaller version.
  *
  * Throttled to once per 500ms to avoid spamming history entries while typing.
- * The stamp carries the latest program, so programs that run back to back
- * (agent commands) leave the last one in the URL.
  */
 let urlStampTimeout = null
-let urlStampDsl = ''
-function stampUrl(nextDsl) {
+function stampUrl(dsl) {
     if (loadedFromShareCode) return
-    urlStampDsl = nextDsl
     if (urlStampTimeout) return
     urlStampTimeout = setTimeout(() => {
         urlStampTimeout = null
-        const dsl = urlStampDsl
         try {
             const url = new URL(window.location.href)
             const oversize = encodeURIComponent(dsl).length > 2000
@@ -3009,8 +3022,8 @@ function init() {
         .catch(err => console.error('Failed to move program images:', err))
     snapshotHistory.holdWritesUntil(programImagesMigrated())
 
-    // Agent API: window.PolymorphicAgent, WebMCP tools, and ?agent=1. Its
-    // commands wait for startup to finish.
+    // Agent API: window.PolymorphicAgent and WebMCP tools. Its commands wait
+    // for startup to finish.
     bootstrapAgent(agentApp)
 
     // Start shader immediately (no consent screen for Polymorphic)
@@ -3251,9 +3264,8 @@ async function hushSurfaces() {
 // Agent API (js/agent/)
 // =========================================================================
 
-/** Whether the editor text is the program that the renderer runs. */
-function editorProgramRuns() {
-    const dsl = dslEditor?.value || ''
+/** Whether `dsl` is the program that the renderer runs. */
+function programRuns(dsl) {
     return Boolean(dsl) && (dsl === programStateDsl || dsl === renderer?._currentDsl)
 }
 
@@ -3289,7 +3301,8 @@ const agentApp = {
     get canvas() { return canvas },
     get tempoBar() { return document.getElementById('tempo-bar') },
     getDsl: () => dslEditor?.value || '',
-    isRunning: editorProgramRuns,
+    isRunning: () => programRuns(dslEditor?.value || ''),
+    runs: programRuns,
     compilerError: () => compilerErrorEl?.classList.contains('visible') ? compilerErrorEl.textContent || null : null,
     runProgram: runProgramNow,
     getOriginal: () => originalDsl,
@@ -3308,6 +3321,12 @@ const agentApp = {
     saveCanvasImage,
     useLiveInput: (source) => LIVE_INPUT_ACTIONS[source](),
     onlineStatus: () => onlineAdapter?.getStatus?.() || 'offline',
+    // Whether the tab holds nothing that the online session must not see.
+    canShare: () => publicationCheck() === true,
+    // The program text the online session holds, or null when unknown.
+    sessionText: () => onlineAdapter?.getSessionText?.() ?? null,
+    // Whether the online session holds image `id`.
+    sessionHasImage: (id) => onlineAdapter ? onlineAdapter.getImage(id).then(() => true, () => false) : Promise.resolve(false),
 }
 
 // Start when DOM is ready

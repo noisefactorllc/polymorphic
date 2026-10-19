@@ -99,6 +99,8 @@ export async function joinAsAgent({ server, code, origin }) {
 
     return {
         relayed,
+        /** The session owner's user id, as the server last announced it. */
+        owner: () => owner,
         /** Wait for the owner's tab to announce itself, as it does when it joins. */
         announced: (timeoutMs = 15000) => waitFor(frame => ownerFrame(frame) && frame.kind === 'announce', frames, timeoutMs, 'an announce'),
         /** Ask every tab to describe itself; only the owner's tab answers. */

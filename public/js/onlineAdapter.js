@@ -178,6 +178,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     const maxReconnectAttempts = deps.maxReconnectAttempts ?? 0
 
     let online = null
+    let agentRelay = null
     let sdkPromise = null
     let bindCleanup = null
     let statusUnsub = null
@@ -205,7 +206,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         const sdk = await sdkPromise
         if (online) return online
         // The agent relay rides the SDK's own socket (agent/relay.js).
-        const SocketClass = deps.createSocketClass?.({ uploadImage: blob => online.uploadImage(blob) })
+        agentRelay = deps.createAgentRelay?.({ uploadImage: blob => online.uploadImage(blob) }) || null
         online = sdk.createOnlineDslLayer({
             seanceUrl: config.seanceUrl,
             publicAppUrl,
@@ -213,7 +214,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             reconnectBaseMs,
             reconnectMaxMs,
             reconnectJitter,
-            ...(SocketClass ? { WebSocket: SocketClass } : {}),
+            ...(agentRelay ? { WebSocket: agentRelay.WebSocket } : {}),
             ...deps.layerOptions,
         })
         bindCleanup = online.bindEditor({
@@ -415,6 +416,8 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
                 ? { docs: getInitialDocs(prepared.dsl), images: prepared.images }
                 : getInitialDocs(prepared?.dsl ?? text))
             if (version !== actionVersion || layer !== online) return null
+            // Only the tab that took a session online answers agents in it.
+            agentRelay?.sessionCreated(layer.getSessionId())
             for (const image of prepared?.images || []) uploadedImages.add(image.id)
             rememberSessionId(layer.getSessionId())
             writeSessionToBrowserUrl(layer.getSessionId())
@@ -615,6 +618,12 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         getReconnectAttempt: () => reconnectAttempt,
         ensureOnline,
         getImage: async id => (await ensureOnline()).getImage(id),
+        // The program text the session holds, including a change this tab has
+        // sent and the server has not confirmed yet. Null when unknown.
+        getSessionText: () => {
+            const text = online?.docs?.get?.(DEFAULT_DOC_ID)?.text
+            return typeof text === 'string' ? text : null
+        },
         takeOnline,
         joinSession,
         joinFromUrl,

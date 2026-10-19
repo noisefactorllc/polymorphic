@@ -10,7 +10,6 @@ import { API_VERSION, makeFailure, registerCommand, runCommand } from './dispatc
 import { SCHEMAS } from './schemas.js'
 import * as commands from './commands.js'
 import { catalog, registerWebMCP, REMOTE } from './transports.js'
-import { mountAgentConsole } from './console.js'
 import { createAgentRelay } from './relay.js'
 
 let _readyResolve
@@ -36,7 +35,6 @@ export function bootstrapAgent(ctx) {
         registerCommand(PolymorphicAgent, name, commands[name])
     }
     registerWebMCP(PolymorphicAgent)
-    if (new URLSearchParams(location.search).get('agent') === '1') mountAgentConsole(PolymorphicAgent)
 }
 
 /**
@@ -48,13 +46,13 @@ export function markAgentReady() {
 }
 
 /**
- * The WebSocket class for the Seance SDK. Through it this tab answers agent
- * commands that arrive in the person's online session (see relay.js).
+ * The Seance relay for this tab (see relay.js): its WebSocket class goes to the
+ * Seance SDK, and sessionCreated marks a session this tab took online.
  *
  * @param {{appVersion: string, uploadImage: (blob: Blob) => Promise<string>}} options
- * @returns {typeof WebSocket}
+ * @returns {{ WebSocket: typeof WebSocket, sessionCreated: (sessionId: string) => void }}
  */
-export function createSeanceAgentSocket({ appVersion, uploadImage }) {
+export function createSeanceAgentRelay({ appVersion, uploadImage }) {
     return createAgentRelay({
         app: 'polymorphic',
         appVersion,
@@ -65,12 +63,12 @@ export function createSeanceAgentSocket({ appVersion, uploadImage }) {
                 return {
                     envelope: SCHEMAS[command]
                         ? makeFailure(command, 'REMOTE_UNAVAILABLE',
-                            `${command} is not available through a session: it needs the person at the browser, or it reaches their stored programs.`)
+                            `${command} is not available through a session: it needs the person at the browser, or it reaches what they keep in this browser.`)
                         : makeFailure(command, 'NOT_FOUND_COMMAND', `Unknown command: ${command}`),
                 }
             }
             await PolymorphicAgent.ready
             return runCommand(command, args, { remote: true })
         },
-    }).WebSocket
+    })
 }

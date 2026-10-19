@@ -1,11 +1,12 @@
 /**
  * PolymorphicAgent: the in-page command surface that public/llms.txt
- * documents, its WebMCP tools and its opt-in ?agent=1 command form.
+ * documents, and its WebMCP tools. The page shows nothing new for agents.
  */
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { installHandfishLocal } from './handfishLocal.js'
+import { cornerPixels, expectCorners } from './agentThumbnail.js'
 
 installHandfishLocal(test)
 test.describe.configure({ timeout: 90000 })
@@ -27,9 +28,6 @@ const BASE = [
 const RED = 'search synth\nsolid(color: [1, 0, 0]).write(o0)\nrender(o0)'
 const BLUE = 'search synth\nsolid(color: [0, 0, 1]).write(o0)\nrender(o0)'
 const TWO_SURFACES = 'search synth\nsolid(color: [1, 0, 0]).write(o0)\nsolid(color: [0, 0, 1]).write(o1)\nrender(o0)'
-// Four colored corners show whether an image is flipped.
-const CORNERS = 'search synth\ngradient(type: 2).write(o0)\nrender(o0)'
-
 async function loadAgent(page, query = '') {
   await page.goto(`/?dsl=${encodeURIComponent(BASE)}${query}`, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(() => window.PolymorphicAgent?.getState, null, { timeout: 30000 })
@@ -49,44 +47,6 @@ async function thumbnailPixel(page) {
     ctx.drawImage(image, 0, 0)
     return Array.from(ctx.getImageData(image.width >> 1, image.height >> 1, 1, 1).data)
   })
-}
-
-/** Corner pixels of the thumbnail and of the canvas's own PNG encoding, at one size. */
-async function cornerPixels(page) {
-  return page.evaluate(async (dsl) => {
-    const A = window.PolymorphicAgent
-    await A.setProgram({ dsl })
-    await A.pause()
-    const env = await A.getThumbnail({ maxDimension: 64, format: 'png' })
-    const { width, height } = env.result
-    const corners = async (blob) => {
-      const image = await createImageBitmap(blob)
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(image, 0, 0, width, height)
-      const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data)
-      return [at(4, 4), at(width - 5, 4), at(4, height - 5), at(width - 5, height - 5)]
-    }
-    const thumb = Uint8Array.from(atob(env.result.bytes), char => char.charCodeAt(0))
-    const reference = await new Promise(resolve => document.getElementById('canvas').toBlob(resolve, 'image/png'))
-    return {
-      backend: env.state.backend,
-      thumbnail: await corners(new Blob([thumb], { type: 'image/png' })),
-      canvas: await corners(reference),
-    }
-  }, CORNERS)
-}
-
-function expectSameCorners({ thumbnail, canvas }) {
-  for (let corner = 0; corner < 4; corner++) {
-    for (let channel = 0; channel < 3; channel++) {
-      expect(Math.abs(thumbnail[corner][channel] - canvas[corner][channel])).toBeLessThan(24)
-    }
-  }
-  // The corners differ, so a flipped image would not match.
-  expect(new Set(canvas.map(pixel => pixel.slice(0, 3).join())).size).toBeGreaterThan(1)
 }
 
 test('exposes exactly the described commands', async ({ page }) => {
@@ -243,27 +203,39 @@ test('arguments are checked, playback toggles, and thumbnails come back as small
   expect(out.playing).toEqual({ playing: true })
 })
 
-test('a thumbnail taken while paused shows the program that was just set', async ({ page }) => {
+test('a thumbnail is the frame on screen, and taking one does not advance a paused program', async ({ page }) => {
   await loadAgent(page)
-  await page.evaluate(() => window.PolymorphicAgent.pause())
   await page.evaluate(dsl => window.PolymorphicAgent.setProgram({ dsl }), RED)
-  expect(await thumbnailPixel(page)).toEqual([255, 0, 0, 255])
-  await page.evaluate(dsl => window.PolymorphicAgent.setProgram({ dsl }), BLUE)
-  expect(await thumbnailPixel(page)).toEqual([0, 0, 255, 255])
+  await expect.poll(() => thumbnailPixel(page)).toEqual([255, 0, 0, 255])
+  const out = await page.evaluate(async (blue) => {
+    const A = window.PolymorphicAgent
+    await A.pause()
+    const pipeline = window.__poly.renderer.inner.pipeline
+    let renders = 0
+    const render = pipeline.render
+    pipeline.render = function (...args) { renders++; return render.apply(this, args) }
+    try {
+      const first = (await A.getThumbnail({ maxDimension: 32, format: 'png' })).result.bytes
+      const second = (await A.getThumbnail({ maxDimension: 32, format: 'png' })).result.bytes
+      await A.setProgram({ dsl: blue })
+      const afterChange = await A.getThumbnail({ maxDimension: 32, format: 'png' })
+      return { same: first === second, unchanged: afterChange.result.bytes === first, renders, playing: afterChange.state.playback.playing }
+    } finally {
+      pipeline.render = render
+    }
+  }, BLUE)
+  // Paused, nothing renders: the image stays the frame on screen, even after
+  // a program change, until the animation plays again.
+  expect(out).toEqual({ same: true, unchanged: true, renders: 0, playing: false })
+  await page.evaluate(() => window.PolymorphicAgent.play())
+  await expect.poll(() => thumbnailPixel(page)).toEqual([0, 0, 255, 255])
 })
 
-test('a WebGL2 thumbnail matches the canvas, the right way up', async ({ page }) => {
+test('a WebGL2 thumbnail has the canvas\'s colours, the right way up', async ({ page }) => {
   await loadAgent(page)
   const out = await cornerPixels(page)
   expect(out.backend).toBe('webgl2')
-  expectSameCorners(out)
-})
-
-test('a WebGPU thumbnail matches the canvas, the right way up', async ({ page }) => {
-  await loadAgent(page, '&backend=webgpu')
-  const out = await cornerPixels(page)
-  expect(out.backend).toBe('webgpu')
-  expectSameCorners(out)
+  expectCorners(out.corners)
 })
 
 test('gallery examples load, and resetProgram restores the last one', async ({ page }) => {
@@ -525,57 +497,12 @@ test('a live input opens the live inputs panel and becomes the media source', as
   await expect.poll(() => page.evaluate(async () => (await window.PolymorphicAgent.getState()).state.liveMedia)).toBe(true)
 })
 
-test('setBackend reloads into the selected renderer', async ({ page }) => {
-  await loadAgent(page)
-  const same = await page.evaluate(() => window.PolymorphicAgent.setBackend({ backend: 'webgl2' }))
-  expect(same.result).toEqual({ backend: 'webgl2', reloading: false })
-  const env = await page.evaluate(() => {
-    window.beforeReload = true
-    return window.PolymorphicAgent.setBackend({ backend: 'webgpu' })
-  })
-  expect(env.result).toEqual({ backend: 'webgpu', reloading: true })
-  await page.waitForFunction(() => !window.beforeReload && window.PolymorphicAgent?.getState, null, { timeout: 30000 })
-  const state = await page.evaluate(async () => (await window.PolymorphicAgent.getState()).state)
-  expect(state.backend).toBe('webgpu')
-  expect(state.program.running).toBe(true)
-})
-
-test('the command form runs the same validation, mutation and image commands without page evaluation', async ({ page }) => {
-  await page.goto(`/?dsl=${encodeURIComponent(BASE)}&agent=1`, { waitUntil: 'domcontentloaded' })
-  const panel = page.getByRole('region', { name: 'Polymorphic agent' })
-  await expect(panel).toBeVisible({ timeout: 30000 })
-  const command = panel.getByLabel('Command', { exact: true })
-  const args = panel.getByLabel('Arguments (JSON)', { exact: true })
-  const run = panel.getByRole('button', { name: 'Run command', exact: true })
-  const output = panel.getByLabel('Command result', { exact: true })
-  await expect(run).toBeEnabled({ timeout: 30000 })
-  await command.selectOption('setProgram')
-  await args.fill(JSON.stringify({ dsl: RED }))
-  await run.click()
-  await expect(output).toContainText('"applied": true')
-  await command.selectOption('validateProgram')
-  await args.fill(JSON.stringify({ dsl: 'search synth\nperlin(madeUp: 1).write(o0)\nrender(o0)' }))
-  await run.click()
-  await expect(output).toContainText('"valid": false')
-  await args.fill('{')
-  await run.click()
-  await expect(output).toContainText('INVALID_JSON')
-  await command.selectOption('getProgram')
-  await args.fill('{}')
-  await run.click()
-  await expect(output).toContainText('solid(color: [1, 0, 0])')
-  await command.selectOption('getThumbnail')
-  await args.fill('{"maxDimension":64,"format":"png"}')
-  await run.click()
-  await expect(panel.getByRole('img', { name: 'Command image' })).toBeVisible()
-  await expect(output).toContainText('"width": 64')
-  await expect(output).not.toContainText('"bytes"')
-  await expect(panel.getByRole('link', { name: 'Download image' })).toHaveAttribute('href', /^blob:/)
-})
-
-test('without agent=1 the page has no command form', async ({ page }) => {
-  await loadAgent(page)
-  expect(await page.locator('#polymorphic-agent-console').count()).toBe(0)
+test('the page shows nothing new for agents, with or without agent=1', async ({ page }) => {
+  for (const query of ['', '&agent=1']) {
+    await loadAgent(page, query)
+    expect(await page.locator('#polymorphic-agent-console, [aria-label="Polymorphic agent"]').count()).toBe(0)
+    expect(await page.locator('link[href*="agent"]').count()).toBe(0)
+  }
 })
 
 test('WebMCP registers all commands and executes real handlers after readiness', async ({ page }) => {
@@ -618,16 +545,15 @@ test('WebMCP registers all commands and executes real handlers after readiness',
   expect(out.mutation).toBe(false)
 })
 
-test('an unavailable WebMCP registration does not break commands or the form', async ({ page }) => {
+test('an unavailable WebMCP registration does not break commands', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(document, 'modelContext', { value: {
       registerTool() { return Promise.reject(new Error('registration unavailable')) },
     } })
   })
-  await loadAgent(page, '&agent=1')
+  await loadAgent(page)
   const env = await page.evaluate(() => window.PolymorphicAgent.getState())
   expect(env.ok).toBe(true)
-  await expect(page.getByRole('region', { name: 'Polymorphic agent' }).getByRole('button', { name: 'Run command' })).toBeEnabled()
 })
 
 test('/llms.txt and /llms-full.txt are served as text', async ({ request }) => {

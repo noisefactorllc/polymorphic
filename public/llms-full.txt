@@ -4,11 +4,12 @@
 > Noisemaker engine. A Polymorphic program is Noisemaker DSL text that
 > compiles to a render graph. An agent can join the person's own open
 > Polymorphic over Seance, the Noise Factor collaboration service, and read
-> and run programs in it, look at its canvas, use its gallery, saved programs,
-> scenes, surfaces, tempo and view, and move programs to other Noise Factor
-> apps. An agent that drives its own browser can use the in-page
-> `window.PolymorphicAgent` API instead. This file is the contract for
-> software agents that control Polymorphic.
+> and run programs in it, look at its canvas, use the gallery, the output
+> surfaces and the tempo, and move programs to other Noise Factor apps. An
+> agent that drives its own browser can use the in-page
+> `window.PolymorphicAgent` API instead, which also reaches that browser's
+> saved programs, scenes and view. This file is the contract for software
+> agents that control Polymorphic.
 
 The full contract adds a reference for every command and its arguments:
 https://polymorphic.noisedeck.app/llms-full.txt
@@ -58,33 +59,41 @@ keeps it. The exit code is 0 for success, 1 when the app refused the command
 How it works, so you can explain it to the person:
 
 - The tool joins the session as an anonymous participant, which the person
-  sees join. It runs commands in the tab of the person who took the program
-  online, through the session, with the same checks as their own edits. Their
-  program changes in their editor, and the person sees every change. Other
-  tabs in the session do not answer.
+  sees join. It runs commands in the tab that took the program online, through
+  the session, with the same checks as the person's own edits. A program that
+  you run replaces the one in their editor and runs on their canvas. No other tab answers,
+  even one that becomes the session's owner after the person's tab leaves.
 - Everyone in the session receives every answer, and anyone who can edit the
-  session can send commands to that tab. So what the person stored in their
-  browser is not reachable through a session: saved programs (`listPrograms`,
-  `saveProgram`, `loadProgram`, `deleteProgram`), scenes (`listScenes`,
-  `saveScene`, `loadScene`), the program history (`stepHistory`) and their
-  custom `user` effects answer `REMOTE_UNAVAILABLE` or are left out. Nor can
-  a session load a sharing link (`importComposition`): its custom effects
-  bring shader code that only the person may let in. Commands that need the
-  person at the browser answer `REMOTE_UNAVAILABLE` too: downloads
-  (`exportImage`, `setRecording`), `setFullscreen` and `useLiveInput`. `commands` marks them "not available remotely". Suggest that
-  the person goes offline (**Go Offline** in the same dialog) when you are done.
+  session can send commands to that tab. So a session reaches only the shared
+  program and what is on the canvas. What the person keeps in their browser is
+  not reachable: saved programs (`listPrograms`, `saveProgram`, `loadProgram`,
+  `deleteProgram`), scenes (`listScenes`, `saveScene`, `loadScene`), the
+  program history (`stepHistory`, `resetProgram`) and custom `user` effects
+  answer `REMOTE_UNAVAILABLE` or are left out. A program that you run can name
+  only images that are in the session (`image-put`), never one that the person
+  keeps only in their browser (`NOT_FOUND_IMAGE`). `importComposition` cannot
+  run through a session either: a sharing link's custom effects bring shader
+  code that only the person may let in.
+- Commands that act on the person's browser rather than the shared program
+  answer `REMOTE_UNAVAILABLE` too: downloads (`exportImage`, `setRecording`),
+  `setFullscreen`, `useLiveInput`, the panels (`setView`) and the renderer
+  (`setBackend`). `commands` marks all of them "not available remotely".
+- While the person uses live camera, screen or video input, that input stays in
+  their browser: every command answers `REMOTE_UNAVAILABLE` until they stop it.
+  `getProgram` returns the program that the session holds.
 - The person can change the program at the same time. Read it again before
   you edit it. `wait --since <rev>` returns at once when the person changed the
   program after that revision.
-- `look` asks the person's tab for an image of the canvas. The tab adds the
-  image to the session as its own bytes, and the tool saves it as a file. Do
-  not print image bytes as text.
+- `look` asks the person's tab for an image of the canvas: the frame on the
+  screen, which a paused animation keeps. The tab adds the image to the session
+  as its own bytes, and the tool saves it as a file. Do not print image bytes as
+  text. No image crosses a session as text (`IMAGE_AS_TEXT`).
 - A session holds at most 32 images, and the person's own images need room
   too. The tab takes at most 16 images in ten minutes; past that, `look`
   answers `IMAGE_LIMIT` with `details.retryAfter` in seconds. Look when the
   program has changed, not in a loop.
-- `setBackend` reloads the person's tab. The tab joins the session again;
-  wait until `commands` answers before the next command.
+- Suggest that the person goes offline (**Go Offline** in the same dialog)
+  when you are done.
 
 Work with several apps at once: join each app's session (each gets its own
 name, such as `polymorphic`, `noisedeck` or `visualize`), then name the session
@@ -110,8 +119,8 @@ Agent tool errors (exit code 2, `error.code`):
 ## Control Polymorphic in a browser you drive
 
 Use this route when you control a browser yourself. Open
-https://polymorphic.noisedeck.app/?agent=1. This is a Polymorphic of its own,
-not the person's tab: its saved programs and scenes are those of that browser.
+https://polymorphic.noisedeck.app. This is a Polymorphic of its own, not the
+person's tab: its saved programs and scenes are those of that browser.
 Use the first route your browser tool supports:
 
 1. WebMCP: discover the page tools named `polymorphic_getState`,
@@ -121,12 +130,7 @@ Use the first route your browser tool supports:
    duplicating its bytes in text. If your harness serializes the whole tool
    result, parse it, display the image through your image tool, and print only
    the text block. Do not print image bytes.
-2. Browser actions: the `Polymorphic agent` region appears with `agent=1`.
-   Select `Command`, fill `Arguments (JSON)`, and click `Run command`.
-   Read `Command result` and the completion status. `getThumbnail` displays
-   `Command image` and a `Download image` link. This route needs no page JavaScript.
-   Invalid JSON returns `INVALID_JSON`; correct it and run again.
-3. Page JavaScript: call `window.PolymorphicAgent` directly. Wait until the
+2. Page JavaScript: call `window.PolymorphicAgent` directly. Wait until the
    object and method exist. Every command waits for startup automatically;
    explicitly awaiting `ready` also works. Return the fields you need, not the
    whole API object.
@@ -136,11 +140,11 @@ const env = await window.PolymorphicAgent.getProgram()
 return env.result.dsl
 ```
 
-All routes use the same serialized commands and validation. WebMCP
-availability depends on the browser. If discovery returns no tools, use the
-command form. Do not try to bypass a browser tool's read-only JavaScript
+Both routes use the same serialized commands and validation. WebMCP
+availability depends on the browser. If discovery returns no tools, use page
+JavaScript. Do not try to bypass a browser tool's read-only JavaScript
 policy. A tool that only fetches HTML cannot run Polymorphic: it needs a
-browser with WebGL2 or WebGPU. The command form is opt-in.
+browser with WebGL2 or WebGPU.
 
 ---
 
@@ -226,7 +230,7 @@ your context.
 - Every envelope includes `state`. Remove it when you do not need it.
 - `getProgram` returns the whole program text. `state.program.chars` gives its length.
 - Direct JavaScript `getThumbnail` returns base64 image data. Keep `maxDimension` small.
-  WebMCP, the command form and `look` keep image bytes out of text.
+  WebMCP and `look` keep image bytes out of text.
 
 ---
 
@@ -262,13 +266,14 @@ state: {
     schemaVersion,
     program:  { chars, running, error },  // running: the editor text is the program that runs
                                           // error: the compiler error on screen, or null
+                                          // through a session: the text that the session holds
     canvas:   { width, height },
     output:   { surface, written },       // surface: "o0" to "o7", the surface on the canvas
                                           // written: the surfaces that the program writes
     playback: { playing },
     tempo:    { bpm, divider, source },   // source: "manual" or "midi"
     backend,                              // "webgl2" or "webgpu"
-    history:  { canBack, canForward },    // stepHistory
+    history:  { canBack, canForward },    // stepHistory; null through a session
     online,                               // "offline", "connecting", "online" or "readonly"
     recording,                            // a video recording is running
     liveMedia,                            // a webcam, screen capture or video is the media() source
@@ -294,7 +299,6 @@ A syntax error has code `SYNTAX`. Diagnostics with severity `warning` do not sto
 
 | Code | When |
 |---|---|
-| `INVALID_JSON` | the command form arguments are not valid JSON |
 | `INVALID_ARGS_TYPE` | wrong argument type |
 | `INVALID_ARGS_REQUIRED` | missing required argument |
 | `INVALID_ARGS_RANGE` | number or string length out of range, or a blank name |
@@ -314,8 +318,10 @@ A syntax error has code `SYNTAX`. Diagnostics with severity `warning` do not sto
 | `IMPORT_FAILED` | the sharing link is not valid, or its composition could not load |
 | `STORAGE_FAILED` | browser storage refused a save or a delete. `details.quotaExceeded` tells whether it is full |
 | `BROWSER_REFUSED` | the browser refused fullscreen or a recording |
-| `REMOTE_UNAVAILABLE` | the command came through a session, and it needs the person at the browser or reaches what they stored |
+| `REMOTE_UNAVAILABLE` | the command came through a session, and it needs the person at the browser or reaches what they keep in this browser; or the person is using live camera, screen or video input, and nothing reaches the session |
+| `NOT_FOUND_IMAGE` | through a session, the program names an `image:<sha256>` that is not in the session. Add it with `image-put` |
 | `IMAGE_LIMIT` | the tab already took 16 images in ten minutes. `details.retryAfter` is in seconds |
+| `IMAGE_AS_TEXT` | a session request or answer would carry an image as base64 text. Add the image with `image-put` and use `image:<sha256>` |
 | `IMAGE_UPLOAD_FAILED` | the tab could not add an image to the session (the session holds up to 32 images) |
 | `INTERNAL_ERROR` | unexpected failure |
 
@@ -350,7 +356,7 @@ Arguments: none.
 
 #### `getProgram`
 
-Returns the program text in the editor, and whether it is the program that runs.
+Returns the program text in the editor, and whether it is the program that runs. Through a Seance session it returns the text that the session holds.
 
 Returns: `{ dsl, running }`.
 
@@ -370,7 +376,7 @@ Arguments:
 
 #### `setProgram`
 
-Puts `dsl` in the editor and runs it, like typing it. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). A program that runs goes to the online session, the program history and the page URL.
+Puts `dsl` in the editor and runs it, like typing it. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame. A program that runs goes to the online session, the program history and the page URL. Through a session, every `image:<sha256>` that the program names must already be in the session (NOT_FOUND_IMAGE).
 
 Returns: `{ applied: true, diagnostics }` (warnings only).
 
@@ -388,9 +394,11 @@ Arguments: none.
 
 #### `resetProgram`
 
-Runs the original program again: the program loaded at startup, or the last gallery example loaded. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Runs the original program again: the program loaded at startup, or the last gallery example loaded. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ applied: true, diagnostics }`.
+
+Not available through a Seance session (`REMOTE_UNAVAILABLE`).
 
 Arguments: none.
 
@@ -418,7 +426,7 @@ Arguments: none.
 
 #### `loadExample`
 
-Runs the gallery example named `title`. Without `title` it runs a random example, like "Shuffle to a random example". The example becomes the program that resetProgram restores. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Runs the gallery example named `title`. Without `title` it runs a random example, like "Shuffle to a random example". The example becomes the program that resetProgram restores. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ title, applied: true, diagnostics }`.
 
@@ -428,7 +436,7 @@ Arguments:
 
 #### `importComposition`
 
-Loads a composition from a Noise Factor sharing link (https://sharing.noisedeck.app/s/CODE) or its code, like "import from url...". Custom effects in the composition join the `user` namespace. A session cannot load one: a custom effect brings its own shader code, which only the person may let into their tab. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Loads a composition from a Noise Factor sharing link (https://sharing.noisedeck.app/s/CODE) or its code, like "import from url...". Custom effects in the composition join the `user` namespace. A session cannot load one: a custom effect brings its own shader code, which only the person may let into their tab. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ title, effects, images, applied: true, diagnostics }`, where `effects` lists the custom effect names and `images` counts the images.
 
@@ -465,7 +473,7 @@ Arguments:
 
 #### `loadProgram`
 
-Runs the saved program named `name`, like "load program". The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Runs the saved program named `name`, like "load program". The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ name, applied: true, diagnostics }`.
 
@@ -513,7 +521,7 @@ Arguments:
 
 #### `loadScene`
 
-Runs the program in scene `slot`, like the number keys 1 to 9. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Runs the program in scene `slot`, like the number keys 1 to 9. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ slot, applied: true, diagnostics }`.
 
@@ -551,7 +559,7 @@ Arguments:
 
 #### `setOutput`
 
-Shows surface `surface` on the canvas by changing the program's `render(oN)` line, like "Switch render output". `next` and `previous` move through the surfaces that the program writes. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).
+Shows surface `surface` on the canvas by changing the program's `render(oN)` line, like "Switch render output". `next` and `previous` move through the surfaces that the program writes. The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.
 
 Returns: `{ surface, changed }`.
 
@@ -604,6 +612,8 @@ Shows or hides a panel: the code editor, the documentation, the live inputs pane
 
 Returns: `{ panel, visible }`.
 
+Not available through a Seance session (`REMOTE_UNAVAILABLE`).
+
 Arguments:
 
 - `panel` (required): string, one of `editor`, `docs`, `liveInputs`, `surfacePips`, `performanceOverlay`, `statusRow`, `performanceMode`
@@ -611,9 +621,11 @@ Arguments:
 
 #### `setBackend`
 
-Selects the WebGL2 or WebGPU renderer. A change reloads the page, like the "Switch to ... backend" actions. The page joins its online session again after the reload; wait for it before the next command. A browser without WebGPU stays on WebGL2.
+Selects the WebGL2 or WebGPU renderer and reloads the page, like the "Switch to ... backend" actions. A browser without WebGPU stays on WebGL2.
 
 Returns: `{ backend, reloading }`.
+
+Not available through a Seance session (`REMOTE_UNAVAILABLE`).
 
 Arguments:
 
@@ -623,7 +635,7 @@ Arguments:
 
 #### `getThumbnail`
 
-Returns an image of the canvas. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`.
+Returns an image of the frame on the canvas. Nothing renders for it: while the animation is paused, the image is the frame on screen, which can be from before the last program change. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`.
 
 Returns: `{ bytes, mimeType, width, height }`, with `bytes` in base64. Through a session: `{ image: { id, mimeType, bytes }, mimeType, width, height }`, where `image.bytes` is the byte count.
 

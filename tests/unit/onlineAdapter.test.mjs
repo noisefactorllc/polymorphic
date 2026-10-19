@@ -864,18 +864,25 @@ test('go offline during the initial SDK import cancels session creation before i
     adapter.dispose()
 })
 
-test('the agent relay socket class reaches the SDK, and its uploads go to the session layer', async () => {
+test('the agent relay socket class reaches the SDK, its uploads go to the session layer, and it learns the sessions this tab created', async () => {
     class RelaySocket {}
     const uploads = []
+    const created = []
     let options = null
     let uploadImage = null
     let layers = 0
-    const layer = fakeLayer({ async uploadImage(blob) { uploads.push(blob); return 'a'.repeat(64) } })
+    const layer = fakeLayer({
+        docs: new Map([['main', { text: 'search synth\nnoise().write(o0)\nrender(o0)' }]]),
+        async uploadImage(blob) { uploads.push(blob); return 'a'.repeat(64) },
+    })
     const adapter = createPolymorphicOnlineAdapter({
         editor: { value: 'search synth\nnoise().write(o0)\nrender(o0)' },
         location: new URL('https://poly.test/'),
         importSdk: async () => ({ createOnlineDslLayer: (opts) => { layers++; options = opts; return layer } }),
-        createSocketClass: (relay) => { uploadImage = relay.uploadImage; return RelaySocket },
+        createAgentRelay: (relay) => {
+            uploadImage = relay.uploadImage
+            return { WebSocket: RelaySocket, sessionCreated: id => created.push(id) }
+        },
     })
     // Two callers waiting on the SDK import get one layer, so one relay socket.
     await Promise.all([adapter.ensureOnline(), adapter.ensureOnline()])
@@ -884,5 +891,11 @@ test('the agent relay socket class reaches the SDK, and its uploads go to the se
     const blob = new Blob(['png'], { type: 'image/png' })
     assert.equal(await uploadImage(blob), 'a'.repeat(64))
     assert.deepEqual(uploads, [blob])
+    assert.deepEqual(created, [])
+    await adapter.joinSession('JOINED')
+    assert.deepEqual(created, [], 'joining a session does not make this tab its creator')
+    await adapter.takeOnline()
+    assert.deepEqual(created, [layer.getSessionId()])
+    assert.equal(adapter.getSessionText(), 'search synth\nnoise().write(o0)\nrender(o0)')
     adapter.dispose()
 })

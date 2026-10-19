@@ -13,7 +13,7 @@
  * @module agent/descriptions
  */
 
-const PROGRAM_RUNS = 'The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED).'
+const PROGRAM_RUNS = 'The program is checked first: one that does not compile changes nothing (INVALID_PROGRAM). If the renderer rejects it, the previous program runs again (COMPILE_FAILED). While the animation plays, the command returns once the new program has drawn a frame.'
 
 export const COMMAND_GROUPS = [
     {
@@ -24,7 +24,7 @@ export const COMMAND_GROUPS = [
                 returns: 'the snapshot',
             },
             getProgram: {
-                does: 'Returns the program text in the editor, and whether it is the program that runs.',
+                does: 'Returns the program text in the editor, and whether it is the program that runs. Through a Seance session it returns the text that the session holds.',
                 returns: '`{ dsl, running }`',
             },
         },
@@ -37,7 +37,7 @@ export const COMMAND_GROUPS = [
                 returns: '`{ valid, diagnostics }`',
             },
             setProgram: {
-                does: `Puts \`dsl\` in the editor and runs it, like typing it. ${PROGRAM_RUNS} A program that runs goes to the online session, the program history and the page URL.`,
+                does: `Puts \`dsl\` in the editor and runs it, like typing it. ${PROGRAM_RUNS} A program that runs goes to the online session, the program history and the page URL. Through a session, every \`image:<sha256>\` that the program names must already be in the session (NOT_FOUND_IMAGE).`,
                 returns: '`{ applied: true, diagnostics }` (warnings only)',
             },
             formatProgram: {
@@ -47,6 +47,7 @@ export const COMMAND_GROUPS = [
             resetProgram: {
                 does: `Runs the original program again: the program loaded at startup, or the last gallery example loaded. ${PROGRAM_RUNS}`,
                 returns: '`{ applied: true, diagnostics }`',
+                remote: false,
             },
             stepHistory: {
                 does: 'Steps through the history of programs that ran, like Cmd/Ctrl+Alt+Left and Right. `back` runs the older program, `forward` the newer one. The history is stored in the browser, so a session cannot reach it.',
@@ -161,10 +162,12 @@ export const COMMAND_GROUPS = [
             setView: {
                 does: 'Shows or hides a panel: the code editor, the documentation, the live inputs panel, the surface previews (`surfacePips`), the performance overlay or the status row. `performanceMode` hides everything but the canvas.',
                 returns: '`{ panel, visible }`',
+                remote: false,
             },
             setBackend: {
-                does: 'Selects the WebGL2 or WebGPU renderer. A change reloads the page, like the "Switch to ... backend" actions. The page joins its online session again after the reload; wait for it before the next command. A browser without WebGPU stays on WebGL2.',
+                does: 'Selects the WebGL2 or WebGPU renderer and reloads the page, like the "Switch to ... backend" actions. A browser without WebGPU stays on WebGL2.',
                 returns: '`{ backend, reloading }`',
+                remote: false,
             },
         },
     },
@@ -172,7 +175,7 @@ export const COMMAND_GROUPS = [
         title: 'Images',
         commands: {
             getThumbnail: {
-                does: 'Returns an image of the canvas. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`.',
+                does: 'Returns an image of the frame on the canvas. Nothing renders for it: while the animation is paused, the image is the frame on screen, which can be from before the last program change. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`.',
                 returns: '`{ bytes, mimeType, width, height }`, with `bytes` in base64. Through a session: `{ image: { id, mimeType, bytes }, mimeType, width, height }`, where `image.bytes` is the byte count',
             },
             exportImage: {
