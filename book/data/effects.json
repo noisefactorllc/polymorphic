@@ -7305,7 +7305,11 @@
           "label": "matte color",
           "type": "color",
           "control": "color",
-          "default": "#000000",
+          "default": [
+            0,
+            0,
+            0
+          ],
           "min": null,
           "max": null,
           "choices": null
