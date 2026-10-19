@@ -205,8 +205,14 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         })
         const sdk = await sdkPromise
         if (online) return online
-        // The agent relay rides the SDK's own socket (agent/relay.js).
-        agentRelay = deps.createAgentRelay?.({ uploadImage: blob => online.uploadImage(blob) }) || null
+        // The agent relay rides the SDK's own socket (agent/relay.js). Its
+        // first request from an agent lights the connect-agent dialog's last step.
+        agentRelay = deps.createAgentRelay?.({
+            uploadImage: blob => online.uploadImage(blob),
+            onAgent: () => {
+                if (deps.agentDialog) deps.agentDialog.connected = true
+            },
+        }) || null
         online = sdk.createOnlineDslLayer({
             seanceUrl: config.seanceUrl,
             publicAppUrl,
@@ -340,12 +346,23 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
     }
 
     function refreshStatus(status = online?.getStatus?.() || 'offline') {
-        const dialog = deps.dialog
-        if (!dialog) return
-
         const isOnline = status === 'online' || status === 'readonly'
         const sessionId = online?.getSessionId?.() || ''
         const sessionUrl = (isOnline || isReconnecting) ? (online?.getShareUrl?.() || '') : ''
+
+        // The shared connect-agent dialog (handfish <agent-connect-dialog>)
+        // follows the same session: its prompt names the session link.
+        const agentDialog = deps.agentDialog
+        if (agentDialog) {
+            agentDialog.state = status === 'readonly'
+                ? 'readonly'
+                : isOnline ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
+            agentDialog.prompt = isOnline && sessionUrl ? deps.agentPrompt?.(sessionUrl) || '' : ''
+            if (status === 'offline' && !isReconnecting) agentDialog.connected = false
+        }
+
+        const dialog = deps.dialog
+        if (!dialog) return
 
         // Drive the unified seance-dialog's internal view via its state; the
         // dialog is shown/hidden by its own trigger (the "go online" menu
@@ -576,6 +593,17 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             })
         })
         dialog?.addEventListener?.('go-offline', () => goOffline())
+        // "connect agent..." walks the person through going online, copying
+        // the agent prompt, and the agent's first request.
+        const agentDialog = deps.agentDialog
+        agentDialog?.addEventListener?.('go-online', () => {
+            takeOnline().catch((err) => {
+                console.error('[Polymorphic] Take online failed:', err)
+                showToast(`Could not take online: ${describeSeanceError(err)}`, 'error')
+            })
+        })
+        agentDialog?.addEventListener?.('copy-failed', () => showToast('Could not copy the prompt', 'error'))
+        agentDialog?.addEventListener?.('connected', () => showToast('Agent connected', 'success'))
         dialog?.addEventListener?.('copy-url', () => {
             copyShareUrl().catch((err) => {
                 console.error('[Polymorphic] Copy session URL failed:', err)

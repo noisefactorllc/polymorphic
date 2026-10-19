@@ -899,3 +899,56 @@ test('the agent relay socket class reaches the SDK, its uploads go to the sessio
     assert.equal(adapter.getSessionText(), 'search synth\nnoise().write(o0)\nrender(o0)')
     adapter.dispose()
 })
+
+test('the connect-agent dialog follows the session, lights on the first agent and clears offline', async () => {
+    const listeners = {}
+    const toasts = []
+    const agentDialog = {
+        state: 'offline',
+        prompt: '',
+        connected: false,
+        addEventListener(type, listener) { listeners[type] = listener },
+    }
+    let onAgent = null
+    const layer = fakeLayer()
+    const adapter = createPolymorphicOnlineAdapter({
+        editor: { value: 'search synth\nnoise().write(o0)\nrender(o0)' },
+        location: new URL('https://poly.test/'),
+        history: { replaceState() {} },
+        importSdk: async () => ({ createOnlineDslLayer: () => layer }),
+        createAgentRelay: (relay) => {
+            onAgent = relay.onAgent
+            return { WebSocket: class {}, sessionCreated() {} }
+        },
+        agentDialog,
+        agentPrompt: url => `join ${url}`,
+        showToast: (message, type) => toasts.push({ message, type }),
+    })
+    adapter.wireUi()
+    assert.equal(agentDialog.state, 'offline')
+    assert.equal(agentDialog.prompt, '')
+
+    // The dialog's Go Online step takes the program online as the go-online dialog does.
+    listeners['go-online']()
+    for (let turn = 0; turn < 10000 && agentDialog.state !== 'online'; turn++) {
+        await new Promise(resolve => setImmediate(resolve))
+    }
+    assert.equal(layer.calls.filter(call => call === 'takeOnline').length, 1)
+    assert.equal(agentDialog.state, 'online')
+    assert.equal(agentDialog.prompt, `join ${layer.getShareUrl()}`)
+
+    onAgent({ userId: 'u1', username: 'agent' })
+    assert.equal(agentDialog.connected, true)
+    listeners.connected()
+    listeners['copy-failed']()
+    assert.deepEqual(toasts.slice(-2), [
+        { message: 'Agent connected', type: 'success' },
+        { message: 'Could not copy the prompt', type: 'error' },
+    ])
+
+    adapter.goOffline()
+    assert.equal(agentDialog.connected, false)
+    assert.equal(agentDialog.state, 'offline')
+    assert.equal(agentDialog.prompt, '')
+    adapter.dispose()
+})

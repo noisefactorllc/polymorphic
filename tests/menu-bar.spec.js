@@ -96,6 +96,7 @@ const EXPECTED = {
         ['shareProgram', 'share publicly...'],
         'separator',
         ['goOnlineMenuItem', 'go online...'],
+        ['connectAgentMenuItem', 'connect agent...'],
     ],
 }
 

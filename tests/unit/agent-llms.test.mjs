@@ -41,7 +41,7 @@ test('llms.txt lists every error code that the agent API returns', async () => {
         for (const m of source.matchAll(pattern)) codes.add(m[1] || m[2])
     }
     for (const code of ['INVALID_PROGRAM', 'INVALID_ARGS_UNKNOWN', 'INTERNAL_ERROR', 'REMOTE_UNAVAILABLE', 'NOT_FOUND_COMMAND',
-        'IMAGE_UPLOAD_FAILED', 'IMAGE_LIMIT', 'IMAGE_AS_TEXT', 'NOT_FOUND_IMAGE']) {
+        'IMAGE_UPLOAD_FAILED', 'IMAGE_LIMIT', 'IMAGE_AS_TEXT', 'OUTSIDE_LINK', 'NOT_FOUND_IMAGE']) {
         assert.ok(codes.has(code), `the code scan no longer finds ${code}`)
     }
     const llms = await readFile(LLMS_PATH, 'utf8')

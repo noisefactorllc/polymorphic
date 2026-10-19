@@ -8,6 +8,9 @@
 const APP_VERSION = '0.11'
 
 import { AboutDialog, dslTokenizer, initEscapeHandler, initializeTooltips, formatShortcut, hasOpenEscapeables } from 'handfish'
+// A namespace import: an older handfish without the connect-agent dialog
+// still loads the app, and the "connect agent..." item stays hidden.
+import * as handfish from 'handfish'
 
 // One global Escape handler for handfish components (menu bar, dialogs).
 // Required once per app by the handfish escape-stack contract.
@@ -69,6 +72,8 @@ const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
 const seanceDialog = document.getElementById('seanceDialog')
+// The shared connect-agent dialog (handfish <agent-connect-dialog>).
+const agentConnectDialog = document.getElementById('agentConnectDialog')
 const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
 
 // Renderer reference (set after initialization)
@@ -284,6 +289,15 @@ if (menuBarEl) {
                             hidden: () => !onlineCollabUiVisible,
                             onSelect: () => seanceDialog?.show(),
                         },
+                        {
+                            id: 'connectAgentMenuItem',
+                            label: 'connect agent...',
+                            hidden: () => !onlineCollabUiVisible || !customElements.get('agent-connect-dialog'),
+                            onSelect: () => {
+                                onlineAdapter?.refreshStatus?.()
+                                agentConnectDialog?.show?.()
+                            },
+                        },
                     ],
                 },
             ],
@@ -391,6 +405,7 @@ function setOnlineCollaborationUiVisible(visible) {
     onlineCollabUiVisible = visible
     refreshMenuBar()
     if (!visible && seanceDialog) seanceDialog.hide?.()
+    if (!visible) agentConnectDialog?.hide?.()
 }
 
 setOnlineCollaborationUiVisible(onlineCollaborationEnabled)
@@ -1115,6 +1130,12 @@ function setupOnlineCollaboration() {
     onlineAdapter = createPolymorphicOnlineAdapter({
         editor: dslEditor,
         dialog: seanceDialog,
+        agentDialog: agentConnectDialog,
+        agentPrompt: sessionUrl => handfish.agentConnectPrompt?.({
+            app: 'Polymorphic',
+            contractUrl: 'https://polymorphic.noisedeck.app/llms-full.txt',
+            sessionUrl,
+        }) || '',
         getCurrentDsl: () => dslEditor?.value || '',
         validatePublication: publicationCheck,
         prepareImages: async dsl => {
@@ -1150,7 +1171,7 @@ function setupOnlineCollaboration() {
         },
         // Agents in a session this tab took online send it commands through
         // the session's socket (agent/relay.js).
-        createAgentRelay: ({ uploadImage }) => createSeanceAgentRelay({ appVersion: APP_VERSION, uploadImage }),
+        createAgentRelay: ({ uploadImage, onAgent }) => createSeanceAgentRelay({ appVersion: APP_VERSION, uploadImage, onAgent }),
     })
     onlineAdapter.wireUi()
     // "go online..." is a menu-bar item wired via its config (seanceDialog.show)

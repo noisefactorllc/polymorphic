@@ -27,8 +27,11 @@ Use this route when you can run shell commands. It works with the Polymorphic
 the person already has open: their program and their canvas.
 
 1. Ask the person to open https://polymorphic.noisedeck.app, choose
-   **go online...** at the end of the program menu, click **Take Online**, and
-   send you the session link (**Copy URL**) or the six-character code.
+   **connect agent...** at the end of the program menu, click **Go Online**,
+   then **Copy Prompt**, and paste the prompt to you. The prompt names this
+   file and the session link. (Without that dialog: **go online...**,
+   **Take Online**, then send the link from **Copy URL** or the six-character
+   code.)
 2. Get the agent tool. It needs Node 22.4 or later and nothing else:
    `curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs`
 3. Join: `node seance-agent.mjs join <link-or-code>`. It prints the session
@@ -195,7 +198,7 @@ What Polymorphic adds to the DSL:
   image file's bytes. In a session, add the file with `image-put` first and use
   the `image:<id>` that it prints. Saved programs and scenes keep their images
   in the browser. Use only image ids: a link to another site makes every
-  viewer's browser fetch it.
+  viewer's browser fetch it, and a session refuses one (`OUTSIDE_LINK`).
 - `media()` draws the image at its own size in pixels, in the middle of the
   canvas. `scaleAmt`, `position` and `tiling` change that; read them with
   `getEffectDefinition({ effectId: "synth/media" })`.
@@ -322,6 +325,7 @@ A syntax error has code `SYNTAX`. Diagnostics with severity `warning` do not sto
 | `NOT_FOUND_IMAGE` | through a session, the program names an `image:<sha256>` that is not in the session. Add it with `image-put` |
 | `IMAGE_LIMIT` | the tab already took 16 images in ten minutes. `details.retryAfter` is in seconds |
 | `IMAGE_AS_TEXT` | a session request or answer would carry an image as base64 text. Add the image with `image-put` and use `image:<sha256>` |
+| `OUTSIDE_LINK` | a session request names media by an outside link. Add the image with `image-put` and use `image:<sha256>` |
 | `IMAGE_UPLOAD_FAILED` | the tab could not add an image to the session (the session holds up to 32 images) |
 | `INTERNAL_ERROR` | unexpected failure |
 

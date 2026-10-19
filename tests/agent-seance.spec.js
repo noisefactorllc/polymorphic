@@ -406,3 +406,99 @@ test('a tab that inherits the session after the person\'s tab closes does not an
     await guestContext.close()
   }
 })
+
+test('connect agent walks the person through going online, copying the prompt and the agent joining', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ORIGIN })
+  await openApp(page)
+  // "connect agent..." sits directly under "go online..." in the program menu.
+  await page.locator('#programMenuTitle').click()
+  await expect(page.locator('#connectAgentMenuItem')).toBeVisible()
+  expect(await page.locator('#goOnlineMenuItem').evaluate(item => item.nextElementSibling?.id)).toBe('connectAgentMenuItem')
+  await expect(page.locator('#connectAgentMenuItem')).toHaveText('connect agent...')
+  await page.locator('#connectAgentMenuItem').click()
+
+  const dialog = page.locator('#agentConnectDialog dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('.hf-agent-lead')).toHaveText('To connect an agent, follow these steps:')
+  const states = () => dialog.locator('.hf-agent-step').evaluateAll(items => items.map(item => item.dataset.state))
+  expect(await states()).toEqual(['active', 'pending', 'pending'])
+
+  await dialog.locator('[data-action="go-online"]').click()
+  await expect.poll(states, { timeout: 30000 }).toEqual(['done', 'active', 'pending'])
+  const code = new URL(page.url()).searchParams.get('seance')
+  expect(code).toBeTruthy()
+  const sessionUrl = await page.locator('#seanceDialog').evaluate(el => el.sessionUrl)
+  expect(new URL(sessionUrl).searchParams.get('seance')).toBe(code)
+
+  await dialog.locator('[data-action="copy-prompt"]').click()
+  await expect.poll(states).toEqual(['done', 'done', 'active'])
+  const prompt = await page.evaluate(() => navigator.clipboard.readText())
+  expect(prompt).toBe([
+    'Connect to my Polymorphic session and help me with it.',
+    'Read https://polymorphic.noisedeck.app/llms-full.txt first.',
+    'Then run:',
+    '  curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs',
+    `  node seance-agent.mjs join ${sessionUrl}`,
+  ].join('\n'))
+
+  // The agent follows the prompt's last line: it joins the session link and
+  // sends its first request.
+  const joinUrl = prompt.trim().split('\n').at(-1).trim().split(' ').at(-1)
+  const agent = await joinAsAgent({ server: seance.url, code: new URL(joinUrl).searchParams.get('seance'), origin: ORIGIN })
+  try {
+    expect((await agent.describe()).app).toBe('polymorphic')
+    await expect.poll(states).toEqual(['done', 'done', 'done'])
+    await expect(dialog).toBeHidden({ timeout: 10000 })
+    await expect(page.locator('.polymorphic-toast').filter({ hasText: 'Agent connected' })).toBeVisible()
+  } finally {
+    agent.close()
+  }
+
+  // Going offline clears the connection: opening the dialog again starts over.
+  await page.evaluate(() => window.__poly.onlineAdapter.goOffline())
+  expect(await page.locator('#agentConnectDialog').evaluate(el => el.connected)).toBe(false)
+})
+
+test('a prompt that cannot be copied says so', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { async writeText() { throw new Error('denied') }, async readText() { return '' } },
+    })
+  })
+  await openApp(page)
+  await page.locator('#programMenuTitle').click()
+  await page.locator('#connectAgentMenuItem').click()
+  const dialog = page.locator('#agentConnectDialog dialog')
+  await dialog.locator('[data-action="go-online"]').click()
+  await expect(dialog.locator('[data-action="copy-prompt"]')).toBeEnabled({ timeout: 30000 })
+  await dialog.locator('[data-action="copy-prompt"]').click()
+  await expect(page.locator('.polymorphic-toast').filter({ hasText: 'Could not copy the prompt' })).toBeVisible()
+})
+
+test('without the connect-agent dialog in handfish, the app loads and the menu item stays hidden', async ({ page }) => {
+  // An older handfish: everything but <agent-connect-dialog>.
+  await page.addInitScript(() => {
+    const define = customElements.define.bind(customElements)
+    customElements.define = (name, ...rest) => name === 'agent-connect-dialog' ? undefined : define(name, ...rest)
+  })
+  await openApp(page)
+  await page.locator('#programMenuTitle').click()
+  await expect(page.locator('#goOnlineMenuItem')).toBeVisible()
+  await expect(page.locator('#connectAgentMenuItem')).toBeHidden()
+  expect((await page.evaluate(() => window.PolymorphicAgent.getState())).ok).toBe(true)
+})
+
+test('a session cannot name media by an outside link', async ({ page }) => {
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const tab = (await agent.describe()).from
+    const linked = await agent.request(tab, 'setProgram', { dsl: 'search synth\nmedia(url: "https://example.com/a.png").write(o0)\nrender(o0)' })
+    expect(linked.body.error.code).toBe('OUTSIDE_LINK')
+    expect(await editorText(page)).toBe(BASE)
+  } finally {
+    agent.close()
+  }
+})
