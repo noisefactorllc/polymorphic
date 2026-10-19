@@ -17,7 +17,7 @@
   "author": "Noise Factor",
   "license": "MIT",
   "devDependencies": {
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "playwright": "^1.60.0",
     "serve": "^14.2.0"
   }
