@@ -203,6 +203,9 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             throw error
         })
         const sdk = await sdkPromise
+        if (online) return online
+        // The agent relay rides the SDK's own socket (agent/relay.js).
+        const SocketClass = deps.createSocketClass?.({ uploadImage: blob => online.uploadImage(blob) })
         online = sdk.createOnlineDslLayer({
             seanceUrl: config.seanceUrl,
             publicAppUrl,
@@ -210,6 +213,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
             reconnectBaseMs,
             reconnectMaxMs,
             reconnectJitter,
+            ...(SocketClass ? { WebSocket: SocketClass } : {}),
             ...deps.layerOptions,
         })
         bindCleanup = online.bindEditor({

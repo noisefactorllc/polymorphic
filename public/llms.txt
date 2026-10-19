@@ -1,0 +1,331 @@
+# Polymorphic -- Agent API
+
+> Polymorphic is a free live-coding environment for shaders, built on the
+> Noisemaker engine. A Polymorphic program is Noisemaker DSL text that
+> compiles to a render graph. An agent can join the person's own open
+> Polymorphic over Seance, the Noise Factor collaboration service, and read
+> and run programs in it, look at its canvas, use its gallery, saved programs,
+> scenes, surfaces, tempo and view, and move programs to other Noise Factor
+> apps. An agent that drives its own browser can use the in-page
+> `window.PolymorphicAgent` API instead. This file is the contract for
+> software agents that control Polymorphic.
+
+The full contract adds a reference for every command and its arguments:
+https://polymorphic.noisedeck.app/llms-full.txt
+
+The DSL itself (syntax, effects, parameters, surfaces) is specified by the
+Noisemaker contract: https://noisemaker.app/llms-full.txt
+
+The same agent tool controls Noisedeck, Visualize and HD4. Their contracts:
+https://noisedeck.app/llms-full.txt, https://visualize.noisedeck.app/llms.txt,
+https://hd4.noisefactor.io/llms.txt
+
+## Connect to the person's Polymorphic
+
+Use this route when you can run shell commands. It works with the Polymorphic
+the person already has open: their program and their canvas.
+
+1. Ask the person to open https://polymorphic.noisedeck.app, choose
+   **go online...** at the end of the program menu, click **Take Online**, and
+   send you the session link (**Copy URL**) or the six-character code.
+2. Get the agent tool. It needs Node 22.4 or later and nothing else:
+   `curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs`
+3. Join: `node seance-agent.mjs join <link-or-code>`. It prints the session
+   name (`polymorphic`), the open app tabs and the program documents. A
+   background process keeps the session joined between commands.
+
+| Command | What it does |
+|---|---|
+| `node seance-agent.mjs commands` | Lists the app's commands and their arguments. |
+| `node seance-agent.mjs program [--json]` | Prints the session's program text (`--json` adds its `rev`). |
+| `node seance-agent.mjs validate <file>` | Checks a program (`-` reads standard input). |
+| `node seance-agent.mjs set <file>` | Runs a program in the person's tab (setProgram). |
+| `node seance-agent.mjs look [--size N] [--format png\|jpg] [--out FILE]` | Saves an image of the person's canvas. Prints its path. Open the file with your image tool. |
+| `node seance-agent.mjs call <command> [JSON]` | Runs any command, for example `call loadExample '{"title":"RGB Static"}'`. |
+| `node seance-agent.mjs wait [--since REV] [--timeout S]` | Waits for the person to change the program, then prints it. |
+| `node seance-agent.mjs image-put <file>` | Adds a PNG, JPEG, GIF or WebP file to the session. Prints `image:<id>`. |
+| `node seance-agent.mjs image-get <id> [--out FILE]` | Saves an image of the session to a file. |
+| `node seance-agent.mjs transfer <from> <to>` | Copies the program and its images from one joined session to another. |
+| `node seance-agent.mjs leave` / `stop` | Leaves the session / stops the background process. |
+
+Every command prints JSON, except `program` and `commands`, which print text
+(`--json` gives JSON). The tool leaves `state` out of envelopes; `--state`
+keeps it. The exit code is 0 for success, 1 when the app refused the command
+(read `result.envelope.error.code`), and 2 when the tool could not run it
+(read `error.code`; the codes are listed below).
+`node seance-agent.mjs help` lists every option.
+
+How it works, so you can explain it to the person:
+
+- The tool joins the session as an anonymous participant, which the person
+  sees join. It runs commands in the tab of the person who took the program
+  online, through the session, with the same checks as their own edits. Their
+  program changes in their editor, and the person sees every change. Other
+  tabs in the session do not answer.
+- Everyone in the session receives every answer, and anyone who can edit the
+  session can send commands to that tab. So what the person stored in their
+  browser is not reachable through a session: saved programs (`listPrograms`,
+  `saveProgram`, `loadProgram`, `deleteProgram`), scenes (`listScenes`,
+  `saveScene`, `loadScene`), the program history (`stepHistory`) and their
+  custom `user` effects answer `REMOTE_UNAVAILABLE` or are left out. Nor can
+  a session load a sharing link (`importComposition`): its custom effects
+  bring shader code that only the person may let in. Commands that need the
+  person at the browser answer `REMOTE_UNAVAILABLE` too: downloads
+  (`exportImage`, `setRecording`), `setFullscreen` and `useLiveInput`. `commands` marks them "not available remotely". Suggest that
+  the person goes offline (**Go Offline** in the same dialog) when you are done.
+- The person can change the program at the same time. Read it again before
+  you edit it. `wait --since <rev>` returns at once when the person changed the
+  program after that revision.
+- `look` asks the person's tab for an image of the canvas. The tab adds the
+  image to the session as its own bytes, and the tool saves it as a file. Do
+  not print image bytes as text.
+- A session holds at most 32 images, and the person's own images need room
+  too. The tab takes at most 16 images in ten minutes; past that, `look`
+  answers `IMAGE_LIMIT` with `details.retryAfter` in seconds. Look when the
+  program has changed, not in a loop.
+- `setBackend` reloads the person's tab. The tab joins the session again;
+  wait until `commands` answers before the next command.
+
+Work with several apps at once: join each app's session (each gets its own
+name, such as `polymorphic`, `noisedeck` or `visualize`), then name the session
+in each command: `set polymorphic prog.dsl`, `look noisedeck`,
+`transfer polymorphic noisedeck`. A transfer copies the program's images as
+bytes, so `media(url: "image:<sha256>")` references keep working. The target
+app checks the program and refuses one that it cannot compile.
+
+Agent tool errors (exit code 2, `error.code`):
+
+- `NO_SESSION`: no session is joined, or more than one and none was named.
+- `UNKNOWN_SESSION`, `SESSION_LOCKED`, `REFUSED`: the session code is wrong or
+  expired, the session is locked, or the session refused the join.
+- `NO_APP_TAB`: the tab that took the session online did not answer. Ask the
+  person to keep it open, or to go online again and send the new code.
+- `TIMEOUT`: the tab did not answer in time. Check `status`, then try again.
+- `READONLY`: the session lets this agent only read.
+- `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
+  server refused a request (the message says why).
+- `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
+  failed, a document is missing, or the command line was wrong.
+
+## Control Polymorphic in a browser you drive
+
+Use this route when you control a browser yourself. Open
+https://polymorphic.noisedeck.app/?agent=1. This is a Polymorphic of its own,
+not the person's tab: its saved programs and scenes are those of that browser.
+Use the first route your browser tool supports:
+
+1. WebMCP: discover the page tools named `polymorphic_getState`,
+   `polymorphic_setProgram`, and so on. Each tool has the argument schema in
+   the command reference. These call the same API and return its envelope as
+   text. `getThumbnail` also returns an image content block, without
+   duplicating its bytes in text. If your harness serializes the whole tool
+   result, parse it, display the image through your image tool, and print only
+   the text block. Do not print image bytes.
+2. Browser actions: the `Polymorphic agent` region appears with `agent=1`.
+   Select `Command`, fill `Arguments (JSON)`, and click `Run command`.
+   Read `Command result` and the completion status. `getThumbnail` displays
+   `Command image` and a `Download image` link. This route needs no page JavaScript.
+   Invalid JSON returns `INVALID_JSON`; correct it and run again.
+3. Page JavaScript: call `window.PolymorphicAgent` directly. Wait until the
+   object and method exist. Every command waits for startup automatically;
+   explicitly awaiting `ready` also works. Return the fields you need, not the
+   whole API object.
+
+```js
+const env = await window.PolymorphicAgent.getProgram()
+return env.result.dsl
+```
+
+All routes use the same serialized commands and validation. WebMCP
+availability depends on the browser. If discovery returns no tools, use the
+command form. Do not try to bypass a browser tool's read-only JavaScript
+policy. A tool that only fetches HTML cannot run Polymorphic: it needs a
+browser with WebGL2 or WebGPU. The command form is opt-in.
+
+---
+
+## Write a program
+
+1. Find effects with `searchEffects`. Read their parameters with `getEffectDefinition`.
+2. Write the program. Copy each parameter name from `getEffectDefinition`. Do not guess names.
+   `choices` lists accepted values. For a `member` parameter, insert its value as a DSL
+   member expression, such as `palette.hypercolor`, without quotes.
+3. Check it with `validateProgram`. Fix every diagnostic with severity `error`.
+4. Run it with `setProgram`. Look at the result with `getThumbnail` (`look` in a session).
+5. To start from an existing program, use `listExamples` and `loadExample`. In
+   a browser you drive, `importComposition` loads a sharing link and
+   `saveProgram` keeps the result in the saved programs; through a session, ask
+   the person to do these from the program menu ("import from url...",
+   "save program").
+
+```js
+const A = window.PolymorphicAgent
+const dsl = [
+    'search synth, filter',
+    'perlin(scale: 75, octaves: 2)',
+    '  .adjust(mode: hsv, rotation: 120, hueRange: 40)',
+    '  .write(o0)',
+    'render(o0)',
+].join('\n')
+const check = await A.validateProgram({ dsl })
+if (!check.result.valid) return check.result.diagnostics
+const run = await A.setProgram({ dsl })
+return { ok: run.ok, error: run.error }
+```
+
+DSL rules that agents most often get wrong:
+
+- The first line `search ns1, ns2` sets the namespaces that effect names resolve in, in order.
+  The same function name can mean different effects: `noise` is `synth/noise` under
+  `search synth` and `classicNoisedeck/noise` under `search classicNoisedeck`.
+  The two take different parameters.
+- Every chain ends with `.write(oN)`. The program ends with `render(oN)`.
+- Read another surface with `read(oN)`, for example `tex: read(o0)`.
+- Noisemaker retired all old parameter aliases. Older examples use names
+  such as `mixAmt`, `noiseType` or `loopAmp`. Those now fail with
+  `S001 Unknown argument`. `getEffectDefinition` gives the current names.
+
+What Polymorphic adds to the DSL:
+
+- `media(url: "image:<sha256>")` shows an image. The id is the SHA-256 of the
+  image file's bytes. In a session, add the file with `image-put` first and use
+  the `image:<id>` that it prints. Saved programs and scenes keep their images
+  in the browser. Use only image ids: a link to another site makes every
+  viewer's browser fetch it.
+- `media()` draws the image at its own size in pixels, in the middle of the
+  canvas. `scaleAmt`, `position` and `tiling` change that; read them with
+  `getEffectDefinition({ effectId: "synth/media" })`.
+- `media()` without `url` shows the live source that the person started:
+  the webcam, a screen capture or a video file.
+- `text(text: "Hello", font: "Nunito", size: 0.1)` (effect `filter/text`) draws
+  text over its input. The browser draws the words, in fonts from
+  https://fonts.noisefactor.io. Read the other parameters with
+  `getEffectDefinition({ effectId: "filter/text" })`.
+- Custom effects, from a sharing link (`importComposition`) or a ZIP that the
+  person imported, are in the `user` namespace. Add `user` to the search line,
+  for example `search user, synth`. In a browser you drive,
+  `searchEffects({ namespace: "user" })` lists them; a session does not show them.
+- With the microphone on, a parameter can follow the sound:
+  `audio(band: low, min: 0, max: 1)`, with band `low`, `mid`, `high` or `vol`.
+  With MIDI on, `midi(channel: 1, controller: 7, min: 0, max: 1)` follows a controller.
+- One animation loop lasts one bar of the tempo (`setTempo`).
+
+Every command that changes the program checks it first. A program with an
+`error` diagnostic changes nothing. A program that runs goes to the online
+session, the program history (`stepHistory`) and the page URL, as typing it
+would.
+
+---
+
+## Keep results small
+
+Your tools send each result back to you. A large result uses a large part of
+your context.
+
+- Return only the fields that you need from each script.
+- Every envelope includes `state`. Remove it when you do not need it.
+- `getProgram` returns the whole program text. `state.program.chars` gives its length.
+- Direct JavaScript `getThumbnail` returns base64 image data. Keep `maxDimension` small.
+  WebMCP, the command form and `look` keep image bytes out of text.
+
+---
+
+## The envelope
+
+Every command response, success or failure, has this shape:
+
+```js
+// success
+{ ok: true, command: "setProgram", apiVersion: "1.0", result: { /* command-specific */ }, state: { /* snapshot */ } }
+
+// failure
+{
+    ok: false,
+    command: "setProgram",
+    apiVersion: "1.0",
+    error: { code: "INVALID_PROGRAM", message: "...", details: { diagnostics: [ /* ... */ ] } },
+    state: { /* snapshot */ }
+}
+```
+
+Commands run one at a time, in the order you call them.
+You can omit the argument object: `getState()` is the same as `getState({})`.
+Every command rejects an argument that it does not declare, so a command
+with no arguments accepts only `{}`.
+
+---
+
+## State snapshot
+
+```
+state: {
+    schemaVersion,
+    program:  { chars, running, error },  // running: the editor text is the program that runs
+                                          // error: the compiler error on screen, or null
+    canvas:   { width, height },
+    output:   { surface, written },       // surface: "o0" to "o7", the surface on the canvas
+                                          // written: the surfaces that the program writes
+    playback: { playing },
+    tempo:    { bpm, divider, source },   // source: "manual" or "midi"
+    backend,                              // "webgl2" or "webgpu"
+    history:  { canBack, canForward },    // stepHistory
+    online,                               // "offline", "connecting", "online" or "readonly"
+    recording,                            // a video recording is running
+    liveMedia,                            // a webcam, screen capture or video is the media() source
+    view:     { editor, docs, liveInputs, surfacePips, performanceOverlay, statusRow, performanceMode }
+}
+```
+
+---
+
+## Diagnostics
+
+`validateProgram` and a refused program return compiler diagnostics:
+
+```js
+{ code: "S001", severity: "error", message: "Unknown argument 'mixAmt' for blendMode()", location?: { line, column } }
+```
+
+A syntax error has code `SYNTAX`. Diagnostics with severity `warning` do not stop a program.
+
+---
+
+## Error codes
+
+| Code | When |
+|---|---|
+| `INVALID_JSON` | the command form arguments are not valid JSON |
+| `INVALID_ARGS_TYPE` | wrong argument type |
+| `INVALID_ARGS_REQUIRED` | missing required argument |
+| `INVALID_ARGS_RANGE` | number or string length out of range, or a blank name |
+| `INVALID_ARGS_ENUM` | value not in the allowed list |
+| `INVALID_ARGS_UNKNOWN` | an argument that the command does not declare |
+| `INVALID_PROGRAM` | the program does not compile, or the editor is empty. `details.diagnostics` lists the errors. Nothing changed |
+| `COMPILE_FAILED` | the renderer rejected a program that passed the compiler. The previous program runs again |
+| `CONFLICT_PROGRAM_CHANGED` | the program changed while the command ran, for example because the person typed. Read it again and retry |
+| `CONFLICT_PROGRAM_EXISTS` | `saveProgram` with a name in use and no `overwrite` |
+| `CONFLICT_TEMPO_SOURCE` | `setTempo` with `bpm` while the tempo follows MIDI clock |
+| `NOT_FOUND_EFFECT` | unknown effect id |
+| `NOT_FOUND_EXAMPLE` | no gallery example has that title |
+| `NOT_FOUND_PROGRAM` | no saved program has that name |
+| `NOT_FOUND_SCENE` | the scene slot is empty |
+| `NOT_FOUND_COMMAND` | no command has that name |
+| `EFFECT_LOAD_FAILED` | an effect could not load from the CDN |
+| `IMPORT_FAILED` | the sharing link is not valid, or its composition could not load |
+| `STORAGE_FAILED` | browser storage refused a save or a delete. `details.quotaExceeded` tells whether it is full |
+| `BROWSER_REFUSED` | the browser refused fullscreen or a recording |
+| `REMOTE_UNAVAILABLE` | the command came through a session, and it needs the person at the browser or reaches what they stored |
+| `IMAGE_LIMIT` | the tab already took 16 images in ten minutes. `details.retryAfter` is in seconds |
+| `IMAGE_UPLOAD_FAILED` | the tab could not add an image to the session (the session holds up to 32 images) |
+| `INTERNAL_ERROR` | unexpected failure |
+
+---
+
+## Pointers
+
+- Full command reference: https://polymorphic.noisedeck.app/llms-full.txt
+- DSL and effect contract: https://noisemaker.app/llms-full.txt
+- Agent tool for Seance sessions: https://noisedeck.app/agent/seance-agent.mjs
+- Source of truth in the page: `/js/agent/index.js` (registration), `/js/agent/commands.js`
+  (handlers), `/js/agent/schemas.js` (argument schemas), `/js/agent/descriptions.js`
+  (command descriptions)

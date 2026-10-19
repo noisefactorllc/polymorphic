@@ -1,0 +1,292 @@
+/**
+ * The Seance route of the agent contract: an agent joins the session that a
+ * Polymorphic tab took online and sends nf-agent/1 requests to that tab
+ * (public/js/agent/relay.js). Images travel as bytes, never as text.
+ */
+import { test, expect } from '@playwright/test'
+import { createHash } from 'node:crypto'
+import { deflateSync } from 'node:zlib'
+import { routeHandfishLocal } from './handfishLocal.js'
+import { routePortableImagesLocal } from './portableImagesLocal.js'
+import { SEANCE_SDK_URL, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
+import { joinAsAgent } from './agentRelayClient.js'
+
+const ORIGIN = 'http://localhost:3017'
+const BASE = [
+  'search synth, filter',
+  '',
+  'perlin(scale: 75, octaves: 2)',
+  '  .adjust(mode: hsv, rotation: 120, hueRange: 40)',
+  '  .write(o0)',
+  '',
+  'render(o0)',
+].join('\n')
+const VALID = 'search synth\nsolid(color: [0, 0, 1]).write(o0)\nrender(o0)'
+
+const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+
+/** A 2x2 PNG of one color. */
+function png(red, green, blue) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data])
+    let crc = 0xffffffff
+    for (const byte of body) {
+      crc ^= byte
+      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0)
+    }
+    const length = Buffer.alloc(4)
+    const checksum = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0)
+    return Buffer.concat([length, body, checksum])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(2, 0)
+  header.writeUInt32BE(2, 4)
+  header[8] = 8
+  header[9] = 6
+  const row = [0, red, green, blue, 255, red, green, blue, 255]
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(Buffer.from([...row, ...row]))),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+let seance
+
+test.describe.configure({ mode: 'serial', timeout: 120000 })
+
+test.beforeAll(async () => {
+  seance = await startSeanceServer({ origin: ORIGIN })
+})
+
+test.afterAll(async () => {
+  await seance?.stop()
+})
+
+function appPath(params = {}) {
+  const url = new URL('/', ORIGIN)
+  url.searchParams.set('seanceUrl', seance.url)
+  url.searchParams.set('seanceSdk', SEANCE_SDK_URL)
+  url.searchParams.set('dsl', BASE)
+  if (params.seance) url.searchParams.set('seance', params.seance)
+  return `${url.pathname}${url.search}`
+}
+
+async function openApp(page, params) {
+  await routeHandfishLocal(page)
+  await routeSeanceSdkLocal(page)
+  await routePortableImagesLocal(page)
+  await page.goto(appPath(params), { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => window.PolymorphicAgent?.getState, null, { timeout: 30000 })
+  await page.evaluate(() => window.PolymorphicAgent.ready)
+}
+
+/** Take the program online through the program menu, as the person does. */
+async function takeOnline(page) {
+  await page.locator('#programMenuTitle').click()
+  await page.locator('#goOnlineMenuItem').click()
+  await expect(page.locator('#seanceDialog dialog')).toBeVisible()
+  await page.locator('#seanceDialog [data-action="take-online"]').click()
+  await expect(page.locator('#seanceDialog .hf-seance-status-text')).toHaveText('Online', { timeout: 15000 })
+  const code = await page.locator('#seanceDialog').evaluate(el => el.sessionId)
+  await page.keyboard.press('Escape')
+  return code
+}
+
+const editorText = page => page.evaluate(() => document.getElementById('dsl-editor').value)
+
+// media() draws an image at its own size, in the middle of the canvas.
+const centerPixel = page => page.evaluate(() => {
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 1
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(document.getElementById('canvas'), 0, 0, 1, 1)
+  return Array.from(ctx.getImageData(0, 0, 1, 1).data)
+})
+
+// A custom effect, as a sharing link carries it.
+const CUSTOM_EFFECT = {
+  name: 'agentFill',
+  func: 'agentFill',
+  description: 'Fills the picture with one level of red',
+  globals: { level: { type: 'float', default: 0.5, min: 0, max: 1, uniform: 'level' } },
+  passes: [{ name: 'render', program: 'main', inputs: {}, outputs: { color: 'outputTex' } }],
+  shaders: { main: {
+    glsl: '#version 300 es\nprecision highp float;\nuniform float level;\nout vec4 fragColor;\nvoid main() { fragColor = vec4(level, 0.0, 0.0, 1.0); }',
+    wgsl: '@fragment fn main() -> @location(0) vec4<f32> { return vec4<f32>(0.5, 0.0, 0.0, 1.0); }',
+  } },
+}
+
+test('the owner tab runs an agent\'s commands and shows its canvas as an uploaded image', async ({ page }) => {
+  const sent = []
+  page.on('websocket', socket => socket.on('framesent', frame => sent.push(String(frame.payload))))
+  const uploads = []
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/images')) {
+      uploads.push({ type: request.headers()['content-type'], body: request.postDataBuffer() })
+    }
+  })
+  await openApp(page)
+  // The person takes the program online in the page under test, so this tab is the owner's.
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const described = await agent.describe()
+    expect(described.app).toBe('polymorphic')
+    expect(described.body).toMatchObject({ ok: true, result: { app: 'polymorphic', apiVersion: '1.0', tab: described.from } })
+    const commands = Object.fromEntries(described.body.result.commands.map(command => [command.name, command]))
+    expect(commands.setProgram.args.required).toEqual(['dsl'])
+    expect(commands.setProgram.remote).toBe(true)
+    expect(commands.getThumbnail).toMatchObject({ readOnly: true, remote: true })
+    for (const name of ['exportImage', 'listPrograms', 'saveProgram', 'loadProgram', 'deleteProgram', 'listScenes', 'saveScene', 'loadScene', 'stepHistory']) {
+      expect(commands[name].remote, name).toBe(false)
+    }
+    const tab = described.from
+
+    const program = await agent.request(tab, 'getProgram')
+    expect(program.body.result).toEqual({ dsl: BASE, running: true })
+
+    // '*' reaches only describe: a broadcast getProgram gets no answer, so the
+    // answer to the next request is the first one with either id.
+    const broadcast = await agent.send('*', 'getProgram')
+    const set = await agent.request(tab, 'setProgram', { dsl: VALID })
+    expect(agent.relayed.filter(frame => frame.kind === 'response' && frame.id === broadcast)).toEqual([])
+    expect(set.body).toMatchObject({ ok: true, command: 'setProgram', result: { applied: true } })
+    expect(set.body.state.program).toEqual({ chars: VALID.length, running: true, error: null })
+    expect(await editorText(page)).toBe(VALID)
+    await expect.poll(async () => (await agent.documents()).find(doc => doc.id === 'main')?.text).toBe(VALID)
+
+    const refused = await agent.request(tab, 'setProgram', { dsl: 'search synth\nperlin(madeUp: 3).write(o0)\nrender(o0)' })
+    expect(refused.body.ok).toBe(false)
+    expect(refused.body.error.code).toBe('INVALID_PROGRAM')
+    expect(await editorText(page)).toBe(VALID)
+    expect((await agent.documents()).find(doc => doc.id === 'main').text).toBe(VALID)
+
+    const look = await agent.request(tab, 'getThumbnail', { maxDimension: 48, format: 'png' })
+    expect(look.body.ok).toBe(true)
+    const result = look.body.result
+    expect(result).toMatchObject({ mimeType: 'image/png', image: { mimeType: 'image/png' } })
+    expect(Math.max(result.width, result.height)).toBe(48)
+    expect(result.bytes).toBeUndefined()
+    const bytes = await agent.downloadImage(result.image.id)
+    expect(bytes.subarray(1, 4).toString()).toBe('PNG')
+    expect(digest(bytes)).toBe(result.image.id)
+    expect(result.image.bytes).toBe(bytes.length)
+    // Images are images: the frame went up as its own bytes, and no
+    // WebSocket frame from the tab carried image text.
+    expect(uploads.some(upload => upload.type === 'image/png' && upload.body?.equals(bytes))).toBe(true)
+    expect(sent.filter(frame => frame.includes(bytes.toString('base64')) || /data:image|[A-Za-z0-9+/]{200,}/.test(frame))).toEqual([])
+
+    // Downloads and what the person stored stay out of the session.
+    await page.evaluate(() => window.PolymorphicAgent.saveProgram({ name: 'Private sketch' }))
+    for (const [command, args] of [['exportImage', {}], ['listPrograms', {}], ['loadProgram', { name: 'Private sketch' }],
+      ['saveProgram', { name: 'From the session' }], ['deleteProgram', { name: 'Private sketch' }], ['listScenes', {}],
+      ['saveScene', { slot: 1 }], ['stepHistory', { direction: 'back' }], ['importComposition', { link: 'Agent1' }]]) {
+      const answer = await agent.request(tab, command, args)
+      expect(answer.body.error.code, command).toBe('REMOTE_UNAVAILABLE')
+      expect(JSON.stringify(answer.body), command).not.toContain('Private sketch')
+    }
+    expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('polymorphic-programs'))))).toEqual(['Private sketch'])
+    expect(await editorText(page)).toBe(VALID)
+
+    const unknown = await agent.request(tab, 'noSuchCommand')
+    expect(unknown.body.error.code).toBe('NOT_FOUND_COMMAND')
+    const invalid = await agent.request(tab, 'setProgram', { dsl: VALID, force: true })
+    expect(invalid.body.error.code).toBe('INVALID_ARGS_UNKNOWN')
+  } finally {
+    agent.close()
+  }
+})
+
+test('custom effects the person loaded stay out of the session', async ({ page }) => {
+  await page.route('https://sharing.noisedeck.app/api/composition/**', route => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 'Agent1', title: 'Custom', dsl: VALID, images: [], effects: [CUSTOM_EFFECT] }),
+  }))
+  await openApp(page)
+  expect((await page.evaluate(() => window.PolymorphicAgent.importComposition({ link: 'Agent1' }))).ok).toBe(true)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const tab = (await agent.describe()).from
+    const local = await page.evaluate(() => window.PolymorphicAgent.searchEffects({ namespace: 'user' }))
+    expect(local.result.total).toBe(1)
+    const remote = await agent.request(tab, 'searchEffects', { namespace: 'user' })
+    expect(remote.body.result).toEqual({ total: 0, effects: [] })
+    const all = await agent.request(tab, 'searchEffects', { query: 'agentFill', limit: 500 })
+    expect(all.body.result.total).toBe(0)
+    const definition = await agent.request(tab, 'getEffectDefinition', { effectId: 'user/agentFill' })
+    expect(definition.body.error.code).toBe('REMOTE_UNAVAILABLE')
+    expect(JSON.stringify([remote.body, all.body, definition.body])).not.toContain('Fills the picture')
+    const builtIn = await agent.request(tab, 'getEffectDefinition', { effectId: 'synth/solid' })
+    expect(builtIn.body.result.func).toBe('solid')
+  } finally {
+    agent.close()
+  }
+})
+
+test('a second tab in the session stays silent, an image the agent adds runs in both, and the owner announces itself again after a reload', async ({ page, browser }) => {
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  const guestContext = await browser.newContext()
+  const guest = await guestContext.newPage()
+  const guestSent = []
+  guest.on('websocket', socket => socket.on('framesent', frame => guestSent.push(String(frame.payload))))
+  try {
+    await openApp(guest, { seance: code })
+    await expect.poll(() => guest.evaluate(() => window.PolymorphicAgent.getState().then(env => env.state.online))).toBe('online')
+    const owner = (await agent.describe()).from
+
+    const red = png(255, 0, 0)
+    const id = await agent.uploadImage(red, 'image/png')
+    expect(id).toBe(digest(red))
+    const dsl = `search synth\nmedia(url: "image:${id}").write(o0)\nrender(o0)`
+    const check = await agent.request(owner, 'validateProgram', { dsl })
+    expect(check.body.result).toEqual({ valid: true, diagnostics: [] })
+    const set = await agent.request(owner, 'setProgram', { dsl })
+    expect(set.body.ok, JSON.stringify(set.body.error)).toBe(true)
+    expect(await editorText(page)).toBe(dsl)
+    await expect.poll(() => centerPixel(page)).toEqual([255, 0, 0, 255])
+    // The guest's tab runs the same program, with the image from the session.
+    await expect.poll(() => editorText(guest)).toBe(dsl)
+    await expect.poll(() => centerPixel(guest)).toEqual([255, 0, 0, 255])
+
+    // The owner's tab reloads (setBackend does this) and joins again as the owner.
+    const announced = agent.announced()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    const announce = await announced
+    expect(announce.body).toMatchObject({ app: 'polymorphic', apiVersion: '1.0', tab: announce.from })
+    expect(announce.from).not.toBe(owner)
+    expect((await agent.request(announce.from, 'getProgram')).body.result.dsl).toBe(dsl)
+
+    // The guest's tab never sent a relay frame, and every relay frame the
+    // agent received came from the owner.
+    expect(guestSent.filter(frame => frame.includes('nf-agent/1'))).toEqual([])
+    expect(new Set(agent.relayed.map(frame => frame.user_id)).size).toBe(1)
+  } finally {
+    agent.close()
+    await guestContext.close()
+  }
+})
+
+test('the tab takes at most 16 images in ten minutes', async ({ page }) => {
+  await openApp(page)
+  const code = await takeOnline(page)
+  const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
+  try {
+    const tab = (await agent.describe()).from
+    for (let n = 0; n < 16; n++) {
+      const look = await agent.request(tab, 'getThumbnail', { maxDimension: 16 })
+      expect(look.body.ok, JSON.stringify(look.body.error)).toBe(true)
+    }
+    const refused = await agent.request(tab, 'getThumbnail', { maxDimension: 16 })
+    expect(refused.body.error).toMatchObject({ code: 'IMAGE_LIMIT', details: { retryAfter: expect.any(Number) } })
+    expect(refused.body.error.details.retryAfter).toBeGreaterThan(500)
+  } finally {
+    agent.close()
+  }
+})

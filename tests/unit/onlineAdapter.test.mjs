@@ -863,3 +863,26 @@ test('go offline during the initial SDK import cancels session creation before i
     assert.equal(created, 0)
     adapter.dispose()
 })
+
+test('the agent relay socket class reaches the SDK, and its uploads go to the session layer', async () => {
+    class RelaySocket {}
+    const uploads = []
+    let options = null
+    let uploadImage = null
+    let layers = 0
+    const layer = fakeLayer({ async uploadImage(blob) { uploads.push(blob); return 'a'.repeat(64) } })
+    const adapter = createPolymorphicOnlineAdapter({
+        editor: { value: 'search synth\nnoise().write(o0)\nrender(o0)' },
+        location: new URL('https://poly.test/'),
+        importSdk: async () => ({ createOnlineDslLayer: (opts) => { layers++; options = opts; return layer } }),
+        createSocketClass: (relay) => { uploadImage = relay.uploadImage; return RelaySocket },
+    })
+    // Two callers waiting on the SDK import get one layer, so one relay socket.
+    await Promise.all([adapter.ensureOnline(), adapter.ensureOnline()])
+    assert.equal(layers, 1)
+    assert.equal(options.WebSocket, RelaySocket)
+    const blob = new Blob(['png'], { type: 'image/png' })
+    assert.equal(await uploadImage(blob), 'a'.repeat(64))
+    assert.deepEqual(uploads, [blob])
+    adapter.dispose()
+})

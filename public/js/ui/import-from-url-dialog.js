@@ -223,7 +223,7 @@ if (!document.getElementById(STYLES_ID)) {
  * @param {string} url - The sharing URL
  * @returns {string|null} The short code or null if invalid
  */
-function extractShortCode(url) {
+export function extractShortCode(url) {
     if (!url) return null
     
     // Direct code (just alphanumeric)

@@ -51,6 +51,7 @@ import { attachTouchControls } from './ui/touchControls.js'
 import { applyEmbedMode } from './ui/embedMode.js'
 import { parseErrorLocation, formatErrorLabel } from './ui/errorBanner.js'
 import { createPolymorphicOnlineAdapter } from './onlineAdapter.js'
+import { bootstrapAgent, createSeanceAgentSocket, markAgentReady } from './agent/index.js'
 import './ui/codeEditor.js'  // Polymorphic editor CSS; handfish registers and owns the element behavior.
 import './ui/effectControls.js' // Register <effect-controls> custom element
 import { findCallSiteAtOffset, reresolveCallSite } from './ui/effectClickResolver.js'
@@ -152,30 +153,8 @@ if (menuBarEl) {
                     id: 'fileMenu',
                     trigger: { label: 'file', id: 'fileMenuTitle' },
                     items: [
-                        {
-                            id: 'savePNG',
-                            label: 'quick save as png',
-                            onSelect: () => {
-                                if (canvas) {
-                                    const link = document.createElement('a')
-                                    link.download = 'polymorphic.png'
-                                    link.href = canvas.toDataURL('image/png')
-                                    link.click()
-                                }
-                            },
-                        },
-                        {
-                            id: 'saveJPG',
-                            label: 'quick save as jpg',
-                            onSelect: () => {
-                                if (canvas) {
-                                    const link = document.createElement('a')
-                                    link.download = 'polymorphic.jpg'
-                                    link.href = canvas.toDataURL('image/jpeg', 0.95)
-                                    link.click()
-                                }
-                            },
-                        },
+                        { id: 'savePNG', label: 'quick save as png', onSelect: () => saveCanvasImage('png') },
+                        { id: 'saveJPG', label: 'quick save as jpg', onSelect: () => saveCanvasImage('jpg') },
                         { type: 'separator' },
                         { id: 'importFromZipMenuItem', label: 'import effect from zip...', onSelect: () => importEffectDialog.open() },
                     ],
@@ -924,6 +903,21 @@ function toggleFullscreen() {
 }
 
 /**
+ * Save the canvas as a browser download, as "quick save as png" and "quick
+ * save as jpg" do.
+ * @param {'png'|'jpg'} format
+ * @returns {{width: number, height: number}|null} The size of the saved image
+ */
+function saveCanvasImage(format) {
+    if (!canvas) return null
+    const link = document.createElement('a')
+    link.download = `polymorphic.${format}`
+    link.href = format === 'jpg' ? canvas.toDataURL('image/jpeg', 0.95) : canvas.toDataURL('image/png')
+    link.click()
+    return { width: canvas.width, height: canvas.height }
+}
+
+/**
  * Update fullscreen button icon based on current state
  */
 function updateFullscreenButton() {
@@ -1145,6 +1139,8 @@ function setupOnlineCollaboration() {
             showToast('A remote update was refused: the program was too large', 'warning')
             console.warn('[Polymorphic] refused remote document:', inspection.reason)
         },
+        // Agents in the session send commands to this tab through the socket.
+        createSocketClass: ({ uploadImage }) => createSeanceAgentSocket({ appVersion: APP_VERSION, uploadImage }),
     })
     onlineAdapter.wireUi()
     // "go online..." is a menu-bar item wired via its config (seanceDialog.show)
@@ -2157,6 +2153,46 @@ function scheduleHotReload() {
 }
 
 /**
+ * Run a program now, for the agent API (js/agent/). The editor takes the
+ * text and it compiles at once, through the same single-flight gate as a hot
+ * reload. A program that runs then goes to the online session, the program
+ * history and the page URL, as a hot reload sends it. A program that fails
+ * stays in the editor with its error shown, as typing it would leave it.
+ * @param {string} dsl
+ * @param {string} source - Why the text changed, for the online session
+ * @returns {Promise<{success: boolean, error?: string, superseded?: boolean}>}
+ */
+async function runProgramNow(dsl, source) {
+    if (!dslEditor || !renderer) return { success: false, error: 'Not initialized' }
+    if (hotReloadTimeout) {
+        clearTimeout(hotReloadTimeout)
+        hotReloadTimeout = null
+    }
+    while (_compileInFlight) {
+        await new Promise(resolve => setTimeout(resolve, 25))
+    }
+    dslEditor.value = dsl
+    let result
+    try {
+        _compileInFlight = true
+        result = await recompileShader()
+    } finally {
+        _compileInFlight = false
+    }
+    if (result.superseded) return result
+    if (!result.success) {
+        showCompilerError(result.error)
+        return result
+    }
+    hideCompilerError()
+    publishLocalDsl(source)
+    pushSnapshot(dsl)
+    stampUrl(dsl)
+    outputPicker.setDsl(dsl).catch(err => console.debug('[outputPicker] setDsl failed:', err))
+    return result
+}
+
+/**
  * Update the browser URL to encode the current DSL.
  * Skipped entirely when the page was loaded via ?code= (we don't want to
  * shadow a short link with a verbose ?dsl=).
@@ -2166,13 +2202,18 @@ function scheduleHotReload() {
  * doesn't carry an old, smaller version.
  *
  * Throttled to once per 500ms to avoid spamming history entries while typing.
+ * The stamp carries the latest program, so programs that run back to back
+ * (agent commands) leave the last one in the URL.
  */
 let urlStampTimeout = null
-function stampUrl(dsl) {
+let urlStampDsl = ''
+function stampUrl(nextDsl) {
     if (loadedFromShareCode) return
+    urlStampDsl = nextDsl
     if (urlStampTimeout) return
     urlStampTimeout = setTimeout(() => {
         urlStampTimeout = null
+        const dsl = urlStampDsl
         try {
             const url = new URL(window.location.href)
             const oversize = encodeURIComponent(dsl).length > 2000
@@ -2210,6 +2251,7 @@ function pushSnapshot(dsl) {
 
 /**
  * Step backward in snapshot history (older successful program).
+ * @returns {Promise<object>|null} The compile, or null when there is no older program
  */
 function snapshotBack() {
     const prev = snapshotHistory.back()
@@ -2220,16 +2262,19 @@ function snapshotBack() {
         publishLocalDsl('snapshot-back')
         // Recompile immediately, but don't re-snapshot
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
-        recompileShader().then(r => {
-            if (r.superseded) return
+        return recompileShader().then(r => {
+            if (r.superseded) return r
             if (!r.success) showCompilerError(r.error)
             else hideCompilerError()
+            return r
         })
     }
+    return null
 }
 
 /**
  * Step forward in snapshot history (newer successful program).
+ * @returns {Promise<object>|null} The compile, or null when there is no newer program
  */
 function snapshotForward() {
     const next = snapshotHistory.forward()
@@ -2239,12 +2284,14 @@ function snapshotForward() {
         })
         publishLocalDsl('snapshot-forward')
         if (hotReloadTimeout) { clearTimeout(hotReloadTimeout); hotReloadTimeout = null }
-        recompileShader().then(r => {
-            if (r.superseded) return
+        return recompileShader().then(r => {
+            if (r.superseded) return r
             if (!r.success) showCompilerError(r.error)
             else hideCompilerError()
+            return r
         })
     }
+    return null
 }
 
 /**
@@ -2962,8 +3009,12 @@ function init() {
         .catch(err => console.error('Failed to move program images:', err))
     snapshotHistory.holdWritesUntil(programImagesMigrated())
 
+    // Agent API: window.PolymorphicAgent, WebMCP tools, and ?agent=1. Its
+    // commands wait for startup to finish.
+    bootstrapAgent(agentApp)
+
     // Start shader immediately (no consent screen for Polymorphic)
-    startShader()
+    startShader().finally(() => markAgentReady())
 }
 
 /**
@@ -3014,18 +3065,8 @@ function setupCommandPalette() {
             liveInputsPanel.toggle()
             inputsToggleBtn?.classList.toggle('active', liveInputsPanel.isOpen())
         },
-        enableMic: () => {
-            liveInputsPanel.open()
-            inputsToggleBtn?.classList.add('active')
-            const btn = document.querySelector('.live-inputs-panel [data-id=audio-toggle]')
-            if (btn && !btn.classList.contains('active')) btn.click()
-        },
-        connectMidi: () => {
-            liveInputsPanel.open()
-            inputsToggleBtn?.classList.add('active')
-            const btn = document.querySelector('.live-inputs-panel [data-id=midi-toggle]')
-            if (btn && !btn.classList.contains('active')) btn.click()
-        },
+        enableMic: LIVE_INPUT_ACTIONS.microphone,
+        connectMidi: LIVE_INPUT_ACTIONS.midi,
         toggleRecording: () => {
             if (recorder.isRecording()) recorder.stop()
             else recorder.start()
@@ -3039,16 +3080,8 @@ function setupCommandPalette() {
             }
             showToast(`Recording quality: ${labels[preset] ?? preset}`, 'info')
         },
-        useWebcam: () => {
-            liveInputsPanel.open()
-            inputsToggleBtn?.classList.add('active')
-            document.querySelector('.live-inputs-panel .source-btn[data-source="webcam"]')?.click()
-        },
-        useScreenCapture: () => {
-            liveInputsPanel.open()
-            inputsToggleBtn?.classList.add('active')
-            document.querySelector('.live-inputs-panel .source-btn[data-source="screen"]')?.click()
-        },
+        useWebcam: LIVE_INPUT_ACTIONS.webcam,
+        useScreenCapture: LIVE_INPUT_ACTIONS.screen,
         togglePerfOverlay: () => {
             perfOverlay.toggle()
             perfToggleBtn?.classList.toggle('active', perfOverlay.isOpen())
@@ -3110,6 +3143,25 @@ async function loadGalleryExample(example, reason = 'gallery') {
     }
     scheduleHotReload()
     dslEditor.focus()
+}
+
+/**
+ * Start a live input from the live inputs panel, as the command palette's
+ * "Enable microphone", "Connect MIDI device", "Use webcam" and "Use screen
+ * capture" actions do. The browser asks the person for permission.
+ */
+const LIVE_INPUT_ACTIONS = {
+    microphone: () => startLiveInput('.live-inputs-panel [data-id=audio-toggle]', { unlessActive: true }),
+    midi: () => startLiveInput('.live-inputs-panel [data-id=midi-toggle]', { unlessActive: true }),
+    webcam: () => startLiveInput('.live-inputs-panel .source-btn[data-source="webcam"]'),
+    screen: () => startLiveInput('.live-inputs-panel .source-btn[data-source="screen"]'),
+}
+
+function startLiveInput(selector, { unlessActive = false } = {}) {
+    liveInputsPanel.open()
+    inputsToggleBtn?.classList.add('active')
+    const btn = document.querySelector(selector)
+    if (btn && !(unlessActive && btn.classList.contains('active'))) btn.click()
 }
 
 /** Switch shader backend by setting a localStorage flag and reloading. */
@@ -3193,6 +3245,69 @@ async function hushSurfaces() {
     } finally {
         if (wasPlaying) renderer.start()
     }
+}
+
+// =========================================================================
+// Agent API (js/agent/)
+// =========================================================================
+
+/** Whether the editor text is the program that the renderer runs. */
+function editorProgramRuns() {
+    const dsl = dslEditor?.value || ''
+    return Boolean(dsl) && (dsl === programStateDsl || dsl === renderer?._currentDsl)
+}
+
+/** Which panels and modes are showing, for the agent state snapshot. */
+function agentView() {
+    return {
+        editor: Boolean(dslOverlay) && dslOverlay.style.display !== 'none',
+        docs: isDocReaderVisible(),
+        liveInputs: liveInputsPanel.isOpen(),
+        surfacePips: outputPicker.isEnabled(),
+        performanceOverlay: perfOverlay.isOpen(),
+        statusRow: statusRow.isOpen(),
+        performanceMode: document.body.classList.contains('performance-mode'),
+    }
+}
+
+/** Show or hide a panel or mode through the same calls as its menu item. */
+function setAgentView(panel, visible) {
+    if (agentView()[panel] === visible) return
+    if (panel === 'editor') toggleDslOverlay()
+    else if (panel === 'docs') visible ? showDocReader() : hideDocReader()
+    else if (panel === 'liveInputs') liveInputsPanel.toggle()
+    else if (panel === 'surfacePips') outputPicker.setEnabled(visible)
+    else if (panel === 'performanceOverlay') perfOverlay.toggle()
+    else if (panel === 'statusRow') statusRow.toggle()
+    else if (panel === 'performanceMode') togglePerformanceMode()
+    refreshMenuBar()
+}
+
+/** The app references and actions that the agent commands use. */
+const agentApp = {
+    get renderer() { return renderer },
+    get canvas() { return canvas },
+    get tempoBar() { return document.getElementById('tempo-bar') },
+    getDsl: () => dslEditor?.value || '',
+    isRunning: editorProgramRuns,
+    compilerError: () => compilerErrorEl?.classList.contains('visible') ? compilerErrorEl.textContent || null : null,
+    runProgram: runProgramNow,
+    getOriginal: () => originalDsl,
+    setOriginal: (dsl) => { originalDsl = dsl },
+    isPlaying: () => isPlaying,
+    setPlaying: (playing) => {
+        if (playing !== isPlaying) togglePlayPause()
+        return isPlaying
+    },
+    stepHistory: (direction) => direction === 'back' ? snapshotBack() : snapshotForward(),
+    hushSurfaces,
+    storeImages: (dsl) => storeDslImages(dsl, renderer?.images),
+    getView: agentView,
+    setView: setAgentView,
+    switchBackend,
+    saveCanvasImage,
+    useLiveInput: (source) => LIVE_INPUT_ACTIONS[source](),
+    onlineStatus: () => onlineAdapter?.getStatus?.() || 'offline',
 }
 
 // Start when DOM is ready
