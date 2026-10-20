@@ -61,11 +61,11 @@ export const COMMAND_GROUPS = [
         commands: {
             listExamples: {
                 does: 'Lists the examples in the gallery, without their program text.',
-                returns: '`{ total, examples: [{ title, tagline, tags }] }`',
+                returns: '`{ total, examples: [{ id, title, tagline, tags }] }`',
             },
             loadExample: {
-                does: `Runs the gallery example named \`title\`. Without \`title\` it runs a random example, like "Shuffle to a random example". The example becomes the program that resetProgram restores. ${PROGRAM_RUNS}`,
-                returns: '`{ title, applied: true, diagnostics }`',
+                does: `Runs a gallery example as the gallery does, named by \`id\`, by \`title\` or by both (titles can repeat; ids do not). Without either it runs a random example, like "Shuffle to a random example". The example's own effects join the \`user\` namespace, and the example becomes the program that resetProgram restores. An example that needs WebGL2 reloads a WebGPU tab into WebGL2 with the example selected: the command answers \`reloading: true\`, so wait for the page to load again, then read the state. Through a session, that example answers REMOTE_UNAVAILABLE. ${PROGRAM_RUNS}`,
+                returns: '`{ id, title, applied, reloading, diagnostics }`, where `applied` is false and `diagnostics` is left out when the page reloads',
             },
             importComposition: {
                 does: `Loads a composition from a Noise Factor sharing link (https://sharing.noisedeck.app/s/CODE) or its code, like "import from url...". Custom effects in the composition join the \`user\` namespace. A session cannot load one: a custom effect brings its own shader code, which only the person may let into their tab. ${PROGRAM_RUNS}`,

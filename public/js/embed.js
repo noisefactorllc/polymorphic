@@ -3329,6 +3329,9 @@ const agentApp = {
     runProgram: runProgramNow,
     getOriginal: () => originalDsl,
     setOriginal: (dsl) => { originalDsl = dsl },
+    // The gallery's path for an example: its images, the page URL, the
+    // WebGL2 reload. The agent runs the program right after.
+    loadGalleryExample,
     isPlaying: () => isPlaying,
     setPlaying: (playing) => {
         if (playing !== isPlaying) togglePlayPause()

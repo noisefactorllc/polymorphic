@@ -246,26 +246,57 @@ test('gallery examples load, and resetProgram restores the last one', async ({ p
     const list = await A.listExamples()
     const load = await A.loadExample({ title: title.toUpperCase() })
     const program = (await A.getProgram()).result.dsl
+    const curated = new URL(location.href).searchParams.get('curated')
     await A.setProgram({ dsl: red })
     const reset = await A.resetProgram()
     const restored = (await A.getProgram()).result.dsl
     const missing = await A.loadExample({ title: 'No such example' })
     const random = await A.loadExample()
     return {
-      list: list.result, load: load.result, program, reset: reset.ok, restored,
+      list: list.result, load: load.result, program, curated, reset: reset.ok, restored,
       missing: missing.error.code, random: { ok: random.ok, title: random.result.title, dsl: (await A.getProgram()).result.dsl },
     }
   }, { title: examples[1].title, red: RED })
   expect(out.list.total).toBe(examples.length)
-  expect(out.list.examples[1]).toEqual({ title: examples[1].title, tagline: examples[1].tagline, tags: examples[1].tags })
+  expect(out.list.examples[1]).toEqual({ id: examples[1].id, title: examples[1].title, tagline: examples[1].tagline, tags: examples[1].tags })
   expect(out.list.examples[1].dsl).toBeUndefined()
-  expect(out.load).toMatchObject({ title: examples[1].title, applied: true })
+  expect(out.load).toMatchObject({ id: examples[1].id, title: examples[1].title, applied: true, reloading: false })
   expect(out.program).toBe(examples[1].dsl)
+  // The gallery's path names the example in the page URL.
+  expect(out.curated).toBe(examples[1].id)
   expect(out.reset).toBe(true)
   expect(out.restored).toBe(examples[1].dsl)
   expect(out.missing).toBe('NOT_FOUND_EXAMPLE')
   expect(out.random.ok).toBe(true)
   expect(out.random.dsl).toBe(examples.find(e => e.title === out.random.title).dsl)
+})
+
+test('an example is found by id where titles repeat, and brings its own effects', async ({ page }) => {
+  await loadAgent(page)
+  const examples = JSON.parse(await readFile(resolve(process.cwd(), 'public/data/examples.json'), 'utf8'))
+  // Titles repeat in the gallery; ids do not.
+  const repeated = examples.filter(e => examples.filter(o => o.title === e.title).length > 1)
+  const second = repeated.find(e => e.dsl !== repeated[0].dsl && e.title === repeated[0].title)
+  // An example whose effects ship with it runs once they register.
+  const custom = examples.find(e => (e.effects || []).length)
+  expect(second).toBeTruthy()
+  expect(custom).toBeTruthy()
+  const out = await page.evaluate(async ({ second, custom }) => {
+    const A = window.PolymorphicAgent
+    const byId = await A.loadExample({ id: second.id })
+    const byIdProgram = (await A.getProgram()).result.dsl
+    const mismatch = await A.loadExample({ id: second.id, title: 'No such example' })
+    const withEffects = await A.loadExample({ id: custom.id })
+    const state = (await A.getState()).state
+    const program = await A.getProgram()
+    return { byId: byId.result, byIdProgram, mismatch: mismatch.error.code, withEffects: withEffects.result, backend: state.backend, program: program.result }
+  }, { second, custom })
+  expect(out.byId).toMatchObject({ id: second.id, title: second.title, applied: true })
+  expect(out.byIdProgram).toBe(second.dsl)
+  expect(out.mismatch).toBe('NOT_FOUND_EXAMPLE')
+  expect(out.backend).toBe('webgl2')
+  expect(out.withEffects).toMatchObject({ id: custom.id, applied: true, reloading: false })
+  expect(out.program).toEqual({ dsl: custom.dsl, running: true })
 })
 
 test('saved programs save, list, load and delete', async ({ page }) => {

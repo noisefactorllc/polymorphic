@@ -45,7 +45,7 @@ the person already has open: their program and their canvas.
 | `node seance-agent.mjs validate <file>` | Checks a program (`-` reads standard input). |
 | `node seance-agent.mjs set <file>` | Runs a program in the person's tab (setProgram). |
 | `node seance-agent.mjs look [--size N] [--format png\|jpg] [--out FILE]` | Saves an image of the person's canvas. Prints its path. Open the file with your image tool. |
-| `node seance-agent.mjs call <command> [JSON]` | Runs any command, for example `call loadExample '{"title":"RGB Static"}'`. |
+| `node seance-agent.mjs call <command> [JSON]` | Runs any command, for example `call loadExample '{"title":"knots"}'`. |
 | `node seance-agent.mjs wait [--since REV] [--timeout S]` | Waits for the person to change the program, then prints it. |
 | `node seance-agent.mjs image-put <file>` | Adds a PNG, JPEG, GIF or WebP file to the session. Prints `image:<id>`. |
 | `node seance-agent.mjs image-get <id> [--out FILE]` | Saves an image of the session to a file. |
@@ -81,6 +81,8 @@ How it works, so you can explain it to the person:
   answer `REMOTE_UNAVAILABLE` too: downloads (`exportImage`, `setRecording`),
   `setFullscreen`, `useLiveInput`, the panels (`setView`) and the renderer
   (`setBackend`). `commands` marks all of them "not available remotely".
+  `loadExample` answers it for an example that needs WebGL2 while the tab runs
+  WebGPU, because that example reloads the person's page.
 - While the person uses live camera, screen or video input, that input stays in
   their browser: every command answers `REMOTE_UNAVAILABLE` until they stop it.
   `getProgram` returns the program that the session holds.
@@ -313,7 +315,7 @@ A syntax error has code `SYNTAX`. Diagnostics with severity `warning` do not sto
 | `CONFLICT_PROGRAM_EXISTS` | `saveProgram` with a name in use and no `overwrite` |
 | `CONFLICT_TEMPO_SOURCE` | `setTempo` with `bpm` while the tempo follows MIDI clock |
 | `NOT_FOUND_EFFECT` | unknown effect id |
-| `NOT_FOUND_EXAMPLE` | no gallery example has that title |
+| `NOT_FOUND_EXAMPLE` | no gallery example has that id or title |
 | `NOT_FOUND_PROGRAM` | no saved program has that name |
 | `NOT_FOUND_SCENE` | the scene slot is empty |
 | `NOT_FOUND_COMMAND` | no command has that name |

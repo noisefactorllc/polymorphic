@@ -18,7 +18,7 @@ import { SURFACES } from './schemas.js'
 import { compile as compileDsl, extractEffectNamesFromDsl, getEffect } from '../noisemaker/bundle.js'
 import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
 import { formatDsl } from '../ui/formatter.js'
-import { loadExamples, pickRandomExample } from '../ui/gallery.js'
+import { loadExamples, prepareExample, requiresWebGL2 } from '../ui/gallery.js'
 import { extractShortCode } from '../ui/import-from-url-dialog.js'
 import { effectiveRenderTarget, surfacesWrittenInDsl, switchOutputSurface } from '../ui/outputPicker.js'
 import { scenes } from '../ui/scenes.js'
@@ -118,11 +118,13 @@ const IMAGE_REF = /image:([a-f0-9]{64})/g
  * @param {string} dsl
  * @param {string} source - Why the program changed, for the online session
  * @param {object} app
- * @param {{images?: Array<object>, remote?: boolean}} [options] - The images the
- *   program comes with, and whether the command came through a session
+ * @param {{images?: Array<object>, remote?: boolean, stage?: () => Promise<void>}} [options] - The
+ *   images the program comes with, whether the command came through a session,
+ *   and a step that puts the program in the editor before it runs (a gallery
+ *   example takes the gallery's own path)
  * @returns {Promise<Array<object>>} The program's warnings
  */
-async function applyProgram(dsl, source, app, { images, remote = false } = {}) {
+async function applyProgram(dsl, source, app, { images, remote = false, stage } = {}) {
     await loadProgramEffects(dsl, app)
     const diagnostics = diagnose(dsl)
     if (diagnostics.some(isError)) {
@@ -139,7 +141,9 @@ async function applyProgram(dsl, source, app, { images, remote = false } = {}) {
     const renderer = app.renderer
     const previous = currentProgram(app, { remote })
     const previousImages = renderer.images
+    const previousOriginal = app.getOriginal()
     if (images) renderer.images = images
+    if (stage) await stage()
     const outcome = await app.runProgram(dsl, source)
     if (outcome.success) {
         // While the animation plays, return once the new program has drawn a
@@ -148,6 +152,7 @@ async function applyProgram(dsl, source, app, { images, remote = false } = {}) {
         return diagnostics
     }
     if (images) renderer.images = previousImages
+    if (stage) app.setOriginal(previousOriginal)
     if (outcome.superseded) {
         throw commandError('CONFLICT_PROGRAM_CHANGED',
             'The program changed while this command ran, so it did not apply. Read it with getProgram and try again.')
@@ -197,25 +202,51 @@ export async function stepHistory({ direction }, app) {
 }
 
 export async function listExamples() {
-    const examples = (await loadExamples()).map(({ title, tagline, tags }) =>
-        ({ title, tagline: tagline || '', tags: tags || [] }))
+    const examples = (await loadExamples()).map(({ id, title, tagline, tags }) =>
+        ({ id, title, tagline: tagline || '', tags: tags || [] }))
     return { result: { total: examples.length, examples } }
 }
 
-export async function loadExample({ title }, app, { remote } = {}) {
-    const example = title === undefined
-        ? await pickRandomExample()
-        : (await loadExamples()).find(e => e.title?.toLowerCase() === title.trim().toLowerCase())
-    if (!example?.dsl) {
-        throw commandError('NOT_FOUND_EXAMPLE',
-            title === undefined ? 'The gallery has no examples.' : `No gallery example is named ${title}.`, { title })
+// Like switchBackend, answer before the page reloads.
+const RELOAD_DELAY_MS = 300
+
+/**
+ * Run a gallery example the way the gallery does (embed.js
+ * loadGalleryExample): its custom effects register, its images join the
+ * renderer, the page URL names it, and the example becomes the program that
+ * resetProgram restores. An example that needs WebGL2 reloads a WebGPU tab
+ * into WebGL2 with the example selected.
+ */
+export async function loadExample({ id, title }, app, { remote } = {}) {
+    const random = id === undefined && title === undefined
+    const examples = await loadExamples()
+    const wanted = title?.trim().toLowerCase()
+    // A random pick is the gallery's "Shuffle": any example, equally likely.
+    const found = random
+        ? examples[Math.floor(Math.random() * examples.length)]
+        : examples.find(e => (id === undefined || e.id === id) && (wanted === undefined || e.title?.toLowerCase() === wanted))
+    if (!found?.dsl) {
+        throw commandError('NOT_FOUND_EXAMPLE', random ? 'The gallery has no examples.'
+            : `No gallery example has ${[id !== undefined && `id ${id}`, title !== undefined && `title ${title}`].filter(Boolean).join(' and ')}.`,
+        { id, title })
     }
-    // A shared composition brings the images its program names.
-    const extra = (example.images || []).filter(image => !app.renderer.images.some(asset => asset.id === image.id))
-    const diagnostics = await applyProgram(example.dsl, title === undefined ? 'shuffle' : 'gallery', app,
-        extra.length ? { images: [...app.renderer.images, ...extra], remote } : { remote })
-    app.setOriginal(example.dsl)
-    return { result: { title: example.title, applied: true, diagnostics } }
+    const reason = random ? 'shuffle' : 'gallery'
+    const named = { id: found.id, title: found.title }
+    const reload = app.renderer?.backend === 'webgpu' && requiresWebGL2(found)
+    if (reload && remote) {
+        throw commandError('REMOTE_UNAVAILABLE',
+            'This example needs the WebGL2 renderer, and switching renderers reloads the person\'s page. Ask the person to load it from the gallery.',
+            named)
+    }
+    // The example's own effects register before its program is checked.
+    const example = await prepareExample(found)
+    if (reload) {
+        setTimeout(() => app.loadGalleryExample(example, reason), RELOAD_DELAY_MS)
+        return { result: { ...named, applied: false, reloading: true } }
+    }
+    const diagnostics = await applyProgram(example.dsl, reason, app,
+        { remote, stage: () => app.loadGalleryExample(example, reason) })
+    return { result: { ...named, applied: true, reloading: false, diagnostics } }
 }
 
 export async function importComposition({ link }, app) {

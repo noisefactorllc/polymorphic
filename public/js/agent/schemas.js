@@ -33,7 +33,7 @@ export const SCHEMAS = {
     resetProgram: NONE,
     stepHistory: strict({ direction: { type: 'string', enum: ['back', 'forward'] } }, ['direction']),
     listExamples: NONE,
-    loadExample: strict({ title: NAME }),
+    loadExample: strict({ id: NAME, title: NAME }),
     importComposition: strict({ link: NAME }, ['link']),
     listPrograms: NONE,
     saveProgram: strict({ name: NAME, overwrite: { type: 'boolean', default: false } }, ['name']),
