@@ -329,6 +329,30 @@ async function imagePixel(page) {
   })
 }
 
+test('while the sketch is online, the go-online item offers going offline', async ({ page, context }) => {
+  await preparePage(page)
+  await page.goto(appPath({ dsl: BASE_SKETCH, online: false }))
+  await waitForApp(page)
+  const label = async () => {
+    await page.locator('#programMenuTitle').click()
+    const text = (await page.locator('#goOnlineMenuItem').textContent()).trim()
+    await page.locator('#programMenuTitle').click()
+    return text
+  }
+  expect(await label()).toBe('go online...')
+
+  await takeOnline(page)
+  await closeDialog(page)
+  expect(await label()).toBe('go offline...')
+
+  // It still opens the session, where Go Offline is.
+  await openDialog(page)
+  await page.locator('#seanceDialog [data-action="go-offline"]').click()
+  await expect(page.locator('#seanceDialog .hf-seance-status-text')).toHaveText('Offline')
+  await closeDialog(page)
+  expect(await label()).toBe('go online...')
+})
+
 async function preparePage(page) {
   await routeHandfishLocal(page)
   await routeSeanceSdkLocal(page)

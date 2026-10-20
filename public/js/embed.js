@@ -284,7 +284,8 @@ if (menuBarEl) {
                             // label was the only thing on screen that could
                             // say a session is live, and it always read "go
                             // online...". Someone could be broadcasting every
-                            // keystroke with nothing telling them so.
+                            // keystroke with nothing telling them so. Online,
+                            // it reads "go offline...".
                             label: () => onlineSessionMenuLabel(),
                             hidden: () => !onlineCollabUiVisible,
                             onSelect: () => seanceDialog?.show(),
@@ -397,8 +398,9 @@ function onlineSessionMenuLabel() {
     const isReconnecting = onlineAdapter?.isReconnecting?.() || false
     if (isReconnecting) return sessionId ? `reconnecting: ${sessionId}...` : 'reconnecting...'
     if (status === 'connecting') return 'connecting...'
-    if (status === 'readonly') return `online (read-only): ${sessionId}...`
-    if (status === 'online') return `online: ${sessionId}...`
+    // Online, the item offers the way back: it opens the session, where Go
+    // Offline is.
+    if (status === 'online' || status === 'readonly') return 'go offline...'
     return 'go online...'
 }
 
