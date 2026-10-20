@@ -205,12 +205,14 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         })
         const sdk = await sdkPromise
         if (online) return online
-        // The agent relay rides the SDK's own socket (agent/relay.js). Its
-        // first request from an agent lights the connect-agent dialog's last step.
+        // The agent relay rides the SDK's own socket (agent/relay.js).
         agentRelay = deps.createAgentRelay?.({
             uploadImage: blob => online.uploadImage(blob),
             onAgent: () => {
-                if (deps.agentDialog) deps.agentDialog.connected = true
+                // The open connect-agent dialog lights its last step and
+                // confirms as it closes; with the dialog closed, confirm at once.
+                if (deps.agentDialog?.open) deps.agentDialog.connected = true
+                else showToast('Agent connected', 'success')
             },
         }) || null
         online = sdk.createOnlineDslLayer({
@@ -534,6 +536,17 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         return layer.updateLocalText(DEFAULT_DOC_ID, prepared.dsl, { source })
     }
 
+    /**
+     * "connect agent..." helps only where an agent can be answered: offline
+     * (going online makes this tab the session's), or online in the session
+     * this tab took online. A tab that joined someone else's session cannot.
+     */
+    function canConnectAgent() {
+        const status = online?.getStatus?.() || 'offline'
+        if (status === 'offline' || status === 'connecting') return true
+        return Boolean(agentRelay?.answers?.())
+    }
+
     async function copyShareUrl() {
         const url = deps.dialog?.sessionUrl || online?.getShareUrl?.()
         if (!url) return false
@@ -660,6 +673,7 @@ export function createPolymorphicOnlineAdapter(deps = {}) {
         copyShareUrl,
         openDialog,
         isOnline,
+        canConnectAgent,
         wireUi,
         refreshStatus,
         closeActiveSession,

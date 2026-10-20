@@ -4,7 +4,9 @@
  * (public/js/agent/relay.js). Images travel as bytes, never as text.
  */
 import { test, expect } from '@playwright/test'
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { routeHandfishLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './portableImagesLocal.js'
@@ -12,6 +14,8 @@ import { SEANCE_SDK_URL, routeSeanceSdkLocal, startSeanceServer } from './seance
 import { joinAsAgent } from './agentRelayClient.js'
 
 const ORIGIN = 'http://localhost:3017'
+// Stands in for the agent tool when the prompt's join line runs in a shell.
+const JOIN_TOOL = resolve(process.cwd(), 'tests/agentJoin.mjs')
 const BASE = [
   'search synth, filter',
   '',
@@ -135,6 +139,8 @@ test('the owner tab runs an agent\'s commands and shows its canvas as an uploade
   const agent = await joinAsAgent({ server: seance.url, code, origin: ORIGIN })
   try {
     const described = await agent.describe()
+    // The person had no connect-agent dialog open: a toast confirms the agent.
+    await expect(page.locator('.polymorphic-toast').filter({ hasText: 'Agent connected' })).toBeVisible()
     expect(described.app).toBe('polymorphic')
     expect(described.body).toMatchObject({ ok: true, result: { app: 'polymorphic', apiVersion: '1.0', tab: described.from } })
     const commands = Object.fromEntries(described.body.result.commands.map(command => [command.name, command]))
@@ -256,6 +262,15 @@ test('a second tab in the session stays silent, an image the agent adds runs in 
     await openApp(guest, { seance: code })
     await expect.poll(() => guest.evaluate(() => window.PolymorphicAgent.getState().then(env => env.state.online))).toBe('online')
     const owner = (await agent.describe()).from
+
+    // Only the tab that took the session online offers "connect agent...".
+    await guest.locator('#programMenuTitle').click()
+    await expect(guest.locator('#goOnlineMenuItem')).toBeVisible()
+    await expect(guest.locator('#connectAgentMenuItem')).toBeHidden()
+    await guest.keyboard.press('Escape')
+    await page.locator('#programMenuTitle').click()
+    await expect(page.locator('#connectAgentMenuItem')).toBeVisible()
+    await page.keyboard.press('Escape')
 
     const red = png(255, 0, 0)
     const id = await agent.uploadImage(red, 'image/png')
@@ -433,28 +448,39 @@ test('connect agent walks the person through going online, copying the prompt an
   await dialog.locator('[data-action="copy-prompt"]').click()
   await expect.poll(states).toEqual(['done', 'done', 'active'])
   const prompt = await page.evaluate(() => navigator.clipboard.readText())
+  // The join line quotes the link and keeps only the page and the code.
   expect(prompt).toBe([
     'Connect to my Polymorphic session and help me with it.',
     'Read https://polymorphic.noisedeck.app/llms-full.txt first.',
     'Then run:',
     '  curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs',
-    `  node seance-agent.mjs join ${sessionUrl}`,
+    `  node seance-agent.mjs join '${ORIGIN}/?seance=${code}'`,
   ].join('\n'))
 
-  // The agent follows the prompt's last line: it joins the session link and
-  // sends its first request.
-  const joinUrl = prompt.trim().split('\n').at(-1).trim().split(' ').at(-1)
-  const agent = await joinAsAgent({ server: seance.url, code: new URL(joinUrl).searchParams.get('seance'), origin: ORIGIN })
-  try {
-    expect((await agent.describe()).app).toBe('polymorphic')
-    await expect.poll(states).toEqual(['done', 'done', 'done'])
-    await expect(dialog).toBeHidden({ timeout: 10000 })
-    await expect(page.locator('.polymorphic-toast').filter({ hasText: 'Agent connected' })).toBeVisible()
-  } finally {
-    agent.close()
-  }
+  // The agent runs the prompt's last line in a shell, as written. A stand-in
+  // for the agent tool joins and sends its first request.
+  const runJoinLine = text => new Promise((done, fail) => execFile('/bin/sh', ['-c',
+    text.trim().split('\n').at(-1).trim().replace('node seance-agent.mjs', `"${process.execPath}" "${JOIN_TOOL}"`)], {
+    env: { ...process.env, SEANCE_AGENT_SERVER: seance.url, SEANCE_AGENT_ORIGIN: ORIGIN },
+  }, (error, stdout) => error ? fail(error) : done(JSON.parse(stdout))))
+  const joined = await runJoinLine(prompt)
+  expect(joined).toMatchObject({ code, app: 'polymorphic' })
+  await expect.poll(states).toEqual(['done', 'done', 'done'])
+  await expect(dialog).toBeHidden({ timeout: 10000 })
+  await expect(page.locator('.polymorphic-toast').filter({ hasText: 'Agent connected' })).toBeVisible()
 
-  // Going offline clears the connection: opening the dialog again starts over.
+  // Each opening waits for the next agent: a second agent connects too.
+  await page.locator('#programMenuTitle').click()
+  await page.locator('#connectAgentMenuItem').click()
+  await expect(dialog).toBeVisible()
+  expect(await states()).toEqual(['done', 'active', 'pending'])
+  await dialog.locator('[data-action="copy-prompt"]').click()
+  await expect.poll(states).toEqual(['done', 'done', 'active'])
+  expect((await runJoinLine(await page.evaluate(() => navigator.clipboard.readText()))).code).toBe(code)
+  await expect.poll(states).toEqual(['done', 'done', 'done'])
+  await expect(dialog).toBeHidden({ timeout: 10000 })
+
+  // Going offline clears the connection.
   await page.evaluate(() => window.__poly.onlineAdapter.goOffline())
   expect(await page.locator('#agentConnectDialog').evaluate(el => el.connected)).toBe(false)
 })

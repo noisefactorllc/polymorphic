@@ -292,7 +292,8 @@ if (menuBarEl) {
                         {
                             id: 'connectAgentMenuItem',
                             label: 'connect agent...',
-                            hidden: () => !onlineCollabUiVisible || !customElements.get('agent-connect-dialog'),
+                            hidden: () => !onlineCollabUiVisible || !customElements.get('agent-connect-dialog')
+                                || !(onlineAdapter?.canConnectAgent?.() ?? true),
                             onSelect: () => {
                                 onlineAdapter?.refreshStatus?.()
                                 agentConnectDialog?.show?.()

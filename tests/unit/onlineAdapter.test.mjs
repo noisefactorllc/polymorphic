@@ -900,16 +900,18 @@ test('the agent relay socket class reaches the SDK, its uploads go to the sessio
     adapter.dispose()
 })
 
-test('the connect-agent dialog follows the session, lights on the first agent and clears offline', async () => {
+test('the connect-agent dialog follows the session, confirms each agent and clears offline', async () => {
     const listeners = {}
     const toasts = []
     const agentDialog = {
+        open: true,
         state: 'offline',
         prompt: '',
         connected: false,
         addEventListener(type, listener) { listeners[type] = listener },
     }
     let onAgent = null
+    let answers = false
     const layer = fakeLayer()
     const adapter = createPolymorphicOnlineAdapter({
         editor: { value: 'search synth\nnoise().write(o0)\nrender(o0)' },
@@ -918,7 +920,7 @@ test('the connect-agent dialog follows the session, lights on the first agent an
         importSdk: async () => ({ createOnlineDslLayer: () => layer }),
         createAgentRelay: (relay) => {
             onAgent = relay.onAgent
-            return { WebSocket: class {}, sessionCreated() {} }
+            return { WebSocket: class {}, sessionCreated() {}, answers: () => answers }
         },
         agentDialog,
         agentPrompt: url => `join ${url}`,
@@ -927,6 +929,7 @@ test('the connect-agent dialog follows the session, lights on the first agent an
     adapter.wireUi()
     assert.equal(agentDialog.state, 'offline')
     assert.equal(agentDialog.prompt, '')
+    assert.equal(adapter.canConnectAgent(), true, 'offline, going online makes this tab the session\'s')
 
     // The dialog's Go Online step takes the program online as the go-online dialog does.
     listeners['go-online']()
@@ -937,8 +940,22 @@ test('the connect-agent dialog follows the session, lights on the first agent an
     assert.equal(agentDialog.state, 'online')
     assert.equal(agentDialog.prompt, `join ${layer.getShareUrl()}`)
 
+    // Online in a session this tab answers, "connect agent..." helps; in one it does not, it cannot.
+    answers = true
+    assert.equal(adapter.canConnectAgent(), true)
+    answers = false
+    assert.equal(adapter.canConnectAgent(), false)
+    answers = true
+
+    // With the dialog open, its last step lights; with it closed, a toast confirms at once.
     onAgent({ userId: 'u1', username: 'agent' })
     assert.equal(agentDialog.connected, true)
+    assert.equal(toasts.some(toast => toast.message === 'Agent connected'), false)
+    agentDialog.open = false
+    agentDialog.connected = false
+    onAgent({ userId: 'u2', username: 'agent' })
+    assert.equal(agentDialog.connected, false)
+    assert.deepEqual(toasts.at(-1), { message: 'Agent connected', type: 'success' })
     listeners.connected()
     listeners['copy-failed']()
     assert.deepEqual(toasts.slice(-2), [

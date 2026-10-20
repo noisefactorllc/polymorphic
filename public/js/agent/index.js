@@ -51,7 +51,7 @@ export function markAgentReady() {
  * hears the first request from each agent.
  *
  * @param {{appVersion: string, uploadImage: (blob: Blob) => Promise<string>, onAgent?: Function}} options
- * @returns {{ WebSocket: typeof WebSocket, sessionCreated: (sessionId: string) => void }}
+ * @returns {{ WebSocket: typeof WebSocket, sessionCreated: (sessionId: string) => void, answers: () => boolean }}
  */
 export function createSeanceAgentRelay({ appVersion, uploadImage, onAgent }) {
     return createAgentRelay({
