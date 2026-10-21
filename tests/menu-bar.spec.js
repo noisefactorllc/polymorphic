@@ -95,7 +95,7 @@ const EXPECTED = {
         ['importFromUrlMenuItem', 'import from url...'],
         ['shareProgram', 'share publicly...'],
         'separator',
-        ['goOnlineMenuItem', 'go online...'],
+        ['goOnlineMenuItem', 'live collab...'],
         ['connectAgentMenuItem', 'connect agent...'],
     ],
 }

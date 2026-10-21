@@ -339,18 +339,18 @@ test('while the sketch is online, the go-online item offers going offline', asyn
     await page.locator('#programMenuTitle').click()
     return text
   }
-  expect(await label()).toBe('go online...')
+  expect(await label()).toBe('live collab...')
 
   await takeOnline(page)
   await closeDialog(page)
-  expect(await label()).toBe('go offline...')
+  expect(await label()).toBe('stop live collab')
 
   // It still opens the session, where Go Offline is.
   await openDialog(page)
   await page.locator('#seanceDialog [data-action="go-offline"]').click()
   await expect(page.locator('#seanceDialog .hf-seance-status-text')).toHaveText('Offline')
   await closeDialog(page)
-  expect(await label()).toBe('go online...')
+  expect(await label()).toBe('live collab...')
 })
 
 async function preparePage(page) {

@@ -285,7 +285,7 @@ if (menuBarEl) {
                             // say a session is live, and it always read "go
                             // online...". Someone could be broadcasting every
                             // keystroke with nothing telling them so. Online,
-                            // it reads "go offline...".
+                            // it reads "stop live collab".
                             label: () => onlineSessionMenuLabel(),
                             hidden: () => !onlineCollabUiVisible,
                             onSelect: () => seanceDialog?.show(),
@@ -400,8 +400,8 @@ function onlineSessionMenuLabel() {
     if (status === 'connecting') return 'connecting...'
     // Online, the item offers the way back: it opens the session, where Go
     // Offline is.
-    if (status === 'online' || status === 'readonly') return 'go offline...'
-    return 'go online...'
+    if (status === 'online' || status === 'readonly') return 'stop live collab'
+    return 'live collab...'
 }
 
 function setOnlineCollaborationUiVisible(visible) {
@@ -1177,7 +1177,7 @@ function setupOnlineCollaboration() {
         createAgentRelay: ({ uploadImage, onAgent }) => createSeanceAgentRelay({ appVersion: APP_VERSION, uploadImage, onAgent }),
     })
     onlineAdapter.wireUi()
-    // "go online..." is a menu-bar item wired via its config (seanceDialog.show)
+    // "live collab..." is a menu-bar item wired via its config (seanceDialog.show)
 }
 
 // Remote text arrives in the same editor the local user types in, and until
