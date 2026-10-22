@@ -1,6 +1,12 @@
 name: ci
 
 on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact main revision to verify
+        required: true
+        type: string
   pull_request:
     paths-ignore:
       - '*.md'
@@ -41,6 +47,15 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
+      - name: Require exact source for manual run
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [ "$SOURCE_SHA" = "$GITHUB_SHA" ]
+          [ "$GITHUB_REF" = "refs/heads/main" ]
+
       # Audit-mode egress monitoring: records every outbound connection the
       # runner makes so exfil/C2 from a compromised dependency is detectable.
       # Non-blocking (audit) — does not fail the build.
@@ -53,6 +68,7 @@ jobs:
 
       - name: Classify changed files
         id: changes
+        if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         with:
           base: ${{ github.event.before || github.ref }}
@@ -79,7 +95,7 @@ jobs:
           cache: 'npm'
 
       - name: Install
-        if: steps.changes.outputs.product == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.product == 'true'
         # --ignore-scripts blocks dependency lifecycle scripts (the install-time
         # code-exec vector for a compromised package). Modern native deps
         # (esbuild, sharp, rollup) ship prebuilt platform binaries as optional
@@ -89,7 +105,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Lint
-        if: steps.changes.outputs.product == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.product == 'true'
         run: |
           if jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
             npm run lint
@@ -98,9 +114,9 @@ jobs:
           fi
 
       - name: Build
-        if: steps.changes.outputs.product == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.product == 'true'
         env:
-          POLYMORPHIC_LINT_DOCUMENTATION: ${{ steps.changes.outputs.documentation }}
+          POLYMORPHIC_LINT_DOCUMENTATION: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.documentation == 'true' }}
         run: |
           if jq -e '.scripts.build' package.json >/dev/null 2>&1; then
             build_cmd=$(jq -r '.scripts.build' package.json)
@@ -114,7 +130,7 @@ jobs:
           fi
 
       - name: Unit tests
-        if: steps.changes.outputs.product == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.product == 'true'
         # Unit tests are part of the release gate. Browser tests run separately.
         run: |
           tests=()
@@ -124,7 +140,7 @@ jobs:
           node --test "${tests[@]}"
 
       - name: Documentation tests
-        if: steps.changes.outputs.documentation == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.documentation == 'true'
         run: |
           node --test tests/unit/book-data.test.mjs
           node scripts/check-book-params.mjs

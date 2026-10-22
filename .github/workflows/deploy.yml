@@ -25,7 +25,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.event == 'push'
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
     steps:
       - name: Require product checks for the source SHA
         id: product-checks
@@ -37,6 +37,9 @@ jobs:
               filter: 'latest', per_page: 100
             });
             const required = ['Install', 'Build', 'Unit tests'];
+            if (context.payload.workflow_run.event === 'workflow_dispatch') {
+              required.push('Require exact source for manual run', 'Lint', 'Documentation tests');
+            }
             const ran = required.every(name => jobs.some(job =>
               job.name === 'ci' && job.steps?.some(step =>
                 step.name === name && step.conclusion === 'success'
