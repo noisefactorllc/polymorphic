@@ -29,7 +29,7 @@ the person already has open: their program and their canvas.
 1. Ask the person to open https://polymorphic.noisedeck.app, choose
    **connect agent...** at the end of the program menu, click **Go Online**,
    then **Copy Prompt**, and paste the prompt to you. The prompt names this
-   file and the session link. (Without that dialog: **go online...**,
+   file and the session link. (Without that dialog: **live collab...**,
    **Take Online**, then send the link from **Copy URL** or the six-character
    code.)
 2. Get the agent tool. It needs Node 22.4 or later and nothing else:
@@ -44,10 +44,10 @@ the person already has open: their program and their canvas.
 | `node seance-agent.mjs program [--json]` | Prints the session's program text (`--json` adds its `rev`). |
 | `node seance-agent.mjs validate <file>` | Checks a program (`-` reads standard input). |
 | `node seance-agent.mjs set <file>` | Runs a program in the person's tab (setProgram). |
-| `node seance-agent.mjs look [--size N] [--format png\|jpg] [--out FILE]` | Saves an image of the person's canvas. Prints its path. Open the file with your image tool. |
+| `node seance-agent.mjs look [--size N] [--format png\|jpg] [--out FILE]` | Saves an image of the person's canvas. Its path is `result.envelope.result.image.path`; open the file with your image tool. `--size` is 768 unless given, at most 1024. |
 | `node seance-agent.mjs call <command> [JSON]` | Runs any command, for example `call loadExample '{"title":"knots"}'`. |
 | `node seance-agent.mjs wait [--since REV] [--timeout S]` | Waits for the person to change the program, then prints it. |
-| `node seance-agent.mjs image-put <file>` | Adds a PNG, JPEG, GIF or WebP file to the session. Prints `image:<id>`. |
+| `node seance-agent.mjs image-put <file>` | Adds a PNG, JPEG, GIF or WebP file to the session. `result.ref` is its `image:<id>`. |
 | `node seance-agent.mjs image-get <id> [--out FILE]` | Saves an image of the session to a file. |
 | `node seance-agent.mjs transfer <from> <to>` | Copies the program and its images from one joined session to another. |
 | `node seance-agent.mjs leave` / `stop` | Leaves the session / stops the background process. |
@@ -84,8 +84,9 @@ How it works, so you can explain it to the person:
   `loadExample` answers it for an example that needs WebGL2 while the tab runs
   WebGPU, because that example reloads the person's page.
 - While the person uses live camera, screen or video input, that input stays in
-  their browser: every command answers `REMOTE_UNAVAILABLE` until they stop it.
-  `getProgram` returns the program that the session holds.
+  their browser: the app's commands answer `REMOTE_UNAVAILABLE` until they stop
+  it. `commands` still lists them, and `program` and `wait` still read the
+  program that the session holds. The microphone and MIDI do not block commands.
 - The person can change the program at the same time. Read it again before
   you edit it. `wait --since <rev>` returns at once when the person changed the
   program after that revision.
@@ -97,8 +98,8 @@ How it works, so you can explain it to the person:
   too. The tab takes at most 16 images in ten minutes; past that, `look`
   answers `IMAGE_LIMIT` with `details.retryAfter` in seconds. Look when the
   program has changed, not in a loop.
-- Suggest that the person goes offline (**Go Offline** in the same dialog)
-  when you are done.
+- Suggest that the person goes offline when you are done: **stop live collab**
+  in the program menu opens the session dialog, which has **Go Offline**.
 
 Work with several apps at once: join each app's session (each gets its own
 name, such as `polymorphic`, `noisedeck` or `visualize`), then name the session
@@ -115,11 +116,23 @@ Agent tool errors (exit code 2, `error.code`):
 - `NO_APP_TAB`: the tab that took the session online did not answer. Ask the
   person to keep it open, or to go online again and send the new code.
 - `TIMEOUT`: the tab did not answer in time. Check `status`, then try again.
-- `READONLY`: the session lets this agent only read.
+- `READONLY`: the session lets this agent only read the program text:
+  `program`, `wait` and `status` work, and every app command, `commands` and
+  `look` included, is refused. Ask the person to allow guests to edit.
 - `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
   server refused a request (the message says why).
+- `ISLAND`: a `transfer` to or from a Layers session. Layers shares nothing
+  with the other apps.
 - `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
   failed, a document is missing, or the command line was wrong.
+- `CONNECT_FAILED`, `RATE_LIMITED`: `join` could not reach the session server,
+  or the server is limiting joins from this address. Wait a minute, then join
+  again.
+- `INVALID_IMAGE`, `BAD_RESPONSE`: an image id is malformed, or the app sent
+  an answer that the tool could not read.
+- `DAEMON_FAILED`, `INTERNAL_ERROR`: the tool's background process did not
+  start, or the tool failed. If it happens again, run `stop` and join again.
+- A file that the tool cannot read gives the system's code, such as `ENOENT`.
 
 ## Control Polymorphic in a browser you drive
 
@@ -190,7 +203,7 @@ DSL rules that agents most often get wrong:
   The two take different parameters.
 - Every chain ends with `.write(oN)`. The program ends with `render(oN)`.
 - Read another surface with `read(oN)`, for example `tex: read(o0)`.
-- Noisemaker retired all old parameter aliases. Older examples use names
+- Noisemaker retired the old parameter aliases. Older examples use names
   such as `mixAmt`, `noiseType` or `loopAmp`. Those now fail with
   `S001 Unknown argument`. `getEffectDefinition` gives the current names.
 
@@ -215,8 +228,8 @@ What Polymorphic adds to the DSL:
   for example `search user, synth`. In a browser you drive,
   `searchEffects({ namespace: "user" })` lists them; a session does not show them.
 - With the microphone on, a parameter can follow the sound:
-  `audio(band: low, min: 0, max: 1)`, with band `low`, `mid`, `high` or `vol`.
-  With MIDI on, `midi(channel: 1, controller: 7, min: 0, max: 1)` follows a controller.
+  `audio(band: low, min: 0, max: 1)`, with band `low`, `mid`, `high`, `vol` or `raw`.
+  With MIDI on, `midi(channel: 1, cc: 7, min: 0, max: 1)` follows a controller.
 - One animation loop lasts one bar of the tempo (`setTempo`).
 
 Every command that changes the program checks it first. A program with an
