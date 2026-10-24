@@ -28,6 +28,16 @@ export function applyBackoffJitter(delayMs, random = Math.random) {
 
 const RECOVERY_PROBATION_MS = 60_000
 const RECOVERY_CANCELLED = Symbol('sync recovery cancelled')
+// SDK error classes measured for a sender the daemon already reaped: a cut
+// transport aborts the sender with SyncSenderLostError from the data-socket
+// end, and the control teardown rejects it with SyncLifecycleError. A stop()
+// that races one of those is already done, so the stale rejection must not
+// surface as a stop failure. Unavailable and timeout errors stay surfaced:
+// they can mean the sender was never confirmed closed.
+const SENDER_GONE_ERROR_NAMES = Object.freeze([
+    'SyncLifecycleError',
+    'SyncSenderLostError'
+])
 const textEncoder = new TextEncoder()
 const FORMATTING_CHARACTERS = /\p{Cf}/u
 const EMPTY_STATS = Object.freeze({
@@ -898,7 +908,12 @@ export class SyncOutputController {
         try {
             await this._waitForSenderClosed(sender.closed)
         } catch (error) {
-            if (!firstError) firstError = error
+            // A cut transport reaps the sender before the local close
+            // handshake finishes, so the closed promise rejects with a
+            // lifecycle-class error naming a sender that no longer exists.
+            // The stop goal is already met; complete cleanly instead of
+            // surfacing the stale teardown error.
+            if (!SENDER_GONE_ERROR_NAMES.includes(error?.name) && !firstError) firstError = error
         }
         const finalStats = this._copyStats(sender.stats)
 
