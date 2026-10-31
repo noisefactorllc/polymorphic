@@ -42,6 +42,11 @@ test('native receiver keeps accepting real webgl2 bytes from the fresh canvas af
         () => window.__poly.syncOutputController.state.error?.code,
     )).toBe('SYNC_RENDERER_REPLACED')
     expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('error')
+    // The observed-socket set still holds every frame sent before the loss,
+    // and a deterministic page can resend byte-identical frames. Clear it
+    // here, with the output stopped, so the acceptance below can only match
+    // a frame the fresh canvas sent after the restart.
+    await page.evaluate(() => window.nativeFrameChecksums.clear())
     await page.evaluate(async () => {
         const output = window.__poly.syncOutputController
         await output.connect()
