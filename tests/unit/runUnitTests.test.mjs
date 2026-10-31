@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { selectTests } from '../../scripts/run-unit-tests.mjs'
+import { chooseSuite, selectTests } from '../../scripts/run-unit-tests.mjs'
 
 const ALL = [
     'contextLoss.test.mjs',
@@ -40,6 +40,14 @@ test('a changed test file selects itself', () => {
 
 test('a changed path no unit test exercises selects nothing', () => {
     assert.deepEqual(selectTests(['docs/unrelated.md'], ALL, readTest), [])
+})
+
+test('an empty focused selection falls back to the whole unit suite', () => {
+    // A Playwright-only change names a test the unit runner cannot execute.
+    const selected = selectTests(
+        ['tests/sync-native-context-loss-receiver.spec.js'], ALL, readTest)
+    assert.deepEqual(selected, [])
+    assert.deepEqual(chooseSuite(selected, ALL), ALL)
 })
 
 test('a changed source path and its test select both together', () => {
