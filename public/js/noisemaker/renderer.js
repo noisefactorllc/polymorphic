@@ -50,7 +50,8 @@ export class PolymorphicRenderer {
             preferWebGPU: this.preferWebGPU,
             useBundles: true,
             bundlePath: `${SHADER_BASE_PATH}/effects`,
-            onError: options.onError
+            onError: options.onError,
+            onContextRestored: () => this._adoptFreshCanvas()
         })
 
         this.images = []
@@ -480,6 +481,37 @@ export class PolymorphicRenderer {
         }
         this.canvas.addEventListener('webglcontextlost', this._contextLostHandler)
         this.canvas.addEventListener('webglcontextrestored', this._contextRestoredHandler)
+    }
+
+    /**
+     * Follow the engine when it rebuilds on a fresh canvas after a lost WebGL
+     * context, restored or not: the engine swaps the dead canvas element for a
+     * new one in the same place, so the old element stays dead even when the
+     * browser restores its context. Point `canvas` at the live element and
+     * re-arm the context-loss listeners on it. When no restore event fired,
+     * the engine rebuilt on its own timer, so recovery is done from the
+     * host's view and the host's onContextRestored runs here, once.
+     *
+     * @private
+     */
+    _adoptFreshCanvas() {
+        if (this._disposed) return
+        const live = this._renderer?.canvas
+        if (!live || live === this.canvas) return
+        if (this._contextLostHandler) {
+            this.canvas?.removeEventListener?.('webglcontextlost', this._contextLostHandler)
+            this.canvas?.removeEventListener?.('webglcontextrestored', this._contextRestoredHandler)
+        }
+        this.canvas = live
+        this._setupContextLossHandlers()
+        if (this._contextLost) {
+            this._contextLost = false
+            try {
+                this.onContextRestored?.(null, this)
+            } catch (err) {
+                console.warn('onContextRestored handler failed:', err)
+            }
+        }
     }
 
     /**

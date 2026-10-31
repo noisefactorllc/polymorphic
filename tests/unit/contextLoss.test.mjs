@@ -40,12 +40,12 @@ function stubCanvas() {
 
 // Sandbox context whose CanvasRenderer stub returns the given engine, plus a
 // loader that executes the sliced PolymorphicRenderer class body in it.
-function sandboxContext(engine, canvas) {
+function sandboxContext(engine, canvas, ctorSink) {
     return vm.createContext({
         console,
         SHADER_BASE_PATH: 'https://shaders.noisedeck.app/1',
         // The engine wrapper (CanvasRenderer) is browser-only; stub it.
-        CanvasRenderer: function () { return engine },
+        CanvasRenderer: function (options) { if (ctorSink) ctorSink.options = options; return engine },
         // Bundle helpers are stubbed out: context-loss tests exercise loss /
         // recovery control flow, not compilation semantics.
         stripMediaUrlArg: dsl => dsl,
@@ -68,7 +68,7 @@ function loadRendererClass(context) {
     return Renderer || vm.runInContext('PolymorphicRenderer', context)
 }
 
-async function make({ options = {}, inner = {} } = {}) {
+async function make({ options = {}, inner = {}, ctorSink = null } = {}) {
     const canvas = stubCanvas()
     const engine = Object.assign({
         isRunning: false,
@@ -87,7 +87,7 @@ async function make({ options = {}, inner = {} } = {}) {
         }
     }, inner)
 
-    const context = sandboxContext(engine, canvas)
+    const context = sandboxContext(engine, canvas, ctorSink)
     const Renderer = loadRendererClass(context)
     const renderer = new Renderer(canvas, options)
     renderer._renderer = engine
@@ -334,4 +334,52 @@ test('re-arming the watch on the same device does not stack duplicate lost handl
     await new Promise(resolve => setImmediate(resolve))
     assert.equal(notified, 1)
     assert.equal(renderer._watchedGpuDevice, device)
+})
+
+// The engine now rebuilds a lost WebGL context on a fresh canvas element (the
+// restored canvas reads back as nothing), so the wrapper must move with it:
+// `canvas` points at the live element, the context-loss listeners re-arm on
+// the fresh canvas, and a recovery the browser never restored is surfaced to
+// the host once through onContextRestored.
+test('the wrapper follows the engine onto its fresh canvas after a context-loss rebuild', async () => {
+    const ctorSink = {}
+    const { renderer, engine, canvas } = await make({ ctorSink })
+    await renderer.init()
+    const hostRestored = []
+    renderer.onContextRestored = (e, r) => hostRestored.push(r)
+
+    canvas.dispatch('webglcontextlost')
+    assert.equal(renderer.contextLost, true)
+
+    const fresh = stubCanvas()
+    engine.canvas = fresh
+    ctorSink.options.onContextRestored()
+
+    assert.equal(renderer.canvas, fresh, 'canvas points at the live element')
+    assert.equal(renderer.contextLost, false, 'the engine recovered without a restore event')
+    assert.equal(fresh.listeners.get('webglcontextlost')?.length, 1, 'listeners re-armed on the fresh canvas')
+    assert.equal(fresh.listeners.get('webglcontextrestored')?.length, 1)
+    assert.ok(canvas.removed.some(([type]) => type === 'webglcontextlost'), 'old canvas listeners released')
+    assert.equal(hostRestored.length, 1, 'the host learns about the recovery once')
+})
+
+test('a browser restore followed by the engine rebuild notifies the host once and does not stack listeners', async () => {
+    const ctorSink = {}
+    const { renderer, engine, canvas } = await make({ ctorSink })
+    await renderer.init()
+    const hostRestored = []
+    renderer.onContextRestored = (e, r) => hostRestored.push(r)
+
+    canvas.dispatch('webglcontextlost')
+    canvas.dispatch('webglcontextrestored')
+    assert.equal(renderer.contextLost, false)
+
+    const fresh = stubCanvas()
+    engine.canvas = fresh
+    ctorSink.options.onContextRestored()
+    ctorSink.options.onContextRestored()
+
+    assert.equal(renderer.canvas, fresh)
+    assert.equal(hostRestored.length, 1, 'the restore event notified the host, the rebuild does not repeat it')
+    assert.equal(fresh.listeners.get('webglcontextlost')?.length, 1, 'exactly one listener pair on the fresh canvas')
 })

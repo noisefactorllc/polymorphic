@@ -2478,7 +2478,7 @@ async function startShader() {
     syncOutputController?.dispose()
     syncOutputController = initializeSyncOutputController({
         renderer: renderer.inner,
-        getCanvas: () => canvas,
+        getCanvas: () => renderer.canvasRenderer.canvas,
         connectionProvider: createSyncOutputConnectionProvider({
             transport: typeof window !== 'undefined' ? window.__POLYMORPHIC_SYNC_TRANSPORT__ : undefined
         })
