@@ -42,12 +42,15 @@ test('a changed path no unit test exercises selects nothing', () => {
     assert.deepEqual(selectTests(['docs/unrelated.md'], ALL, readTest), [])
 })
 
-test('an empty focused selection falls back to the whole unit suite', () => {
-    // A Playwright-only change names a test the unit runner cannot execute.
+test('a Playwright-only change runs no unit test through this entrypoint', () => {
+    // The unit runner cannot execute Playwright specs. For such a change the
+    // focused run stays empty and the entrypoint exits without spawning node:
+    // the specs run through the browser entrypoint and exact-source CI, and a
+    // whole-suite fallback would only rerun unrelated unit tests.
     const selected = selectTests(
         ['tests/sync-native-context-loss-receiver.spec.js'], ALL, readTest)
     assert.deepEqual(selected, [])
-    assert.deepEqual(chooseSuite(selected, ALL), ALL)
+    assert.deepEqual(chooseSuite(selected, ['tests/sync-native-context-loss-receiver.spec.js']), [])
 })
 
 test('a changed source path and its test select both together', () => {

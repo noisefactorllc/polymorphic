@@ -42,15 +42,15 @@ export function selectTests(changed, all, readTest) {
 /**
  * Choose the suite to run. A focused selection may be empty when the changed
  * paths name only tests this runner cannot execute (for example Playwright
- * specs). Falling back to the whole unit suite keeps the pre-runner
- * entrypoint's full coverage instead of a `node --test` default discovery
- * over the repository, which fails on unrelated environment-dependent files.
+ * specs). Such a run executes no unit test: the specs run through the
+ * repository's browser entrypoint and exact-source CI, and a whole-suite
+ * fallback would only rerun unrelated unit tests.
  * @param {string[]} selected - Focused selection from selectTests
- * @param {string[]} all - Every unit test file name
- * @returns {string[]} Unit test files to run
+ * @param {string[]} changed - Changed repository paths
+ * @returns {string[]} Unit test files to run ([] runs nothing)
  */
-export function chooseSuite(selected, all) {
-    return selected.length ? selected : all.slice()
+export function chooseSuite(selected, changed) {
+    return selected.length || changed.length === 0 ? selected : []
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
@@ -62,7 +62,14 @@ if (isMain) {
         .map(line => line.trim())
         .filter(Boolean)
     const selected = selectTests(changed, all, name => readFileSync(path.join(unitDir, name), 'utf8'))
-    const suite = chooseSuite(selected, all)
+    const suite = chooseSuite(selected, changed)
+    if (suite.length === 0) {
+        // `node --test` with no file arguments runs a default discovery over
+        // the repository, which fails on unrelated environment-dependent
+        // files. An empty focused run must therefore exit instead of spawning.
+        console.log('no unit tests exercise the changed paths; nothing to run')
+        process.exit(0)
+    }
 
     const result = spawnSync(
         process.execPath,

@@ -8,6 +8,17 @@ test('native receiver keeps accepting real webgl2 bytes from the fresh canvas af
     test.slow()
     await connectNativeReceiver(page, 'webgl2')
 
+    // Baseline before the loss: the original sender's own acceptance proves
+    // the output path delivers real bytes, and records the sender identity
+    // that the post-rebuild legs must replace. The daemon keeps receiver
+    // counters and the publisher checksum per sender, so a restart creates a
+    // sender whose counters start at zero.
+    await pollReceiverAccepted(page)
+    await page.evaluate(() => {
+        window.__preLossSender = window.__poly.syncOutputController._sender.id
+    })
+    expect(await page.evaluate(() => window.__preLossSender)).toBeTruthy()
+
     // Lose the context the way a GPU reset would: the engine rebuilds on a
     // fresh canvas element in the old canvas's place, the wrapper adopts that
     // fresh canvas, and the Sync output controller's identity checks route the
@@ -43,9 +54,10 @@ test('native receiver keeps accepting real webgl2 bytes from the fresh canvas af
     )).toBe('SYNC_RENDERER_REPLACED')
     expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('error')
     // The observed-socket set still holds every frame sent before the loss,
-    // and a deterministic page can resend byte-identical frames. Clear it
-    // here, with the output stopped, so the acceptance below can only match
-    // a frame the fresh canvas sent after the restart.
+    // and a deterministic page can resend byte-identical frames, so a hash
+    // alone cannot date a frame. Clear the set here, with the output stopped,
+    // so the acceptance below can only match a frame the fresh canvas sent
+    // after the restart.
     await page.evaluate(() => window.nativeFrameChecksums.clear())
     await page.evaluate(async () => {
         const output = window.__poly.syncOutputController
@@ -53,14 +65,34 @@ test('native receiver keeps accepting real webgl2 bytes from the fresh canvas af
         await output.start('Polymorphic native receiver')
     })
 
+    // The post-rebuild acceptance: pollReceiverAccepted reads the daemon's
+    // getStats for the current sender only, and this sender did not exist
+    // before the rebuild, so its accepted count covers post-rebuild frames
+    // alone.
     await pollReceiverAccepted(page)
-    const accepted = await page.evaluate(() => window.nativeReceiverStats)
-    expect(Number(accepted.accepted)).toBeGreaterThanOrEqual(2)
-    expect(Number(accepted.rejected)).toBe(0)
-    expect(Number(accepted.failed)).toBe(0)
-    // The accepted checksum must match a frame this page actually sent after
-    // the rebuild: actual rendered pixel bytes from the fresh canvas, not
+    const fresh = await page.evaluate(() => {
+        const stats = window.nativeReceiverStats
+        return {
+            senderId: window.__poly.syncOutputController._sender.id,
+            accepted: Number(stats.accepted),
+            rejected: Number(stats.rejected),
+            failed: Number(stats.failed),
+            checksum: Number(stats.checksum),
+            sentAfterRebuild: window.nativeFrameChecksums.has(Number(stats.checksum)),
+        }
+    })
+    // The restart replaced the sender: the accepted stats and the accepted
+    // checksum belong to a sender created after the rebuild, never to the
+    // pre-loss one.
+    expect(fresh.senderId).toBeTruthy()
+    expect(fresh.senderId).not.toBe(await page.evaluate(() => window.__preLossSender))
+    expect(fresh.accepted).toBeGreaterThanOrEqual(2)
+    expect(fresh.rejected).toBe(0)
+    expect(fresh.failed).toBe(0)
+    // The accepted checksum must match a frame this page sent after the
+    // rebuild: actual rendered pixel bytes from the fresh canvas, not
     // counters or fake SDK calls.
+    expect(fresh.sentAfterRebuild).toBe(true)
     await page.evaluate(() => window.__poly.syncOutputController.stop())
     expect(await page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(true)
 })
