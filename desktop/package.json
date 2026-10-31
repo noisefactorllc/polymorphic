@@ -12,11 +12,13 @@
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "test": "node --test test/*.test.cjs"
   },
   "devDependencies": {
     "electron": "^42.11.16",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "minimatch": "file:compat/minimatch-compat"
   },
   "build": {
     "publish": {
@@ -102,5 +104,8 @@
         }
       }
     }
+  },
+  "overrides": {
+    "minimatch": "$minimatch"
   }
 }
