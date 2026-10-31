@@ -2441,6 +2441,11 @@ async function startShader() {
     }
 
     // Create renderer
+    // Declared before the renderer boots: the engine can replace the
+    // canvas during boot, and the onCanvasReplaced handler below must
+    // never touch a let binding that does not exist yet.
+    let detachTouchControls = null
+
     renderer = new PolymorphicRenderer(canvas, {
         width,
         height,
@@ -2537,7 +2542,7 @@ async function startShader() {
             onSwitch: (idx, opts) => switchOutput(idx, opts)
         })
 
-        let detachTouchControls = attachTouchControls({
+        detachTouchControls = attachTouchControls({
             canvas,
             dslEditor,
             onTogglePerformanceMode: togglePerformanceMode
