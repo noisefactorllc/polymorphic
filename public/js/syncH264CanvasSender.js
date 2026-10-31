@@ -74,7 +74,7 @@ function h264Codec(descriptor) {
 }
 
 export class SyncH264CanvasSender {
-    static async create({ client, name, canvas, descriptor, clock = performance, logger = globalThis.console }) {
+    static async create({ client, name, canvas, getCanvas, descriptor, clock = performance, logger = globalThis.console }) {
         if (typeof client?.createH264StreamSender !== 'function') {
             throw outputError('SYNC_CAPABILITY', 'Sync SDK does not support H.264 output')
         }
@@ -96,7 +96,7 @@ export class SyncH264CanvasSender {
         const transport = await client.createH264StreamSender(name)
         let sender
         try {
-            sender = new SyncH264CanvasSender({ transport, canvas, descriptor, clock, config, logger })
+            sender = new SyncH264CanvasSender({ transport, canvas, getCanvas, descriptor, clock, config, logger })
             await sender.ready
             await sender.warmup()
             return sender
@@ -107,9 +107,12 @@ export class SyncH264CanvasSender {
         }
     }
 
-    constructor({ transport, canvas, descriptor, clock, config, logger = globalThis.console }) {
+    constructor({ transport, canvas, getCanvas, descriptor, clock, config, logger = globalThis.console }) {
         this._transport = transport
-        this._canvas = canvas
+        // The renderer can replace its canvas element after a lost WebGL
+        // context (the engine rebuilds on a fresh canvas in the same place),
+        // so capture follows a live accessor when the host supplies one.
+        this._getCanvas = typeof getCanvas === 'function' ? getCanvas : () => canvas
         this._descriptor = descriptor
         this._clock = clock
         this._logger = logger
@@ -206,7 +209,7 @@ export class SyncH264CanvasSender {
             const delay = target - this._clock.now()
             if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay))
             if (this._closed) throw outputError('SYNC_SENDER_CLOSED', 'H.264 sender closed during warmup')
-            const frame = new VideoFrame(this._canvas, { timestamp: Math.round(target * 1000) })
+            const frame = new VideoFrame(this._getCanvas(), { timestamp: Math.round(target * 1000) })
             try {
                 this._worker.postMessage({ type: 'warm', frame, keyFrame: index === 0 }, [frame])
             } finally { frame.close() }
@@ -281,7 +284,7 @@ export class SyncH264CanvasSender {
         const keyFrame = this._keyframeNeeded || sequence % 120 === 1
         this._keyframeNeeded = false
         try {
-            const frame = new VideoFrame(this._canvas, { timestamp: videoTimestamp })
+            const frame = new VideoFrame(this._getCanvas(), { timestamp: videoTimestamp })
             try { this._worker.postMessage({ type: 'frame', frame, keyFrame }, [frame]) }
             finally { frame.close() }
         } catch (error) {

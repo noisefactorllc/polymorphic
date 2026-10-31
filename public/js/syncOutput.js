@@ -711,7 +711,7 @@ export class SyncOutputController {
         if (compressed) {
             try {
                 resources.sender = await SyncH264CanvasSender.create({
-                    client, name, canvas, descriptor, clock: this._clock, logger: this._logger
+                    client, name, canvas, getCanvas: () => this._getCanvas(), descriptor, clock: this._clock, logger: this._logger
                 })
             } catch (error) {
                 if (error?.code !== 'SYNC_CAPABILITY') throw error

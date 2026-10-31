@@ -5,13 +5,13 @@
  */
 
 export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode }) {
-    if (!('ontouchstart' in window) || !canvas) return
+    if (!('ontouchstart' in window) || !canvas) return null
 
     let lastTapTime = 0
     let lastTapX = 0
     let lastTapY = 0
 
-    canvas.addEventListener('touchend', (e) => {
+    const singleTapEnd = (e) => {
         if (e.changedTouches.length !== 1) return
         const t = e.changedTouches[0]
         const now = Date.now()
@@ -30,7 +30,8 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
             lastTapX = t.clientX
             lastTapY = t.clientY
         }
-    }, { passive: true })
+    }
+    canvas.addEventListener('touchend', singleTapEnd, { passive: true })
 
     const TWO_FINGER_MAX_MS = 250
     const TWO_FINGER_MAX_DRIFT_PX = 30
@@ -41,7 +42,7 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
     let twoFingerMoved = false
     let twoFingerArmed = false  // we saw exactly 2 fingers and never went above 2
 
-    canvas.addEventListener('touchstart', (e) => {
+    const twoFingerStartHandler = (e) => {
         if (e.touches.length === 2) {
             twoFingerStart = Date.now()
             twoFingerArmed = true
@@ -54,9 +55,10 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
         } else if (e.touches.length > 2) {
             twoFingerArmed = false
         }
-    }, { passive: true })
+    }
+    canvas.addEventListener('touchstart', twoFingerStartHandler, { passive: true })
 
-    canvas.addEventListener('touchmove', (e) => {
+    const twoFingerMoveHandler = (e) => {
         if (!twoFingerArmed || e.touches.length < 2) return
         const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2
         const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2
@@ -67,9 +69,10 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
         const spread = Math.hypot(sx, sy)
         const dSpread = Math.abs(spread - twoFingerOriginSpread)
         if (dx > TWO_FINGER_MAX_DRIFT_PX || dy > TWO_FINGER_MAX_DRIFT_PX || dSpread > TWO_FINGER_MAX_DRIFT_PX) twoFingerMoved = true
-    }, { passive: true })
+    }
+    canvas.addEventListener('touchmove', twoFingerMoveHandler, { passive: true })
 
-    canvas.addEventListener('touchend', (e) => {
+    const twoFingerEndHandler = (e) => {
         if (twoFingerArmed && e.touches.length === 0) {
             const elapsed = Date.now() - twoFingerStart
             if (!twoFingerMoved && elapsed < TWO_FINGER_MAX_MS) {
@@ -77,5 +80,16 @@ export function attachTouchControls({ canvas, dslEditor, onTogglePerformanceMode
             }
             twoFingerArmed = false
         }
-    }, { passive: true })
+    }
+    canvas.addEventListener('touchend', twoFingerEndHandler, { passive: true })
+
+    // The renderer can replace its canvas element after a lost WebGL context;
+    // the host re-attaches these gestures to the fresh canvas with the
+    // returned detach handle.
+    return () => {
+        canvas.removeEventListener('touchend', singleTapEnd)
+        canvas.removeEventListener('touchstart', twoFingerStartHandler)
+        canvas.removeEventListener('touchmove', twoFingerMoveHandler)
+        canvas.removeEventListener('touchend', twoFingerEndHandler)
+    }
 }

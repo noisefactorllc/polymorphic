@@ -18,7 +18,10 @@ afterEach(() => {
 
 function installEncoder() {
     class Frame {
-        constructor(_canvas, { timestamp }) { this.timestamp = timestamp }
+        constructor(_canvas, { timestamp }) {
+            this.timestamp = timestamp
+            this.sourceCanvas = _canvas
+        }
         close() {}
     }
     class Encoder {
@@ -92,6 +95,38 @@ test('spaces catch-up writes so the receiver does not see a frame burst', {
     assert.deepEqual(transport.writes.map(({ frame }) => decodeFrameHeaderV1(frame).sequence), [1, 2, 3])
     assert.ok(transport.writes[1].at - transport.writes[0].at >= 15)
     assert.ok(transport.writes[2].at - transport.writes[1].at >= 15)
+})
+
+test('capture follows the live canvas the host rebinds after a context loss', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const captured = []
+    const stubWorker = globalThis.Worker
+    class RecordingWorker extends stubWorker {
+        postMessage(message) {
+            if (message.type === 'frame') captured.push(message.frame.sourceCanvas)
+            super.postMessage(message)
+        }
+    }
+    globalThis.Worker = RecordingWorker
+    const canvasA = { width: 1920, height: 1080 }
+    const canvasB = { width: 1920, height: 1080 }
+    let live = canvasA
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Rebound', canvas: canvasA, getCanvas: () => live,
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    const now = performance.now()
+    assert.equal(sender.submit(1, now), true)
+    live = canvasB
+    assert.equal(sender.submit(2, now + 0.1), true)
+    sender.close()
+    await sender.closed
+    assert.equal(captured[0], canvasA, 'frames capture the live canvas')
+    assert.equal(captured[1], canvasB, 'capture follows the rebound canvas without a sender restart')
 })
 
 test('pacing timer delays are whole milliseconds so rounding cannot undershoot the write gap', {

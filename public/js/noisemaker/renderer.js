@@ -33,6 +33,7 @@ export class PolymorphicRenderer {
         this.onContextLost = options.onContextLost || null
         this.onContextRestored = options.onContextRestored || null
         this.onDeviceLost = options.onDeviceLost || null
+        this.onCanvasReplaced = options.onCanvasReplaced || null
 
         // WebGPU device-loss state (`device.lost` is terminal for the device,
         // unlike WebGL's context pair). `_gpuDeviceLost` tells recovery to drop
@@ -504,6 +505,7 @@ export class PolymorphicRenderer {
         }
         this.canvas = live
         this._setupContextLossHandlers()
+        this.onCanvasReplaced?.(live)
         if (this._contextLost) {
             this._contextLost = false
             try {

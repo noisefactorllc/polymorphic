@@ -343,7 +343,11 @@ test('re-arming the watch on the same device does not stack duplicate lost handl
 // the host once through onContextRestored.
 test('the wrapper follows the engine onto its fresh canvas after a context-loss rebuild', async () => {
     const ctorSink = {}
-    const { renderer, engine, canvas } = await make({ ctorSink })
+    const replaced = []
+    const { renderer, engine, canvas } = await make({
+        ctorSink,
+        options: { onCanvasReplaced: live => replaced.push(live) }
+    })
     await renderer.init()
     const hostRestored = []
     renderer.onContextRestored = (e, r) => hostRestored.push(r)
@@ -356,6 +360,7 @@ test('the wrapper follows the engine onto its fresh canvas after a context-loss 
     ctorSink.options.onContextRestored()
 
     assert.equal(renderer.canvas, fresh, 'canvas points at the live element')
+    assert.deepEqual(replaced, [fresh], 'the host learns the canvas was replaced')
     assert.equal(renderer.contextLost, false, 'the engine recovered without a restore event')
     assert.equal(fresh.listeners.get('webglcontextlost')?.length, 1, 'listeners re-armed on the fresh canvas')
     assert.equal(fresh.listeners.get('webglcontextrestored')?.length, 1)

@@ -2455,6 +2455,16 @@ async function startShader() {
         onContextRestored: () => {
             return recoverGraphics()
         },
+        onCanvasReplaced: (liveCanvas) => {
+            // The engine presents on a fresh canvas after a context loss;
+            // touch gestures must follow it or they stay on the dead element.
+            detachTouchControls?.()
+            detachTouchControls = attachTouchControls({
+                canvas: liveCanvas,
+                dslEditor,
+                onTogglePerformanceMode: togglePerformanceMode
+            })
+        },
         onDeviceLost: (info) => {
             showToast('GPU device lost — recovering your program…', 'warning')
             console.warn('WebGPU device lost:', info?.reason || info || 'unknown reason')
@@ -2527,7 +2537,7 @@ async function startShader() {
             onSwitch: (idx, opts) => switchOutput(idx, opts)
         })
 
-        attachTouchControls({
+        let detachTouchControls = attachTouchControls({
             canvas,
             dslEditor,
             onTogglePerformanceMode: togglePerformanceMode
