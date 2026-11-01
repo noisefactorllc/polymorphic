@@ -473,17 +473,60 @@ test('exportImage saves through the browser download', async ({ page }) => {
   expect(download.suggestedFilename()).toBe('polymorphic.jpg')
 })
 
-test('a recording starts, and stopping it saves the video through the browser download', async ({ page }) => {
+test('consecutive recordings immediately restart and save separate playable browser downloads', async ({ page }) => {
   await loadAgent(page)
+  const downloads = []
+  page.on('download', download => downloads.push(download))
   const started = await page.evaluate(() => window.PolymorphicAgent.setRecording({ recording: true, quality: 'low' }))
   expect(started.result).toEqual({ recording: true, quality: 'low' })
   expect(started.state.recording).toBe(true)
-  const [download, stopped] = await Promise.all([
-    page.waitForEvent('download', { timeout: 30000 }),
-    page.evaluate(() => window.PolymorphicAgent.setRecording({ recording: false })),
-  ])
+  await page.waitForFunction(() => window.__poly.recorder.recordedBytes > 0)
+  const transition = await page.evaluate(async () => {
+    const stopped = await window.PolymorphicAgent.setRecording({ recording: false })
+    const restarted = await window.PolymorphicAgent.setRecording({ recording: true })
+    return { stopped, restarted }
+  })
+  expect(transition.stopped.result).toEqual({ recording: false, quality: 'low' })
+  expect(transition.restarted.result).toEqual({ recording: true, quality: 'low' })
+  await expect.poll(() => downloads.length).toBe(1)
+  expect((await page.evaluate(() => window.PolymorphicAgent.getState())).state.recording).toBe(true)
+  await page.waitForFunction(() => window.__poly.recorder.recordedBytes > 0)
+  const stopped = await page.evaluate(() => window.PolymorphicAgent.setRecording({ recording: false }))
   expect(stopped.result).toEqual({ recording: false, quality: 'low' })
-  expect(download.suggestedFilename()).toMatch(/\.(webm|mp4)$/)
+  await expect.poll(() => downloads.length).toBe(2)
+
+  for (const download of downloads) {
+    expect(download.suggestedFilename()).toMatch(/\.(webm|mp4)$/)
+    expect(await download.failure()).toBeNull()
+    const bytes = await readFile(await download.path())
+    expect(bytes.length).toBeGreaterThan(0)
+    const decoded = await page.evaluate(async ({ bytes, type }) => {
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type }))
+      const video = document.createElement('video')
+      video.muted = true
+      let timeout
+      try {
+        await new Promise((resolve, reject) => {
+          video.onloadeddata = resolve
+          video.onerror = () => reject(new Error(video.error?.message || 'Recording could not decode'))
+          timeout = setTimeout(() => reject(new Error('Recording did not decode a frame')), 15000)
+          video.src = url
+          video.load()
+        })
+        await video.play()
+        return { width: video.videoWidth, height: video.videoHeight, readyState: video.readyState }
+      } finally {
+        clearTimeout(timeout)
+        video.pause()
+        video.removeAttribute('src')
+        video.load()
+        URL.revokeObjectURL(url)
+      }
+    }, { bytes: Array.from(bytes), type: download.suggestedFilename().endsWith('.mp4') ? 'video/mp4' : 'video/webm' })
+    expect(decoded.width).toBeGreaterThan(0)
+    expect(decoded.height).toBeGreaterThan(0)
+    expect(decoded.readyState).toBeGreaterThanOrEqual(2)
+  }
 })
 
 test('fullscreen enters and leaves, and a refusal is reported', async ({ page }) => {

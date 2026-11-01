@@ -179,3 +179,166 @@ test('Recorder.stop passes manual reason and elapsed stats to onChange', () => {
 test('Default export recorder is an instance of Recorder', () => {
     assert.ok(recorder instanceof Recorder)
 })
+
+function controlledRecorder(t, limits = {}) {
+    const downloads = []
+    const states = []
+    const instances = []
+    const streams = []
+    const urls = new Map()
+    const frames = new Map()
+    let frameId = 0
+    let supportedMime = 'video/webm;codecs=vp9'
+    const captureStream = () => {
+        const track = { stops: 0, stop() { this.stops++ } }
+        const stream = { track, getTracks: () => [track] }
+        streams.push(stream)
+        return stream
+    }
+    class ControlledMediaRecorder {
+        static isTypeSupported(type) { return type === supportedMime }
+        constructor(stream, options) {
+            this.stream = stream
+            this.mimeType = options.mimeType
+            this.state = 'inactive'
+            instances.push(this)
+        }
+        start() { this.state = 'recording' }
+        stop() { this.state = 'inactive' }
+        chunk(text) { this.ondataavailable({ data: new Blob([text]) }) }
+        finish() { this.onstop() }
+    }
+    const element = tag => ({
+        style: {},
+        classList: { add() {}, remove() {} },
+        remove() {},
+        querySelector: () => ({ textContent: '' }),
+        getContext: () => ({ drawImage() {} }),
+        captureStream,
+        click() {
+            assert.equal(tag, 'a')
+            downloads.push({ name: this.download, blob: urls.get(this.href) })
+        }
+    })
+    const globals = {
+        window: { MediaRecorder: ControlledMediaRecorder },
+        MediaRecorder: ControlledMediaRecorder,
+        document: { createElement: element, body: { appendChild() {} } },
+        requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId },
+        cancelAnimationFrame: id => frames.delete(id)
+    }
+    for (const [name, value] of Object.entries(globals)) {
+        const original = Object.getOwnPropertyDescriptor(globalThis, name)
+        Object.defineProperty(globalThis, name, { value, configurable: true, writable: true })
+        t.after(() => original ? Object.defineProperty(globalThis, name, original) : delete globalThis[name])
+    }
+    t.mock.method(URL, 'createObjectURL', blob => {
+        const url = `blob:take-${urls.size}`
+        urls.set(url, blob)
+        return url
+    })
+    t.mock.method(URL, 'revokeObjectURL', url => urls.delete(url))
+    const timers = []
+    t.mock.method(globalThis, 'setTimeout', callback => { timers.push(callback); return timers.length })
+    t.after(() => timers.forEach(callback => callback()))
+    const rec = new Recorder()
+    rec.init({
+        canvas: { width: 1920, height: 1080, captureStream },
+        onChange: state => states.push(state),
+        ...limits
+    })
+    return { rec, downloads, states, instances, streams, frames,
+        useMp4() { supportedMime = 'video/mp4'; rec.init() } }
+}
+
+test('Recorder keeps a late first take separate from the active second take, including MIME and capture resources', async t => {
+    const { rec, downloads, states, instances, streams, frames, useMp4 } = controlledRecorder(t)
+    assert.equal(rec.start(), true)
+    const [first] = instances
+    first.chunk('first-')
+    rec.stop()
+    assert.equal(rec.isRecording(), false)
+    assert.equal(rec._indicator, null)
+    assert.equal(streams[0].track.stops, 1)
+    assert.equal(frames.size, 0)
+
+    useMp4()
+    assert.equal(rec.start(), true)
+    const second = instances[1]
+    second.chunk('second-')
+    const indicator = rec._indicator
+    const captureCanvas = rec._captureCanvas
+    first.chunk('final')
+    first.finish()
+    assert.equal(downloads.length, 1)
+    assert.equal(await downloads[0].blob.text(), 'first-final')
+    assert.equal(downloads[0].blob.type, 'video/webm;codecs=vp9')
+    assert.match(downloads[0].name, /\.webm$/)
+    assert.equal(rec.isRecording(), true)
+    assert.equal(rec.recordedBytes, 7)
+    assert.equal(rec._indicator, indicator)
+    assert.equal(rec._captureCanvas, captureCanvas)
+    assert.equal(streams[1].track.stops, 0)
+    assert.equal(frames.size, 2)
+
+    rec.stop()
+    second.chunk('final')
+    second.finish()
+    assert.equal(await downloads[1].blob.text(), 'second-final')
+    assert.equal(downloads[1].blob.type, 'video/mp4')
+    assert.match(downloads[1].name, /\.mp4$/)
+    assert.equal(rec.recordedBytes, 12)
+    assert.deepEqual(states.map(state => state.recording), [true, false, true, false])
+    assert.equal(streams[1].track.stops, 1)
+    assert.equal(frames.size, 0)
+})
+
+test('Recorder preserves both takes when the second download finishes before the first flush', async t => {
+    const { rec, downloads, instances, useMp4 } = controlledRecorder(t)
+    rec.start()
+    instances[0].chunk('A-')
+    rec.stop()
+    useMp4()
+    rec.start()
+    instances[1].chunk('B-')
+    rec.stop()
+    instances[1].chunk('last')
+    instances[1].finish()
+    instances[0].chunk('last')
+    instances[0].finish()
+    assert.equal(downloads.length, 2)
+    assert.deepEqual(await Promise.all(downloads.map(item => item.blob.text())), ['B-last', 'A-last'])
+    assert.deepEqual(downloads.map(item => item.blob.type), ['video/mp4', 'video/webm;codecs=vp9'])
+    assert.match(downloads[0].name, /\.mp4$/)
+    assert.match(downloads[1].name, /\.webm$/)
+    assert.equal(rec.recordedBytes, 6)
+    assert.equal(rec.isRecording(), false)
+})
+
+test('Recorder excludes an old final chunk from the new take safety limits while preserving its own limits', async t => {
+    const { rec, downloads, states, instances } = controlledRecorder(t, {
+        warningRecordedBytes: 4, maxRecordedBytes: 8
+    })
+    rec.start()
+    instances[0].chunk('aaa')
+    rec.stop()
+    rec.start()
+    instances[1].chunk('b')
+    instances[0].chunk('XXXXXXXX')
+    instances[0].finish()
+    assert.equal(rec.isRecording(), true)
+    assert.equal(rec.recordedBytes, 1)
+    assert.equal(rec.isWarning, false)
+    assert.equal(rec.stopReason, null)
+    assert.deepEqual(states.map(state => state.recording), [true, false, true])
+    assert.equal(await downloads[0].blob.text(), 'aaaXXXXXXXX')
+
+    instances[1].chunk('ccc')
+    assert.equal(rec.isWarning, true)
+    instances[1].chunk('dddd')
+    assert.equal(rec.isRecording(), false)
+    assert.equal(rec.stopReason, 'memory_limit')
+    assert.equal(states.at(-1).bytes, 8)
+    instances[1].finish()
+    assert.equal(await downloads[1].blob.text(), 'bcccdddd')
+})

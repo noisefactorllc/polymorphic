@@ -86,7 +86,6 @@ class Recorder {
         this._canvas = null
         this._stream = null
         this._mediaRecorder = null
-        this._chunks = []
         this._recording = false
         this._startTime = 0
         this._indicator = null
@@ -296,20 +295,27 @@ class Recorder {
                 return false
             }
         }
-        this._chunks = []
+        const mediaRecorder = this._mediaRecorder
+        const chunks = []
+        const mimeType = this._mimeType
+        let recordedBytes = 0
         this._recordedBytes = 0
         this._warningActive = false
         this._stopReason = null
 
-        this._mediaRecorder.ondataavailable = (e) => {
+        mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) {
-                this._chunks.push(e.data)
-                this._recordedBytes += e.data.size
-                this.checkLimits()
+                chunks.push(e.data)
+                recordedBytes += e.data.size
+                // A stopped take may still flush while a new take records.
+                if (this._mediaRecorder === mediaRecorder) {
+                    this._recordedBytes = recordedBytes
+                    this.checkLimits()
+                }
             }
         }
-        this._mediaRecorder.onstop = () => this._onStop()
-        this._mediaRecorder.start(RECORDING_LIMITS.CHUNK_INTERVAL_MS)
+        mediaRecorder.onstop = () => this._onStop(chunks, mimeType)
+        mediaRecorder.start(RECORDING_LIMITS.CHUNK_INTERVAL_MS)
         this._recording = true
         this._startTime = performance.now()
         this._showIndicator()
@@ -372,19 +378,19 @@ class Recorder {
         return this._recording ? this.stop() : this.start()
     }
 
-    _onStop() {
-        const blob = new Blob(this._chunks, { type: this._mimeType || 'video/webm' })
+    _onStop(chunks, mimeType) {
+        const blob = new Blob(chunks, { type: mimeType || 'video/webm' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        const ext = (this._mimeType || '').includes('mp4') ? 'mp4' : 'webm'
+        const ext = (mimeType || '').includes('mp4') ? 'mp4' : 'webm'
         a.download = `polymorphic-${timestamp()}.${ext}`
         document.body.appendChild(a)
         a.click()
         a.remove()
         // Free the blob URL after a tick
         setTimeout(() => URL.revokeObjectURL(url), 200)
-        this._chunks = []
+        chunks.length = 0
     }
 
     _showIndicator() {
