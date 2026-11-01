@@ -467,3 +467,31 @@ async function sendCursor(page, start, end) {
     }))
   }, { start, end })
 }
+
+
+test('join textbox keeps its Session ID name after reopening and online transitions', async ({ page }) => {
+  await preparePage(page)
+  await page.goto(appPath({ dsl: BASE_SKETCH }))
+  await waitForApp(page)
+
+  const dialog = page.locator('#seanceDialog')
+  const join = dialog.locator('.hf-seance-join-input')
+  await openDialog(page)
+  await expect(join).toBeVisible()
+  await expect(join).toHaveAccessibleName('Session ID')
+  await expect(dialog.getByRole('textbox', { name: 'Session ID', exact: true })).toHaveCount(1)
+
+  await closeDialog(page)
+  await openDialog(page)
+  await expect(join).toHaveAccessibleName('Session ID')
+  await closeDialog(page)
+
+  await takeOnline(page)
+  await closeDialog(page)
+  await openDialog(page)
+  await dialog.locator('[data-action="go-offline"]').click()
+  await expect(dialog.locator('.hf-seance-status-text')).toHaveText('Offline')
+  await expect(join).toBeVisible()
+  await expect(join).toHaveAccessibleName('Session ID')
+  await expect(dialog.getByRole('textbox', { name: 'Session ID', exact: true })).toHaveCount(1)
+})

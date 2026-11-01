@@ -82,7 +82,7 @@ const POPUP_HTML = `<!DOCTYPE html>
 /**
  * Receives the source canvas reference. Called by embed.js on setup.
  *
- * @param {{canvas: HTMLCanvasElement}} ctx
+ * @param {{canvas: HTMLCanvasElement, onError?: (message: string) => void}} ctx
  */
 export function configureViewportWindow(ctx) {
     _ctx = ctx
@@ -126,7 +126,8 @@ function _doOpen() {
     if (!_ctx?.canvas) return
     const w = window.open('', 'polymorphic-viewport', 'width=1280,height=720,popup=yes')
     if (!w) {
-        alert('Viewport window blocked. Allow pop-ups for Polymorphic to use the secondary output.')
+        const onError = _ctx.onError || (message => console.error(message))
+        onError('Viewport window blocked. Allow pop-ups for Polymorphic to use the secondary output.')
         return
     }
     w.document.open()

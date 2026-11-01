@@ -132,11 +132,13 @@ class StatusRow {
             this._el.classList.add('hidden')
             this._open = false
         }
+        this._syncChipVisibility()
     }
 
     show() {
         if (this._open) return
         this._open = true
+        this._syncChipVisibility()
         this._el?.classList.remove('hidden')
         document.body.classList.add('status-row-open')
         this._loop()
@@ -145,10 +147,20 @@ class StatusRow {
     hide() {
         if (!this._open) return
         this._open = false
+        this._syncChipVisibility()
         this._el?.classList.add('hidden')
         document.body.classList.remove('status-row-open')
         if (this._raf) cancelAnimationFrame(this._raf)
         this._raf = null
+    }
+
+    _syncChipVisibility() {
+        for (const chip of Object.values(this._chips)) {
+            if (!this._open && document.activeElement === chip) chip.blur()
+            chip.tabIndex = this._open ? 0 : -1
+            if (this._open) chip.removeAttribute('aria-hidden')
+            else chip.setAttribute('aria-hidden', 'true')
+        }
     }
 
     toggle() { this._open ? this.hide() : this.show() }
@@ -220,14 +232,23 @@ class StatusRow {
             const chip = document.createElement('span')
             chip.className = 'status-chip'
             chip.dataset.id = def.id
+            chip.setAttribute('role', 'button')
+            chip.tabIndex = 0
+            chip.setAttribute('aria-labelledby', `status-chip-label-${def.id}`)
             chip.innerHTML = `
                 <span class="status-chip-dot"></span>
                 <span class="icon-material">${def.icon}</span>
-                <span class="status-chip-label">${def.label}</span>
+                <span class="status-chip-label" id="status-chip-label-${def.id}">${def.label}</span>
             `
             chip.addEventListener('click', () => {
                 const fn = this._hooks[def.id]
                 if (typeof fn === 'function') fn()
+            })
+            chip.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                event.stopPropagation()
+                if (!event.repeat) chip.click()
             })
             this._el.appendChild(chip)
             this._chips[def.id] = chip

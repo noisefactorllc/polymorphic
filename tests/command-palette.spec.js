@@ -20,7 +20,7 @@ const PAGE_URL = `/?dsl=${encodeURIComponent(SKETCH)}`
 
 async function waitForApp(page) {
     await page.waitForFunction(() => !!(window.__poly && window.__poly.commandPalette), null, { timeout: 30000 })
-    await page.waitForTimeout(300)
+    await page.evaluate(() => window.PolymorphicAgent.ready)
 }
 
 test.describe('Command Palette Handfish Token Discipline', () => {

@@ -286,3 +286,129 @@ test('the viewport popup mirror page loads Handfish tokens and flips with the th
     expect(lightPixel).not.toEqual(darkPixel)
     await popup.close()
 })
+
+
+test('status keyboard: every chip announces its visible label and runs its existing action', async ({ page }) => {
+    await bootSettled(page, 'search synth, render\nsolid(color: #003366).write(o0)\nrender(o0)')
+    const cdp = await page.context().newCDPSession(page)
+    const chips = page.locator('.status-row .status-chip')
+    await expect(chips).toHaveCount(5)
+    for (const id of ['mic', 'midi', 'source', 'recording', 'fps']) {
+        const chip = page.locator(`.status-chip[data-id="${id}"]`)
+        await expect(chip).toHaveRole('button')
+        await expect(chip).toHaveAttribute('tabindex', '0')
+        await chip.focus()
+        await page.keyboard.press('Shift+Tab')
+        await page.keyboard.press('Tab')
+        await expect(chip).toBeFocused()
+        const label = await chip.locator('.status-chip-label').textContent()
+        const node = await axNode(cdp, `document.querySelector('.status-chip[data-id="${id}"]')`)
+        expect(node.role?.value).toBe('button')
+        if (id !== 'fps') expect(node.name?.value).toBe(label)
+        for (const key of ['click', 'Enter', 'Space']) {
+            await chip.focus()
+            if (key === 'click') await chip.click()
+            else await page.keyboard.press(key)
+            if (id === 'mic' || id === 'midi') {
+                await expect(page.locator('.cmd-palette-overlay')).toBeVisible()
+                await page.keyboard.press('Escape')
+            } else if (id === 'source') {
+                await expect(page.locator('.live-inputs-panel')).toBeVisible()
+                await page.keyboard.press('Escape')
+            } else if (id === 'recording') {
+                await expect.poll(() => page.evaluate(() => window.__poly.recorder.isRecording())).toBe(true)
+                await chip.dispatchEvent('keydown', { key: ' ', repeat: true })
+                expect(await page.evaluate(() => window.__poly.recorder.isRecording())).toBe(true)
+                await chip.click()
+                await expect.poll(() => page.evaluate(() => window.__poly.recorder.isRecording())).toBe(false)
+            } else {
+                expect(await page.evaluate(() => window.__poly.perfOverlay.isOpen())).toBe(true)
+                await chip.dispatchEvent('keydown', { key: 'Enter', repeat: true })
+                expect(await page.evaluate(() => window.__poly.perfOverlay.isOpen())).toBe(true)
+                await chip.click()
+                expect(await page.evaluate(() => window.__poly.perfOverlay.isOpen())).toBe(false)
+            }
+        }
+    }
+    await page.evaluate(() => {
+        window.__keyboardFps = 17
+        Object.defineProperty(window.__poly.renderer, 'currentFPS', { configurable: true, get: () => window.__keyboardFps })
+    })
+    const fps = page.locator('.status-chip[data-id="fps"]')
+    await expect(fps.locator('.status-chip-label')).toHaveText('17 fps')
+    await expect(fps).toHaveAccessibleName('17 fps')
+    await page.evaluate(() => { window.__keyboardFps = 61 })
+    await expect(fps.locator('.status-chip-label')).toHaveText('61 fps')
+    await expect(fps).toHaveAccessibleName('61 fps')
+})
+
+test('gallery keyboard: every card across all tabs announces only its visible title', async ({ page }) => {
+    const { routeKeyboardGallery } = await import('./galleryKeyboardFixtures.js')
+    await routeKeyboardGallery(page, { curated: false })
+    await bootSettled(page, 'search synth, render\nsolid(color: #003366).write(o0)\nrender(o0)')
+    await page.evaluate(() => window.__poly.gallery.open())
+    const cdp = await page.context().newCDPSession(page)
+    for (const tab of ['curated', 'noisedeck-examples', 'blaster']) {
+        await page.locator(`.gallery-tab[data-tab="${tab}"]`).click()
+        await expect(page.locator('.gallery-card').first()).toBeVisible()
+        const cards = page.locator('.gallery-card')
+        if (tab === 'curated') await expect(cards).toHaveCount(157)
+        else await expect(cards).toHaveCount(2)
+        for (let index = 0; index < await cards.count(); index++) {
+            const card = cards.nth(index)
+            const title = await card.locator('.gallery-card-title').textContent()
+            await expect(card).toHaveAttribute('tabindex', '0')
+            await card.focus()
+            await expect(card).toBeFocused()
+            const node = await axNode(cdp, `document.querySelectorAll('.gallery-card')[${index}]`)
+            expect(node.role?.value).toBe('button')
+            expect(node.name?.value).toBe(title)
+        }
+    }
+})
+
+test('status keyboard: hidden chips leave tab order and accessibility, then restore their names and actions', async ({ page }) => {
+    await bootSettled(page, 'search synth, render\nsolid(color: #003366).write(o0)\nrender(o0)')
+    await page.evaluate(() => {
+        const row = document.querySelector('.status-row')
+        for (const [position, id] of [['before', 'keyboard-before-row'], ['after', 'keyboard-after-row']]) {
+            const sentinel = document.createElement('button')
+            sentinel.id = id
+            sentinel.textContent = id
+            row[position](sentinel)
+        }
+        Object.defineProperty(window.__poly.renderer, 'currentFPS', { configurable: true, get: () => 17 })
+        document.querySelector('.status-chip[data-id="fps"]').focus()
+        window.__poly.statusRow.hide()
+    })
+    const chips = page.locator('.status-row .status-chip')
+    const cdp = await page.context().newCDPSession(page)
+    for (let index = 0; index < await chips.count(); index++) {
+        await expect(chips.nth(index)).toHaveAttribute('tabindex', '-1')
+        await expect(chips.nth(index)).toHaveAttribute('aria-hidden', 'true')
+        const node = await axNode(cdp, `document.querySelectorAll('.status-row .status-chip')[${index}]`)
+        expect(node.ignored).toBe(true)
+    }
+    expect(await page.evaluate(() => Boolean(document.activeElement.closest('.status-chip')))).toBe(false)
+    await page.locator('#keyboard-before-row').focus()
+    for (let step = 0; step < 20; step++) {
+        await page.keyboard.press('Tab')
+        expect(await page.evaluate(() => Boolean(document.activeElement.closest('.status-chip')))).toBe(false)
+        if (await page.locator('#keyboard-after-row').evaluate(el => el === document.activeElement)) break
+    }
+    await expect(page.locator('#keyboard-after-row')).toBeFocused()
+    await page.evaluate(() => window.__poly.statusRow.show())
+    for (const chip of await chips.all()) {
+        await expect(chip).toHaveAttribute('tabindex', '0')
+        expect(await chip.getAttribute('aria-hidden')).toBeNull()
+        await chip.focus()
+        await expect(chip).toBeFocused()
+        await expect(chip).toHaveAccessibleName(await chip.locator('.status-chip-label').textContent())
+    }
+    const fps = page.locator('.status-chip[data-id="fps"]')
+    await fps.focus()
+    await page.keyboard.press('Space')
+    expect(await page.evaluate(() => window.__poly.perfOverlay.isOpen())).toBe(true)
+    await page.keyboard.press('Enter')
+    expect(await page.evaluate(() => window.__poly.perfOverlay.isOpen())).toBe(false)
+})

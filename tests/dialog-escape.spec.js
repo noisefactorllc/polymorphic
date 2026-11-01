@@ -158,3 +158,38 @@ test.describe('Dialog and Overlay Escape Key Hygiene', () => {
         expect(result.latencyMs).toBeLessThan(50)
     })
 })
+
+
+test('Import ZIP keyboard close control has the existing Close name', async ({ page }) => {
+    await boot(page)
+    await page.evaluate(() => document.getElementById('importFromZipMenuItem').click())
+    const overlay = page.locator('.import-effect-overlay')
+    const close = overlay.locator('.import-effect-close')
+    await expect(overlay).toBeVisible()
+    await expect(close).toHaveAccessibleName('Close')
+    await close.focus()
+    await page.keyboard.press('Enter')
+    await expect(overlay).toBeHidden()
+})
+
+test('Import ZIP keyboard reaches the existing picker with Enter and Space', async ({ page }) => {
+    await boot(page)
+    await page.evaluate(() => document.getElementById('importFromZipMenuItem').click())
+    const overlay = page.locator('.import-effect-overlay')
+    const close = overlay.locator('.import-effect-close')
+    const picker = overlay.locator('.import-effect-dropzone')
+    await expect(picker).toHaveRole('button')
+    await expect(picker).toHaveAccessibleName('Click to browse or drag and drop')
+    await close.focus()
+    await page.keyboard.press('Tab')
+    await expect(picker).toBeFocused()
+    for (const key of ['Enter', 'Space']) {
+        const chooser = page.waitForEvent('filechooser')
+        await page.keyboard.press(key)
+        await (await chooser).setFiles([])
+        await expect(overlay).toBeVisible()
+        await expect(picker).toBeFocused()
+    }
+    await page.keyboard.press('Escape')
+    await expect(overlay).toBeHidden()
+})

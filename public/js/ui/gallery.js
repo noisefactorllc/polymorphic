@@ -437,6 +437,18 @@ async function loadBlasterFeed({ force = false } = {}) {
     return cachedBlasterFeed
 }
 
+function bindCardKeyboard(card) {
+    card.setAttribute('role', 'button')
+    card.tabIndex = 0
+    card.setAttribute('aria-label', card.querySelector('.gallery-card-title').textContent)
+    card.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat && !card.classList.contains('loading')) card.click()
+    })
+}
+
 class Gallery {
     constructor() {
         this._overlay = null
@@ -942,6 +954,8 @@ class Gallery {
         card.appendChild(thumb)
         card.appendChild(bodyEl)
 
+        bindCardKeyboard(card)
+
         card.addEventListener('click', async () => {
             await this._loadNoisedeckExample(listing, file, card)
         })
@@ -1051,6 +1065,8 @@ class Gallery {
         card.appendChild(thumbDiv)
         card.appendChild(body)
 
+        bindCardKeyboard(card)
+
         card.addEventListener('click', async () => {
             card.classList.add('loading')
             try {
@@ -1112,6 +1128,8 @@ class Gallery {
         `
         card.appendChild(thumb)
         card.appendChild(body)
+
+        bindCardKeyboard(card)
 
         card.addEventListener('click', async () => {
             await this._loadBlasterItem(item, card)

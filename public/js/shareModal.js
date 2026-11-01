@@ -98,6 +98,7 @@ class ShareModal {
         this.dsl = dsl;
         this.images = options.images || [];
         this.hasLiveMedia = options.hasLiveMedia;
+        this._onError = options.onError || (message => console.error(message));
         this.canvas = canvas;
 
         this.overlay = document.getElementById('share-modal');
@@ -250,7 +251,7 @@ class ShareModal {
 
         // Validate
         if (!this.dsl) {
-            alert('No program to share');
+            this._onError('No program to share');
             return;
         }
 
@@ -315,7 +316,7 @@ class ShareModal {
 
         } catch (error) {
             console.error('Share error:', error);
-            alert('Failed to share program. Please try again.');
+            this._onError('Failed to share program. Please try again.');
 
             if (this.shareBtn) {
                 this.shareBtn.disabled = false;
@@ -387,7 +388,7 @@ class ShareModal {
             }
         }).catch((err) => {
             console.error('Copy failed:', err);
-            alert('Failed to copy URL to clipboard');
+            this._onError('Failed to copy URL to clipboard');
         });
     }
 }

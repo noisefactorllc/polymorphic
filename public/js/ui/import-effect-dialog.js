@@ -293,6 +293,7 @@ export class ImportEffectDialog {
         
         const closeBtn = document.createElement('button')
         closeBtn.className = 'import-effect-close'
+        closeBtn.setAttribute('aria-label', 'Close')
         closeBtn.innerHTML = '✕'
         closeBtn.addEventListener('click', () => this.close())
         
@@ -311,6 +312,8 @@ export class ImportEffectDialog {
         // Dropzone
         const dropzone = document.createElement('div')
         dropzone.className = 'import-effect-dropzone'
+        dropzone.setAttribute('role', 'button')
+        dropzone.tabIndex = 0
         
         const dropzoneIcon = document.createElement('div')
         dropzoneIcon.className = 'import-effect-dropzone-icon icon-material'
@@ -319,6 +322,7 @@ export class ImportEffectDialog {
         const dropzoneText = document.createElement('div')
         dropzoneText.className = 'import-effect-dropzone-text'
         dropzoneText.innerHTML = '<strong>Click to browse</strong> or drag and drop'
+        dropzone.setAttribute('aria-label', dropzoneText.textContent)
         
         const fileInput = document.createElement('input')
         fileInput.type = 'file'
@@ -402,6 +406,12 @@ export class ImportEffectDialog {
         // Dropzone click
         this._dropzone.addEventListener('click', () => {
             this._fileInput.click()
+        })
+        this._dropzone.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            event.stopPropagation()
+            if (!event.repeat) this._dropzone.click()
         })
 
         // Drag and drop

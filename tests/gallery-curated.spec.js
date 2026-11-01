@@ -303,3 +303,20 @@ test('a curated warm-up cancelled during loading retries when scrolled into view
         await page.evaluate(() => window.__poly.gallery.close())
     }
 })
+
+
+test('gallery keyboard: curated cards load their actual programs with Enter and Space', async ({ page }) => {
+    const { routeHandfishLocal } = await import('./handfishLocal.js')
+    const { routeKeyboardGallery, expectKeyboardGalleryLoads, keyboardCurated } = await import('./galleryKeyboardFixtures.js')
+    await routeHandfishLocal(page)
+    await routeKeyboardGallery(page)
+    await expectKeyboardGalleryLoads(page, expect, 'curated', keyboardCurated)
+})
+
+test('gallery keyboard: Noisedeck cards load their actual programs with Enter and Space', async ({ page }) => {
+    const { routeHandfishLocal } = await import('./handfishLocal.js')
+    const { routeKeyboardGallery, expectKeyboardGalleryLoads, keyboardNoisedeck } = await import('./galleryKeyboardFixtures.js')
+    await routeHandfishLocal(page)
+    await routeKeyboardGallery(page)
+    await expectKeyboardGalleryLoads(page, expect, 'noisedeck-examples', keyboardNoisedeck)
+})

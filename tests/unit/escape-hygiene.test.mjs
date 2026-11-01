@@ -178,3 +178,23 @@ test('embed.js guards performance mode Escape exit against open escapeables and 
         'embed.js must check for open native dialogs before exiting performance mode on Escape'
     )
 })
+
+
+test('public sources never call native alert, confirm or prompt', async () => {
+    const files = [path.join(REPO_ROOT, 'public', 'index.html')]
+    async function collect(dir) {
+        for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+            const file = path.join(dir, entry.name)
+            if (entry.isDirectory()) await collect(file)
+            else if (entry.name.endsWith('.js')) files.push(file)
+        }
+    }
+    await collect(JS_DIR)
+    const offenders = []
+    for (const file of files) {
+        if (/\b(?:alert|confirm|prompt)\s*\(/.test(await fs.readFile(file, 'utf8'))) {
+            offenders.push(path.relative(REPO_ROOT, file))
+        }
+    }
+    assert.deepEqual(offenders, [])
+})

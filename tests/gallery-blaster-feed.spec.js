@@ -23,3 +23,10 @@ test('the NoiseBLASTER! tab requests a 250-composition feed page', async ({ page
     await expect.poll(() => feedUrls.length).toBeGreaterThan(0)
     for (const url of feedUrls) expect(new URL(url).searchParams.get('limit')).toBe('250')
 })
+
+
+test('gallery keyboard: NoiseBLASTER cards load their actual programs with Enter and Space', async ({ page }) => {
+    const { routeKeyboardGallery, expectKeyboardGalleryLoads, keyboardBlaster } = await import('./galleryKeyboardFixtures.js')
+    await routeKeyboardGallery(page)
+    await expectKeyboardGalleryLoads(page, expect, 'blaster', keyboardBlaster)
+})

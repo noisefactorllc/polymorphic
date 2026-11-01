@@ -72,6 +72,7 @@ const compilerErrorEl = document.getElementById('compiler-error')
 const docReaderClose = document.querySelector('.doc-reader-close')
 
 const seanceDialog = document.getElementById('seanceDialog')
+seanceDialog?.querySelector('.hf-seance-join-input')?.setAttribute('aria-label', 'Session ID')
 // The shared connect-agent dialog (handfish <agent-connect-dialog>).
 const agentConnectDialog = document.getElementById('agentConnectDialog')
 const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
@@ -274,7 +275,7 @@ if (menuBarEl) {
                             label: 'share publicly...',
                             onSelect: () => {
                                 const dsl = dslEditor?.value || ''
-                                shareModal.open({ dsl, canvas, images: renderer?.images || [], hasLiveMedia: liveInputsPanel.hasLiveMedia })
+                                shareModal.open({ dsl, canvas, images: renderer?.images || [], hasLiveMedia: liveInputsPanel.hasLiveMedia, onError: message => showToast(message, 'error') })
                             },
                         },
                         { type: 'separator', id: 'onlineCollabMenuSeparator', hidden: () => !onlineCollabUiVisible },
@@ -2726,7 +2727,7 @@ function setupMenuBar() {
     // the app-level keyboard map and listeners that outlive any menu.
 
     // Viewport window popup mirror needs the canvas reference.
-    configureViewportWindow({ canvas })
+    configureViewportWindow({ canvas, onError: message => showToast(message, 'error') })
 
     // Snapshot history shortcuts (Cmd/Ctrl+Alt+Left/Right)
     document.addEventListener('keydown', (e) => {
