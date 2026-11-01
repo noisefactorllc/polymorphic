@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { chooseSuite, selectTests } from '../../scripts/run-unit-tests.mjs'
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const ALL = [
     'contextLoss.test.mjs',
@@ -51,6 +56,31 @@ test('a Playwright-only change runs no unit test through this entrypoint', () =>
         ['tests/sync-native-context-loss-receiver.spec.js'], ALL, readTest)
     assert.deepEqual(selected, [])
     assert.deepEqual(chooseSuite(selected, ['tests/sync-native-context-loss-receiver.spec.js']), [])
+})
+
+test('the entrypoint exits without spawning node for a Playwright-only change', () => {
+    // Process-level check of scripts/run-unit-tests.mjs: with NM_CHANGED_FILES
+    // naming only a Playwright spec, the focused selection is empty and the
+    // entrypoint must print its notice and exit 0 without spawning node
+    // --test. The spec path is assembled at run time so this file's text never
+    // contains the full spec basename: the runner selects unit tests whose
+    // text names a changed path, and a self-match here would make the spawned
+    // run select this file again and recurse.
+    const changed = ['tests', 'sync-native-' + 'webgpu.spec.js'].join('/')
+    const result = spawnSync(
+        process.execPath,
+        [join(ROOT, 'scripts', 'run-unit-tests.mjs')],
+        {
+            cwd: ROOT,
+            encoding: 'utf8',
+            env: { ...process.env, NM_CHANGED_FILES: changed },
+        })
+    assert.equal(result.status, 0)
+    assert.match(
+        result.stdout,
+        /no unit tests exercise the changed paths; nothing to run/)
+    // A node --test summary would mean the focused run spawned the suite.
+    assert.doesNotMatch(result.stdout, /pass \d+/)
 })
 
 test('a changed source path and its test select both together', () => {
