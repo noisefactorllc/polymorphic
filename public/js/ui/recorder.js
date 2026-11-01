@@ -307,7 +307,7 @@ class Recorder {
             if (e.data && e.data.size > 0) {
                 chunks.push(e.data)
                 recordedBytes += e.data.size
-                // A stopped take may still flush while a new take records.
+                // A stopped take may still flush while a new take records; isolate its chunks.
                 if (this._mediaRecorder === mediaRecorder) {
                     this._recordedBytes = recordedBytes
                     this.checkLimits()
