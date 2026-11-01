@@ -420,3 +420,27 @@ test('marks an encoder warmup timeout as a transient failure', {
         return true
     })
 })
+
+test('keeps two frames submitted with the same timestamp distinct and in write order', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Collision', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    const now = performance.now()
+    assert.equal(sender.submit(1, now), true)
+    assert.equal(sender.submit(2, now), true)
+    sender.close()
+    await sender.closed
+    assert.deepEqual(transport.writes.map(({ frame }) => decodeFrameHeaderV1(frame).sequence), [1, 2])
+    const [first, second] = transport.writes.map(({ frame }) => decodeFrameHeaderV1(frame))
+    assert.ok(second.presentationTimeUs > first.presentationTimeUs,
+        'presentation timestamps must stay strictly increasing across colliding host timestamps')
+    assert.deepEqual(sender.stats, {
+        accepted: 2, droppedBusy: 0, droppedBackpressure: 0, sent: 2, failed: 0
+    })
+})

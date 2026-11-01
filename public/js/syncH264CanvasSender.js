@@ -123,6 +123,8 @@ export class SyncH264CanvasSender {
         this._nextSequence = 1
         this._nextWrite = 1
         this._lastWriteAt = -Infinity
+        this._lastVideoTimestamp = 0
+        this._lastPresentationTimeUs = 0
         this._lastDropWarnAt = -Infinity
         this._pending = new Map()
         this._timer = null
@@ -279,8 +281,14 @@ export class SyncH264CanvasSender {
         }
         const sequence = this._nextSequence++
         const now = Number.isFinite(timestamp) ? timestamp : this._clock.now()
-        const videoTimestamp = Math.round(now * 1000)
-        const presentationTimeUs = Math.round((this._clock.timeOrigin + now) * 1000)
+        // A repeated host timestamp must not collide with a pending entry: the
+        // second set() would overwrite the first frame, its encoded chunk would
+        // be misattributed to the wrong sequence, and the write order would
+        // stall past the encode deadline. Bump both clocks to strictly
+        // increasing microsecond values instead.
+        const videoTimestamp = Math.max(this._lastVideoTimestamp + 1, Math.round(now * 1000))
+        const presentationTimeUs = Math.max(
+            this._lastPresentationTimeUs + 1, Math.round((this._clock.timeOrigin + now) * 1000))
         const keyFrame = this._keyframeNeeded || sequence % 120 === 1
         this._keyframeNeeded = false
         try {
@@ -296,6 +304,8 @@ export class SyncH264CanvasSender {
             sequence, presentationTimeUs, due: now + PACING_DELAY_MS - (keyFrame ? 10 : 2),
             capturedAt: this._clock.now(), frame: null
         })
+        this._lastVideoTimestamp = videoTimestamp
+        this._lastPresentationTimeUs = presentationTimeUs
         this._diagnostics.maxPending = Math.max(this._diagnostics.maxPending, this._pending.size)
         this.stats.accepted++
         this._schedule()
