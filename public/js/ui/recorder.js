@@ -358,7 +358,12 @@ class Recorder {
         if (!this._recording) return
         this._recording = false
         this._stopReason = reason
-        try { this._mediaRecorder?.stop() } catch (err) {
+        const mediaRecorder = this._mediaRecorder
+        // Drop the active take before stopping it: a late ondataavailable
+        // flush from this take must not mutate recorded state or re-enter
+        // safety checks once no take holds the recorder.
+        this._mediaRecorder = null
+        try { mediaRecorder?.stop() } catch (err) {
             console.warn('[Recorder] stop() threw:', err)
         }
         this._stream?.getTracks().forEach(t => t.stop())

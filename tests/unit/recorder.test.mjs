@@ -287,7 +287,7 @@ test('Recorder keeps a late first take separate from the active second take, inc
     assert.equal(await downloads[1].blob.text(), 'second-final')
     assert.equal(downloads[1].blob.type, 'video/mp4')
     assert.match(downloads[1].name, /\.mp4$/)
-    assert.equal(rec.recordedBytes, 12)
+    assert.equal(rec.recordedBytes, 7)
     assert.deepEqual(states.map(state => state.recording), [true, false, true, false])
     assert.equal(streams[1].track.stops, 1)
     assert.equal(frames.size, 0)
@@ -311,7 +311,7 @@ test('Recorder preserves both takes when the second download finishes before the
     assert.deepEqual(downloads.map(item => item.blob.type), ['video/mp4', 'video/webm;codecs=vp9'])
     assert.match(downloads[0].name, /\.mp4$/)
     assert.match(downloads[1].name, /\.webm$/)
-    assert.equal(rec.recordedBytes, 6)
+    assert.equal(rec.recordedBytes, 2)
     assert.equal(rec.isRecording(), false)
 })
 
@@ -341,4 +341,28 @@ test('Recorder excludes an old final chunk from the new take safety limits while
     assert.equal(states.at(-1).bytes, 8)
     instances[1].finish()
     assert.equal(await downloads[1].blob.text(), 'bcccdddd')
+})
+
+test('Recorder isolates a late flush after stop so it cannot mutate recorded state or re-enter safety checks', async t => {
+    const { rec, downloads, states, instances } = controlledRecorder(t, {
+        warningRecordedBytes: 4, maxRecordedBytes: 8
+    })
+    rec.start()
+    instances[0].chunk('aaa')
+    rec.stop()
+    assert.equal(rec.recordedBytes, 3)
+
+    // A flush larger than the byte limit arrives after the take is stopped;
+    // it must stay out of the recorder's state and safety checks entirely.
+    instances[0].chunk('XXXXXXXX')
+    assert.equal(rec.recordedBytes, 3)
+    assert.equal(rec.isWarning, false)
+    assert.equal(rec.isRecording(), false)
+    assert.equal(rec.stopReason, 'manual')
+    assert.deepEqual(states.map(state => state.recording), [true, false])
+
+    // The stopped take still delivers its own full download.
+    instances[0].finish()
+    assert.equal(downloads.length, 1)
+    assert.equal(await downloads[0].blob.text(), 'aaaXXXXXXXX')
 })
