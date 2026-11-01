@@ -4,7 +4,7 @@ import test from 'node:test'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { chooseSuite, selectTests } from '../../scripts/run-unit-tests.mjs'
+import { chooseSuite, selectSpecs, selectTests, specCommand } from '../../scripts/run-unit-tests.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -48,32 +48,73 @@ test('a changed path no unit test exercises selects nothing', () => {
 })
 
 test('a Playwright-only change runs no unit test through this entrypoint', () => {
-    // The unit runner cannot execute Playwright specs. For such a change the
-    // focused run stays empty and the entrypoint exits without spawning node:
-    // the specs run through the browser entrypoint and exact-source CI, and a
-    // whole-suite fallback would only rerun unrelated unit tests.
-    const selected = selectTests(
-        ['tests/sync-native-context-loss-receiver.spec.js'], ALL, readTest)
-    assert.deepEqual(selected, [])
-    assert.deepEqual(chooseSuite(selected, ['tests/sync-native-context-loss-receiver.spec.js']), [])
+    // The unit runner cannot execute Playwright specs directly. For such a
+    // change the focused unit selection stays empty: the spec itself is
+    // routed to the browser entrypoint by selectSpecs, and a whole-suite
+    // fallback would only rerun unrelated unit tests.
+    const changed = ['tests/sync-native-context-loss-receiver.spec.js']
+    assert.deepEqual(selectTests(changed, ALL, readTest), [])
+    assert.deepEqual(chooseSuite([], changed), [])
 })
 
-test('the entrypoint exits without spawning node for a Playwright-only change', () => {
+const ALL_SPECS = [
+    'context-loss.spec.js',
+    'gallery.spec.js',
+    'sync-native.spec.js'
+]
+
+const readSpec = name => {
+    if (name === 'context-loss.spec.js') {
+        return "import { installHandfishLocal } from './handfishLocal.js'"
+    }
+    if (name === 'sync-native.spec.js') {
+        return "import { harness } from './syncNativeHarness.js'"
+    }
+    return "import ... from './galleryKeyboardFixtures.js'"
+}
+
+test('selectSpecs selects nothing when NM_CHANGED_FILES is unset', () => {
+    assert.deepEqual(selectSpecs([], ALL_SPECS, readSpec), [])
+    assert.deepEqual(selectSpecs(undefined, ALL_SPECS, readSpec), [])
+})
+
+test('a changed spec selects itself', () => {
+    assert.deepEqual(
+        selectSpecs(['tests/context-loss.spec.js'], ALL_SPECS, readSpec),
+        ['context-loss.spec.js'])
+})
+
+test('a changed spec-support helper selects the specs that name it', () => {
+    assert.deepEqual(
+        selectSpecs(['tests/syncNativeHarness.js'], ALL_SPECS, readSpec),
+        ['sync-native.spec.js'])
+})
+
+test('a changed app source selects specs whose text names it', () => {
+    assert.deepEqual(
+        selectSpecs(['public/js/app.js'], ALL_SPECS, name =>
+            name === 'gallery.spec.js' ? "import ... from '../../public/js/app.js'" : 'no match'),
+        ['gallery.spec.js'])
+})
+
+test('specCommand builds the browser entrypoint argv', () => {
+    assert.deepEqual(
+        specCommand(['tests/context-loss.spec.js']),
+        ['node_modules/@playwright/test/cli.js', 'test', 'tests/context-loss.spec.js', '--workers=1'])
+})
+
+test('the entrypoint exits without spawning for a change nothing exercises', () => {
     // Process-level check of scripts/run-unit-tests.mjs: with NM_CHANGED_FILES
-    // naming only a Playwright spec, the focused selection is empty and the
-    // entrypoint must print its notice and exit 0 without spawning node
-    // --test. The spec path is assembled at run time so this file's text never
-    // contains the full spec basename: the runner selects unit tests whose
-    // text names a changed path, and a self-match here would make the spawned
-    // run select this file again and recurse.
-    const changed = ['tests', 'sync-native-' + 'webgpu.spec.js'].join('/')
+    // naming a path no unit test mentions and that is not a Playwright spec,
+    // the focused selection is empty and the entrypoint must print its notice
+    // and exit 0 without spawning node --test or the browser entrypoint.
     const result = spawnSync(
         process.execPath,
         [join(ROOT, 'scripts', 'run-unit-tests.mjs')],
         {
             cwd: ROOT,
             encoding: 'utf8',
-            env: { ...process.env, NM_CHANGED_FILES: changed },
+            env: { ...process.env, NM_CHANGED_FILES: 'docs/unrelated-' + 'topic.md' },
         })
     assert.equal(result.status, 0)
     assert.match(
