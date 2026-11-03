@@ -2472,9 +2472,11 @@ async function startShader() {
             })
         },
         onDeviceLost: (info) => {
+            // The engine watches the device too and rebuilds on a fresh canvas
+            // in the old one's place; recovery reaches the host through
+            // onContextRestored, so nothing recompiles here.
             showToast('GPU device lost — recovering your program…', 'warning')
             console.warn('WebGPU device lost:', info?.reason || info || 'unknown reason')
-            return recoverGraphics()
         }
     })
     renderer.images = compositionImages

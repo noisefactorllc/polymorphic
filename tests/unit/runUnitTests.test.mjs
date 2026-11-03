@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { dirname, join, resolve } from 'node:path'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { chooseSuite, selectSpecs, selectTests, specCommand } from '../../scripts/run-unit-tests.mjs'
+import { chooseSuite, resolveBrowsersPath, selectSpecs, selectTests, specCommand } from '../../scripts/run-unit-tests.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -101,6 +102,41 @@ test('specCommand builds the browser entrypoint argv', () => {
     assert.deepEqual(
         specCommand(['tests/context-loss.spec.js']),
         ['node_modules/@playwright/test/cli.js', 'test', 'tests/context-loss.spec.js', '--workers=1'])
+})
+
+test('specCommand shards the browser entrypoint argv when a shard is requested', () => {
+    // NM_SHARD_INDEX is 0-based, Playwright's --shard is 1-based.
+    assert.deepEqual(
+        specCommand(['tests/context-loss.spec.js'], { index: 1, count: 3 }),
+        ['node_modules/@playwright/test/cli.js', 'test', 'tests/context-loss.spec.js', '--workers=1', '--shard=2/3'])
+})
+
+test('resolveBrowsersPath honors PLAYWRIGHT_BROWSERS_PATH before any candidate', () => {
+    const previous = process.env.PLAYWRIGHT_BROWSERS_PATH
+    process.env.PLAYWRIGHT_BROWSERS_PATH = '/custom/browsers'
+    try {
+        assert.equal(resolveBrowsersPath(), '/custom/browsers')
+    } finally {
+        if (previous === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH
+        else process.env.PLAYWRIGHT_BROWSERS_PATH = previous
+    }
+})
+
+test('resolveBrowsersPath skips candidates whose mount cannot execute a file', () => {
+    const probed = []
+    const accepted = resolveBrowsersPath({
+        probe: candidate => {
+            probed.push(candidate)
+            return probed.length === 2
+        }
+    })
+    assert.equal(accepted, probed[1], 'the second candidate was accepted after the first was refused')
+    assert.equal(probed.length, 2)
+})
+
+test('resolveBrowsersPath returns the temp-dir candidate when every probe fails', () => {
+    const accepted = resolveBrowsersPath({ probe: () => false })
+    assert.ok(accepted.endsWith(path.join('pw-browsers')), `a candidate path is still returned: ${accepted}`)
 })
 
 test('the entrypoint exits without spawning for a change nothing exercises', () => {

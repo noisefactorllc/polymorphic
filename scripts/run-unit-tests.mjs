@@ -10,9 +10,10 @@
  * changed or whose source names a changed path or module basename, run
  * through the repository's browser entrypoint.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import os from 'node:os'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -73,10 +74,15 @@ export function selectSpecs(changed, all, readSpec) {
 /**
  * Build the argv for the browser entrypoint run of the selected specs.
  * @param {string[]} specPaths - Spec paths, relative to the repository root
+ * @param {{index: number, count: number} | null} [shard=null] - When set, run
+ *   only one shard of the selected tests (Playwright shards are 1-based; the
+ *   entrypoint's NM_SHARD_INDEX is 0-based, so the argv converts it).
  * @returns {string[]} The spawn argv after the executable
  */
-export function specCommand(specPaths) {
-    return ['node_modules/@playwright/test/cli.js', 'test', ...specPaths, '--workers=1']
+export function specCommand(specPaths, shard = null) {
+    const argv = ['node_modules/@playwright/test/cli.js', 'test', ...specPaths, '--workers=1']
+    if (shard) argv.push(`--shard=${shard.index + 1}/${shard.count}`)
+    return argv
 }
 
 /**
@@ -93,6 +99,65 @@ export function chooseSuite(selected, changed) {
     return selected.length || changed.length === 0 ? selected : []
 }
 
+/**
+ * Resolve the Playwright browsers directory. PLAYWRIGHT_BROWSERS_PATH wins.
+ * Otherwise prefer a scratch directory next to the system temp dir: a home
+ * directory on a noexec mount makes every browser launch fail with EACCES,
+ * while the temp area stays executable on the hosts that run these tests.
+ * A candidate that cannot hold an executable file is skipped, so a noexec
+ * temp dir falls through to the home cache.
+ * @param {{probe?: (candidate: string) => boolean}} [options]
+ * @returns {string} A browsers directory Playwright may install into
+ */
+export function resolveBrowsersPath({ probe = defaultProbe } = {}) {
+    if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH
+    const candidates = [
+        path.join(os.tmpdir(), 'pw-browsers'),
+        path.join(os.homedir(), '.cache', 'pw-browsers')
+    ]
+    for (const candidate of candidates) {
+        if (probe(candidate)) return candidate
+    }
+    return candidates[0]
+}
+
+/**
+ * Whether the mount holding a directory executes files: write a tiny script,
+ * mark it executable and run it. Any failure means noexec or a read-only
+ * mount.
+ * @param {string} candidate - Directory to probe (created when missing)
+ * @returns {boolean} Whether a file from the directory could be executed
+ */
+function defaultProbe(candidate) {
+    try {
+        mkdirSync(candidate, { recursive: true })
+        const probe = path.join(candidate, `.exec-probe-${process.pid}`)
+        writeFileSync(probe, '#!/bin/sh\n')
+        chmodSync(probe, 0o755)
+        const run = spawnSync(probe, [], { timeout: 5000 })
+        rmSync(probe, { force: true })
+        return run.status === 0
+    } catch {
+        return false
+    }
+}
+
+/**
+ * Install the Chromium builds the specs launch, into the resolved browsers
+ * directory. A cached install revalidates in seconds; a cold one downloads
+ * once and every later invocation reuses it.
+ * @param {string} browsersPath - Directory to install into
+ * @returns {number | null} The installer's exit status (null on spawn failure)
+ */
+function installBrowsers(browsersPath) {
+    const install = spawnSync(
+        process.execPath,
+        [path.join('node_modules', 'playwright', 'cli.js'), 'install', 'chromium'],
+        { stdio: 'inherit', cwd: root, env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsersPath } }
+    )
+    return install.status
+}
+
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 
 if (isMain) {
@@ -105,7 +170,19 @@ if (isMain) {
     const specs = selectSpecs(changed, allSpecs, name => readFileSync(path.join(testsDir, name), 'utf8'))
     const selected = selectTests(changed, all, name => readFileSync(path.join(unitDir, name), 'utf8'))
     const suite = chooseSuite(selected, changed)
-    if (suite.length === 0 && specs.length === 0) {
+
+    // Shard mode (NM_SHARD_INDEX / NM_SHARD_COUNT, set by the supervisor when
+    // .nm-test-shards declares a count): the selected tests exceed one
+    // invocation's time budget, so each invocation runs shard NM_SHARD_INDEX
+    // (0-based) of the selected browser tests and only shard 0 also runs the
+    // unit suite. Together the shards cover every selected test exactly once.
+    const shardIndex = Number.parseInt(process.env.NM_SHARD_INDEX ?? '', 10)
+    const shardCount = Number.parseInt(process.env.NM_SHARD_COUNT ?? '', 10)
+    const sharded = Number.isInteger(shardIndex) && shardIndex >= 0 &&
+        Number.isInteger(shardCount) && shardCount >= 2 && shardIndex < shardCount
+    const unitSuite = sharded && shardIndex !== 0 ? [] : suite
+
+    if (unitSuite.length === 0 && specs.length === 0) {
         // `node --test` with no file arguments runs a default discovery over
         // the repository, which fails on unrelated environment-dependent
         // files. An empty focused run must therefore exit instead of spawning.
@@ -113,7 +190,7 @@ if (isMain) {
         process.exit(0)
     }
 
-    if (suite.length > 0) {
+    if (unitSuite.length > 0) {
         const unit = spawnSync(
             process.execPath,
             ['--test', ...suite.map(name => path.join('tests', 'unit', name))],
@@ -126,10 +203,14 @@ if (isMain) {
         // The selected specs run through the repository's browser entrypoint,
         // one worker, so a focused run still enforces the regression specs
         // its changed paths carry, directly or through a spec-support helper.
+        // The browsers install into an executable mount first: a missing or
+        // noexec browser cache would fail every launch.
+        const browsersPath = resolveBrowsersPath()
+        if ((installBrowsers(browsersPath) ?? 1) !== 0) process.exit(1)
         const e2e = spawnSync(
             process.execPath,
-            specCommand(specs.map(name => path.join('tests', name))),
-            { stdio: 'inherit', cwd: root }
+            specCommand(specs.map(name => path.join('tests', name)), sharded ? { index: shardIndex, count: shardCount } : null),
+            { stdio: 'inherit', cwd: root, env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsersPath } }
         )
         process.exit(e2e.status ?? 1)
     }

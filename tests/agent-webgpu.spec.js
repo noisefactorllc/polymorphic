@@ -109,3 +109,105 @@ test('through a session, an example that needs WebGL2 does not reload the person
   expect(after).toEqual({ beforeReload: true, backend: 'webgpu', program: before.program, registered: [] })
   expect(page.url()).toBe(before.url)
 })
+
+// ---- WebGPU device loss recovery ----
+
+// A GPU process exit or a driver reset loses the page's WebGPU device for
+// good: the device's lost promise resolves and no event reaches the canvas.
+// The engine treats that like a lost WebGL context — it stops the loop,
+// rebuilds the program on a fresh canvas in the old canvas's place, resumes,
+// and the host adopts the fresh canvas. The device-loss tests run last in
+// this file: a GPU process exit touches the whole browser.
+
+const LOSS_SKETCH = [
+  'search synth, filter',
+  '',
+  'perlin(scale: 75, octaves: 2)',
+  '  .adjust(',
+  '    mode: hsv,',
+  '    rotation: 120,',
+  '    hueRange: 40',
+  '  )',
+  '  .write(o0)',
+  '',
+  'render(o0)',
+].join('\n')
+
+async function waitForWebgpuApp(page) {
+  await page.goto(`/?dsl=${encodeURIComponent(LOSS_SKETCH)}&backend=webgpu`)
+  await page.waitForFunction(() => !!(window.__poly && window.__poly.backend), null, { timeout: 30000 })
+  const backend = await page.evaluate(() => window.__poly.backend)
+  test.skip(backend !== 'webgpu', 'a WebGPU adapter is required')
+  await page.waitForFunction(() => window.__poly.renderer.isRunning, null, { timeout: 30000 })
+}
+
+// A WebGPU canvas reads back through toBlob(), not drawImage().
+async function canvasMax(page) {
+  return page.evaluate(async () => {
+    const canvas = window.__poly.renderer.canvas
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return 0
+    const bitmap = await createImageBitmap(blob)
+    const copy = document.createElement('canvas')
+    copy.width = bitmap.width
+    copy.height = bitmap.height
+    const context = copy.getContext('2d', { willReadFrequently: true })
+    context.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const data = context.getImageData(0, 0, copy.width, copy.height).data
+    let max = 0
+    for (let i = 0; i < data.length; i += 4) max = Math.max(max, data[i], data[i + 1], data[i + 2])
+    return max
+  })
+}
+
+async function expectRecoveredOnFreshCanvas(page) {
+  await page.waitForFunction(() => window.__poly.renderer.isRunning, null, { timeout: 30000 })
+  expect(await page.evaluate(() => !window.__firstCanvas.isConnected)).toBe(true)
+  expect(await page.evaluate(() => window.__poly.renderer.canvas !== window.__firstCanvas)).toBe(true)
+  expect(await canvasMax(page)).toBeGreaterThan(16)
+
+  // The editor still holds the program — user state survived the reset.
+  const editorValue = await page.evaluate(() => document.querySelector('code-editor')?.value)
+  expect(editorValue).toContain('perlin(')
+}
+
+test('a destroyed WebGPU device is rebuilt on a fresh canvas', async ({ page }) => {
+  await waitForWebgpuApp(page)
+  expect(await canvasMax(page)).toBeGreaterThan(16)
+  await page.evaluate(() => {
+    window.__firstCanvas = window.__poly.renderer.canvas
+  })
+
+  await page.evaluate(() => window.__poly.renderer.inner.pipeline.backend.device.destroy())
+
+  // The engine stops the loop on the dead device, then rebuilds. A destroyed
+  // device is also how the renderer's own dispose tears down, so the host is
+  // not notified here; recovery still reaches it through the fresh canvas.
+  await page.waitForFunction(() => !window.__poly.renderer.isRunning)
+  await expectRecoveredOnFreshCanvas(page)
+})
+
+test('a GPU process exit notifies the host and rebuilds the program on a fresh canvas', async ({ page, context }) => {
+  await waitForWebgpuApp(page)
+  expect(await canvasMax(page)).toBeGreaterThan(16)
+  await page.evaluate(() => {
+    window.__firstCanvas = window.__poly.renderer.canvas
+  })
+
+  const cdp = await context.browser().newBrowserCDPSession()
+  await cdp.send('Browser.crashGpuProcess')
+
+  const lostToast = page.locator('.polymorphic-toast')
+  await expect(lostToast).toBeVisible()
+  await expect(lostToast).toHaveText('GPU device lost — recovering your program…')
+  await page.waitForFunction(() => !window.__poly.renderer.isRunning)
+
+  // The engine rebuilds after its no-restore window, then the host recompiles;
+  // the restored toast lands once that recovery finishes.
+  await page.waitForFunction(() => window.__poly.renderer.isRunning, null, { timeout: 30000 })
+  const restoredToast = page.locator('.polymorphic-toast')
+  await expect(restoredToast).toBeVisible()
+  await expect(restoredToast).toHaveText('Graphics restored — your program is live again', { timeout: 10000 })
+  await expectRecoveredOnFreshCanvas(page)
+})

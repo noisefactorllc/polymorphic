@@ -209,11 +209,12 @@ function gpuEngine(device) {
     }
 }
 
-test('a WebGPU device loss stops the loop, marks context lost and notifies', async () => {
+test('a WebGPU device loss marks the loss and notifies without touching the engine loop or pipeline', async () => {
     let lostInfo = null
     const device = stubGpuDevice()
     const canvas = stubCanvas()
     const engine = gpuEngine(device)
+    engine.isRunning = true
     const context = vm.createContext(sandboxContext(engine, canvas))
     const Renderer = loadRendererClass(context)
     const renderer = new Renderer(canvas, { onDeviceLost: info => { lostInfo = info } })
@@ -221,14 +222,53 @@ test('a WebGPU device loss stops the loop, marks context lost and notifies', asy
     await renderer.compile('osc()')
     assert.equal(renderer.contextLost, false)
 
+    const pipelineBefore = engine._pipeline
     device.lose({ reason: 'internal' })
     await device.lost
     await new Promise(resolve => setImmediate(resolve))
 
     assert.equal(lostInfo?.reason, 'internal')
     assert.equal(renderer.contextLost, true)
-    assert.equal(engine.stopCount, 1)
-    assert.equal(engine.isRunning, false)
+    // The engine's own device watch stops the loop and rebuilds; the wrapper
+    // must not run a competing recovery against it.
+    assert.equal(engine.stopCount, 0)
+    assert.equal(engine.isRunning, true, 'the wrapper left the engine loop alone')
+    assert.equal(engine._pipeline, pipelineBefore, 'the pipeline was not dropped')
+    assert.equal(engine.compileCalls.length, 1, 'no competing recompile was scheduled')
+})
+
+test('the engine rebuild after a device loss surfaces to the host once through the fresh canvas', async () => {
+    const ctorSink = {}
+    const replaced = []
+    const device = stubGpuDevice()
+    const canvas = stubCanvas()
+    const engine = gpuEngine(device)
+    const context = vm.createContext(sandboxContext(engine, canvas, ctorSink))
+    const Renderer = loadRendererClass(context)
+    const renderer = new Renderer(canvas, {
+        onDeviceLost: () => {},
+        onCanvasReplaced: live => replaced.push(live)
+    })
+    renderer._renderer = engine
+    await renderer.compile('osc()')
+    const hostRestored = []
+    renderer.onContextRestored = (e, r) => hostRestored.push(r)
+
+    device.lose({ reason: 'internal' })
+    await device.lost
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(renderer.contextLost, true)
+
+    // The engine rebuilds on a fresh canvas in the old one's place, then calls
+    // its onContextRestored hook — the same shape a WebGL rebuild has.
+    const fresh = stubCanvas()
+    engine.canvas = fresh
+    ctorSink.options.onContextRestored()
+
+    assert.equal(renderer.canvas, fresh, 'the wrapper adopted the engine fresh canvas')
+    assert.deepEqual(replaced, [fresh], 'the host learned the canvas was replaced')
+    assert.equal(renderer.contextLost, false)
+    assert.equal(hostRestored.length, 1, 'the host learns about the recovery once')
 })
 
 test('a destroyed WebGPU device is ignored (intentional shutdown, not a reset)', async () => {
@@ -251,7 +291,7 @@ test('a destroyed WebGPU device is ignored (intentional shutdown, not a reset)',
     assert.equal(engine.stopCount, 0)
 })
 
-test('recoverFromContextLoss drops the dead WebGPU pipeline and rebuilds on a new device', async () => {
+test('after the engine rebuilt on a fresh device, recovery keeps the engine pipeline and watches its device', async () => {
     const device = stubGpuDevice()
     const canvas = stubCanvas()
     const disposed = []
@@ -268,20 +308,21 @@ test('recoverFromContextLoss drops the dead WebGPU pipeline and rebuilds on a ne
     await device.lost
     await new Promise(resolve => setImmediate(resolve))
 
-    // Recovery installs a fresh pipeline/device, mirroring the engine's
-    // _createRuntime path.
+    // The engine's own rebuild replaced the pipeline on a new device and
+    // disposed the dead one; the host's recovery runs afterwards and must not
+    // drop the engine's fresh pipeline.
+    deadPipeline.dispose()
     const freshDevice = stubGpuDevice()
-    let pipelineWasDropped = false
+    const freshPipeline = { backend: { device: freshDevice } }
+    engine._pipeline = freshPipeline
     engine.compile = async dsl => {
         engine.compileCalls.push(dsl)
-        pipelineWasDropped = engine._pipeline === null
-        engine._pipeline = { backend: { device: freshDevice } }
         return { success: true }
     }
     const result = await renderer.recoverFromContextLoss('osc()')
     assert.equal(result.success, true)
-    assert.deepEqual(disposed, ['dead'])
-    assert.equal(pipelineWasDropped, true, 'dead pipeline was dropped before recompile')
+    assert.deepEqual(disposed, ['dead'], 'only the engine disposed the dead pipeline')
+    assert.equal(engine._pipeline, freshPipeline, 'the engine fresh pipeline was kept')
     assert.deepEqual(engine.compileCalls, ['osc()', 'osc()'])
     assert.equal(renderer.contextLost, false)
     assert.equal(engine.isRunning, true)

@@ -35,10 +35,9 @@ export class PolymorphicRenderer {
         this.onDeviceLost = options.onDeviceLost || null
         this.onCanvasReplaced = options.onCanvasReplaced || null
 
-        // WebGPU device-loss state (`device.lost` is terminal for the device,
-        // unlike WebGL's context pair). `_gpuDeviceLost` tells recovery to drop
-        // the dead pipeline so the engine builds a fresh one on a new device.
-        this._gpuDeviceLost = false
+        // WebGPU device-loss watch state. `device.lost` is terminal for the
+        // device, unlike WebGL's context pair; the identity check keeps one
+        // `lost` handler per device.
         this._watchedGpuDevice = null
         this._disposed = false
 
@@ -519,15 +518,17 @@ export class PolymorphicRenderer {
     /**
      * Observe the active WebGPU device for loss.
      *
-     * The engine's WebGPU backend requests its own `GPUDevice` when it builds
-     * the pipeline (`_pipeline.backend.device`). Unlike WebGL's
-     * `webglcontextlost`/`webglcontextrestored` canvas events, WebGPU device
-     * loss is terminal for that device — no restore event will fire — so we
-     * watch `device.lost`, stop the loop, mark the loss and ask the host to
-     * drive recovery (which drops the dead pipeline and recompiles on a fresh
-     * device). Re-armed after every compile: a recovered device is a new
-     * object, and plain recompiles reuse the existing pipeline/device, so the
-     * identity check keeps exactly one `lost` handler per device.
+     * The engine watches the device of each pipeline it makes current and
+     * drives the whole recovery itself: it stops its loop, rebuilds the
+     * program on a fresh canvas in the old canvas's place, resumes the loop
+     * and calls its onContextRestored hook — the same shape a lost WebGL
+     * context takes. The wrapper only marks the loss here, so that fresh
+     * canvas reaches the host once through _adoptFreshCanvas, and notifies
+     * the host through onDeviceLost. Running a recovery here too would race
+     * the engine's rebuild and drop the pipeline it just installed.
+     * Re-armed after every compile: a recovered device is a new object, and
+     * plain recompiles reuse the existing pipeline/device, so the identity
+     * check keeps exactly one `lost` handler per device.
      *
      * @private
      */
@@ -537,12 +538,11 @@ export class PolymorphicRenderer {
         if (this._watchedGpuDevice === device) return
         this._watchedGpuDevice = device
         device.lost.then((info) => {
-            // 'destroyed' is an intentional shutdown (e.g. our own dispose),
-            // not a GPU reset — nothing to recover.
+            // 'destroyed' is an intentional shutdown (a pipeline the engine
+            // replaced or our own dispose), not a GPU reset — nothing to
+            // recover and nothing to report.
             if (this._disposed || info?.reason === 'destroyed') return
-            this._gpuDeviceLost = true
             this._contextLost = true
-            this.stop()
             try {
                 this.onDeviceLost?.(info)
             } catch (err) {
@@ -555,27 +555,13 @@ export class PolymorphicRenderer {
      * Recompile the current program into a restored context and restart the
      * render loop. All GPU resources (shaders, textures, text/media uploads)
      * are lost with the old context; `compile()` recreates every one of them,
-     * so recovery is a plain recompile of the caller's DSL.
-     *
-     * For a lost WebGPU device the engine's `compile()` would reuse the
-     * existing pipeline — which is bound to the dead device — so the dead
-     * pipeline is dropped first, forcing the engine to create a fresh runtime
-     * (new adapter device, reconfigured canvas context) on the next compile.
+     * so recovery is a plain recompile of the caller's DSL. The engine has
+     * already rebuilt the program on a fresh canvas (or context/device) by
+     * the time the host runs this; the pipeline it installed stays in place.
      * @param {string} dsl - DSL source to restore
      * @returns {Promise<{success: boolean, error?: string}>}
      */
     async recoverFromContextLoss(dsl) {
-        if (this._gpuDeviceLost) {
-            this._gpuDeviceLost = false
-            this._watchedGpuDevice = null
-            const deadPipeline = this._renderer?._pipeline
-            this._renderer._pipeline = null
-            try {
-                deadPipeline?.dispose?.()
-            } catch (err) {
-                console.warn('Failed to dispose lost WebGPU pipeline:', err)
-            }
-        }
         const result = await this.compile(dsl)
         if (result.success) {
             this._contextLost = false

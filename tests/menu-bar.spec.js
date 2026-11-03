@@ -14,11 +14,17 @@
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
 
+installHandfishLocal(test)
+// The theme-contrast test samples computed styles across animation frames
+// while the shader renders; under a software rasterizer that runs close to
+// the default 60 s, so give the file the same headroom the WebGPU project
+// specs use.
+test.describe.configure({ timeout: 90000 })
+
 test.use({
     permissions: ['clipboard-read', 'clipboard-write'],
 })
 
-installHandfishLocal(test)
 
 // Fixed light boot program passed to every test via the documented ?dsl=
 // scheme. A fresh visit boots a random gallery example whose compile time
@@ -404,8 +410,15 @@ test('icon toolbar: play/pause, code editor, perf, record; palette delegation; p
     await page.waitForTimeout(500)
     const recording = await page.evaluate(() => document.getElementById('record-toggle-btn').classList.contains('active'))
     if (recording) {
+        // The recorder downloads its take on stop. Register the listener
+        // before the stop click and drain that download: under renderer load
+        // it can arrive after the palette's PNG save below, and the listener
+        // would then resolve with the recording instead of the PNG.
+        const recorderTake = page.waitForEvent('download', { timeout: 30000 })
         await page.evaluate(() => document.getElementById('record-toggle-btn').click())
-        await page.waitForTimeout(500)
+        const take = await recorderTake
+        expect(take.suggestedFilename()).toMatch(/\.webm$/)
+        await take.cancel()
         await expect(page.locator('#record-toggle-btn')).not.toHaveClass(/active/)
     }
 
