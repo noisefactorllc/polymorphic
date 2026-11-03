@@ -4,7 +4,7 @@
  * With NM_CHANGED_FILES unset this runs the whole unit suite, exactly as the
  * previous `node --test tests/unit/*.test.mjs` invocation did. With
  * NM_CHANGED_FILES set (one changed repository path per line, provided by the
- * supervisor) it runs only the tests that exercise those paths: the changed
+ * changed-paths harness) it runs only the tests that exercise those paths: the changed
  * unit tests themselves, every unit test whose source names a changed file by
  * repository path or module basename, and every Playwright spec that is
  * changed or whose source names a changed path or module basename, run
@@ -171,7 +171,7 @@ if (isMain) {
     const selected = selectTests(changed, all, name => readFileSync(path.join(unitDir, name), 'utf8'))
     const suite = chooseSuite(selected, changed)
 
-    // Shard mode (NM_SHARD_INDEX / NM_SHARD_COUNT, set by the supervisor when
+    // Shard mode (NM_SHARD_INDEX / NM_SHARD_COUNT, set by the changed-paths
     // .nm-test-shards declares a count): the selected tests exceed one
     // invocation's time budget, so each invocation runs shard NM_SHARD_INDEX
     // (0-based) of the selected browser tests and only shard 0 also runs the
