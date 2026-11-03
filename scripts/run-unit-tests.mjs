@@ -171,11 +171,12 @@ if (isMain) {
     const selected = selectTests(changed, all, name => readFileSync(path.join(unitDir, name), 'utf8'))
     const suite = chooseSuite(selected, changed)
 
-    // Shard mode (NM_SHARD_INDEX / NM_SHARD_COUNT, set by the changed-paths
-    // .nm-test-shards declares a count): the selected tests exceed one
-    // invocation's time budget, so each invocation runs shard NM_SHARD_INDEX
-    // (0-based) of the selected browser tests and only shard 0 also runs the
-    // unit suite. Together the shards cover every selected test exactly once.
+    // Shard mode. The changed-paths harness sets NM_SHARD_INDEX and
+    // NM_SHARD_COUNT when .nm-test-shards declares a count. The selected
+    // tests exceed one invocation's time budget, so each invocation runs
+    // shard NM_SHARD_INDEX (0-based) of the selected browser tests and only
+    // shard 0 also runs the unit suite. Together the shards cover every
+    // selected test exactly once.
     const shardIndex = Number.parseInt(process.env.NM_SHARD_INDEX ?? '', 10)
     const shardCount = Number.parseInt(process.env.NM_SHARD_COUNT ?? '', 10)
     const sharded = Number.isInteger(shardIndex) && shardIndex >= 0 &&
