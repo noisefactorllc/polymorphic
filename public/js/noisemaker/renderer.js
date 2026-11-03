@@ -442,9 +442,13 @@ export class PolymorphicRenderer {
 
         ctx.restore()
 
-        // Upload to texture with step-indexed ID
+        // Upload to texture with step-indexed ID. The engine never asks an
+        // uploaded canvas for a rendering context, so a caller holding the
+        // source's 2D context hands it over: a willReadFrequently context
+        // then uploads its getImageData bytes on WebGPU, as WebGL2 uploads
+        // them.
         const textureId = `textTex_step_${stepIndex}`
-        this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true })
+        this._renderer.updateTextureFromSource(textureId, canvas, { flipY: true, context2d: ctx })
     }
 
     /**
