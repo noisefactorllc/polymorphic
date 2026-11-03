@@ -64,7 +64,7 @@ export function installNativeAudioDaemon() {
 }
 
 export function createSetup(getEndpoint) {
-    return async function setup(page, fullApp = false, backend = 'webgl2') {
+    return async function setup(page, fullApp = false, backend = 'webgl2', dsl = 'search synth\nperlin().write(o0)\nrender(o0)') {
         await page.route('**/js/sync/audio.js', route => route.fulfill({
             contentType: 'text/javascript',
             body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
@@ -77,7 +77,7 @@ export function createSetup(getEndpoint) {
         await page.route('**/__audio-state.js', route => route.fulfill({
             path: audioStatePath, contentType: 'text/javascript'
         }))
-        await page.goto(fullApp ? '/?dsl=' + encodeURIComponent('search synth\nperlin().write(o0)\nrender(o0)') + '&backend=' + backend : '/sync-audio-test-empty.html')
+        await page.goto(fullApp ? '/?dsl=' + encodeURIComponent(dsl) + '&backend=' + backend : '/sync-audio-test-empty.html')
         await page.evaluate(() => {
             navigator.mediaDevices.getUserMedia = async () => { throw new Error('Sync must not fall back to the microphone') }
         })
