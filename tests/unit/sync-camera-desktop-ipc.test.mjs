@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
@@ -137,6 +137,14 @@ function fakeWebContents() {
 test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent consumers and cleans up',
     { skip: skipReason || false }, async () => {
     if (!mod) return // Skipped through the option above with its reason.
+    // Bind to the implementation source: the loaded file must define the
+    // reader and the IPC wiring itself, not re-export them from a stub
+    // mirror. These checks read content properties a stub cannot satisfy.
+    const loadedSource = readFileSync(shellLib, 'utf8')
+    assert.match(loadedSource, /\bclass SyncCameraShmReader\b/,
+        'the loaded desktop-shell file must define the ring reader')
+    assert.match(loadedSource, /\bfunction wireSyncCameraIpc\b/,
+        'the loaded desktop-shell file must define the IPC wiring')
     const fs = await import('node:fs')
     const os = await import('node:os')
     const path = await import('node:path')
