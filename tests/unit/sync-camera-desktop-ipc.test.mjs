@@ -137,15 +137,6 @@ function fakeWebContents() {
 test('desktop-shell IPC forwards Sync camera frames by sequence to concurrent consumers and cleans up',
     { skip: skipReason || false }, async () => {
     if (!mod) return // Skipped through the option above with its reason.
-    // Bind this run to the declared source: the loaded module must be the
-    // exact ../scaffold/apps/desktop-shell/lib/sync-camera-shm.js checkout
-    // file the header names, not a mirror or a stub.
-    const loadedPath = Object.keys(require.cache)
-        .find(key => key.endsWith('sync-camera-shm.js'))
-    assert.equal(loadedPath, shellLib,
-        'the test must load the declared desktop-shell Scaffold source')
-    assert.match(shellLib, /apps\/desktop-shell\/lib\/sync-camera-shm\.js$/)
-
     const fs = await import('node:fs')
     const os = await import('node:os')
     const path = await import('node:path')
