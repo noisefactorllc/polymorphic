@@ -35,6 +35,7 @@ function systemVulkanIcdPresent() {
     }
     return false
 }
+const testPort = Number(process.env.POLY_TEST_PORT || 3017)
 const systemIcd = systemVulkanIcdPresent()
 const operatorIcd = Boolean(process.env.VK_DRIVER_FILES || process.env.VK_ICD_FILENAMES)
 let bundledIcd = null
@@ -61,7 +62,7 @@ export default defineConfig({
   // headroom on a cold or loaded machine.
   timeout: 60000,
   use: {
-    baseURL: 'http://localhost:3017',
+    baseURL: 'http://127.0.0.1:' + testPort,
     launchOptions: { args: baseArgs },
     // In WebKit, page.route() misses requests from a page that public/sw.js
     // controls, so a mocked sharing or Seance call would reach production.
@@ -75,13 +76,13 @@ export default defineConfig({
     {
       name: 'chromium',
       testIgnore: WEBGPU_SPECS,
-      use: { baseURL: 'http://localhost:3017', launchOptions: { args: baseArgs } },
+      use: { baseURL: 'http://127.0.0.1:' + testPort, launchOptions: { args: baseArgs } },
     },
     {
       name: 'sync-native-webgpu',
       testMatch: WEBGPU_SPECS,
       use: {
-        baseURL: 'http://localhost:3017',
+        baseURL: 'http://127.0.0.1:' + testPort,
         launchOptions: bundledIcd
           ? { args: vulkanArgs, env: { ...process.env, VK_ICD_FILENAMES: bundledIcd } }
           : { args: vulkanArgs },
@@ -92,8 +93,8 @@ export default defineConfig({
     // scripts/serve-book.mjs, not `npx serve public`: the book builds to
     // dist/book/ and is mounted at /book, which is the layout the deploy
     // produces. Serving public/ alone would 404 every book URL.
-    command: 'npm run build && node scripts/serve-book.mjs 3017',
-    url: 'http://localhost:3017',
+    command: 'npm run build && node scripts/serve-book.mjs ' + testPort + '',
+    url: 'http://127.0.0.1:' + testPort,
     reuseExistingServer: true,
     timeout: 120000,
   },

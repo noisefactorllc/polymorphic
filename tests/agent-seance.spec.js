@@ -10,10 +10,15 @@ import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { routeHandfishLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './portableImagesLocal.js'
-import { SEANCE_SDK_URL, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
+import { SEANCE_SDK_URL, hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
 import { joinAsAgent } from './agentRelayClient.js'
 
-const ORIGIN = 'http://localhost:3017'
+test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
+
+// The suite origin follows the project's baseURL so the Seance server's
+// allowed origins, the clipboard grant and the agent join all target the
+// origin the page actually runs on (the config serves 127.0.0.1:<testPort>).
+let ORIGIN = 'http://localhost:3017'
 // Stands in for the agent tool when the prompt's join line runs in a shell.
 const JOIN_TOOL = resolve(process.cwd(), 'tests/agentJoin.mjs')
 const BASE = [
@@ -62,7 +67,8 @@ let seance
 
 test.describe.configure({ mode: 'serial', timeout: 120000 })
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+  ORIGIN = testInfo.project.use.baseURL
   seance = await startSeanceServer({ origin: ORIGIN })
 })
 

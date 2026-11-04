@@ -113,7 +113,7 @@ if (isMain) {
         // connection instead.
         stream.on('error', () => res.destroy())
         stream.pipe(res)
-    }).listen(PORT, () => {
+    }).listen(PORT, process.env.SERVE_BOOK_HOST || undefined, () => {
         process.stdout.write(`polymorphic  http://localhost:${PORT}/\n`)
         process.stdout.write(`book         http://localhost:${PORT}/book/\n`)
     })

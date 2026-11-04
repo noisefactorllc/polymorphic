@@ -12,7 +12,10 @@ const defaultDaemon = path.resolve(__dirname, '../../sync/build/sync_audio_test_
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
 // All default to the standard local serve-book endpoint; overrides exist for
 // sandboxes that can only bind a restricted loopback port range.
-const daemonOrigin = process.env.SYNC_TEST_ORIGIN || 'http://localhost:3017'
+// The daemon's --test-origin must match the page origin, which the Playwright
+// config builds from POLY_TEST_PORT (127.0.0.1:<testPort>).
+const daemonOrigin = process.env.SYNC_TEST_ORIGIN ||
+    `http://127.0.0.1:${Number(process.env.POLY_TEST_PORT || 3017)}`
 const daemonPort = process.env.SYNC_TEST_PORT
 const audioStatePath = process.env.AUDIO_STATE_PATH
     ? path.resolve(process.env.AUDIO_STATE_PATH)
