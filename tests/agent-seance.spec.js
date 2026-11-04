@@ -10,10 +10,8 @@ import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { routeHandfishLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './portableImagesLocal.js'
-import { SEANCE_SDK_URL, hasLocalSeanceHarness, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
+import { SEANCE_SDK_URL, routeSeanceSdkLocal, startSeanceServer } from './seanceLocal.js'
 import { joinAsAgent } from './agentRelayClient.js'
-
-test.skip(!hasLocalSeanceHarness(), 'requires local Seance SDK/server harness; set SEANCE_SDK_DIR and SEANCE_PYTHON')
 
 // The suite origin follows the project's baseURL so the Seance server's
 // allowed origins, the clipboard grant and the agent join all target the
