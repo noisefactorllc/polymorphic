@@ -5,7 +5,10 @@ import { SyncH264CanvasSender, supportsH264CanvasOutput, supportsH264FrameGeomet
 
 const MAX_SENDER_NAME_BYTES = 64
 const RGBA8_BYTES_PER_PIXEL = 4
-const MAX_V1_PAYLOAD_BYTES = 0xffffffff
+// The v1 receiver refuses a frame wider or taller than 4096 and an RGBA
+// payload above 64 MiB (docs/protocol-v1.md; the SDK refuses the same limits).
+const MAX_V1_FRAME_DIMENSION = 4096
+const MAX_V1_PAYLOAD_BYTES = 64 * 1024 * 1024
 const STATS_INTERVAL_MS = 250
 const STOP_TIMEOUT_MS = 3000
 const RECOVERY_DELAYS_MS = Object.freeze([250, 1000, 4000])
@@ -159,6 +162,9 @@ function validateDescriptor(descriptor) {
         typeof descriptor.fps !== 'number' || !Number.isFinite(descriptor.fps) ||
         descriptor.fps <= 0) {
         throw outputError('SYNC_RENDERER_UNAVAILABLE', 'Renderer output dimensions are unavailable')
+    }
+    if (descriptor.width > MAX_V1_FRAME_DIMENSION || descriptor.height > MAX_V1_FRAME_DIMENSION) {
+        throw outputError('SYNC_RENDERER_UNAVAILABLE', 'Renderer output dimensions exceed Sync v1 limits')
     }
     const payloadBytes = descriptor.width * descriptor.height * RGBA8_BYTES_PER_PIXEL
     if (!Number.isSafeInteger(payloadBytes) || payloadBytes > MAX_V1_PAYLOAD_BYTES) {

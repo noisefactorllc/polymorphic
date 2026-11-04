@@ -70,7 +70,7 @@ export function createSetup(getEndpoint) {
     return async function setup(page, fullApp = false, backend = 'webgl2', dsl = 'search synth\nperlin().write(o0)\nrender(o0)') {
         await page.route('**/js/sync/audio.js', route => route.fulfill({
             contentType: 'text/javascript',
-            body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
+            body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
             export class SyncBridgeClient extends Base {
                 constructor(options) { super({ timeoutMs: 15000, ...options, endpoint: ${JSON.stringify(getEndpoint())}, permissions: { query: async () => ({ state: 'granted' }) } }); }
                 async pair() { return { token: 'audio-test-token' }; }

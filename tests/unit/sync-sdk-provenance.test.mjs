@@ -8,25 +8,23 @@ import { test } from 'node:test'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const read = relative => readFile(resolve(root, relative), 'utf8')
 
-// The audio integration is pinned to the 0.3.0 snapshot that shipped with
-// native multichannel audio input. The 0.3.3 browser delta (packed H.264
-// sender, NV12/H264AnnexB packing, WebGL2 in-place row flip, and the
-// audio_unavailable -> SyncUnavailableError classification) is output-focused
-// and unused by the audio path, so the pin is an intentional product
-// difference — not drift. This contract locks the wiring so a future edit
-// cannot silently repoint a production module at an unverified snapshot.
+// Both integrations pin the same 0.3.3 snapshot captured from Sync's browser
+// sources. The audio integration keeps its own import so a future edit cannot
+// silently repoint a production module at an unverified snapshot, and each
+// snapshot keeps an immutable SHA256SUMS manifest that the suite verifies
+// byte for byte.
 const PINNED_SNAPSHOTS = Object.freeze({
-    audio: '0.3.0',
+    audio: '0.3.3',
     output: '0.3.3'
 })
 
 test('the audio integration imports the pinned audio SDK snapshot', async () => {
     const audioModule = await read('public/js/sync/audio.js')
     assert.match(audioModule,
-        /export \{ SyncBridgeClient \} from '\.\/sdk\/0\.3\.0\/browser\/index\.js'/,
-        'audio.js must re-export SyncBridgeClient from the pinned 0.3.0 snapshot')
+        /export \{ SyncBridgeClient \} from '\.\/sdk\/0\.3\.3\/browser\/index\.js'/,
+        'audio.js must re-export SyncBridgeClient from the pinned 0.3.3 snapshot')
     const audioClient = await import('../../public/js/sync/audio.js')
-    const pinnedClient = await import('../../public/js/sync/sdk/0.3.0/browser/index.js')
+    const pinnedClient = await import('../../public/js/sync/sdk/0.3.3/browser/index.js')
     assert.equal(audioClient.SyncBridgeClient, pinnedClient.SyncBridgeClient)
 })
 

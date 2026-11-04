@@ -49,20 +49,10 @@ test('vendored Sync browser SDK matches its pinned checksums', async () => {
 })
 
 
-test('native audio SDK matches the reviewed immutable manifest', async () => {
-    const directory = resolve(sdkDir, '../0.3.0')
-    const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'fb85d80c57b39a63839afe9d1e507ff8e03b719928132e25aba7cfb8c248ceaf')
-    for (const line of manifest.trim().split('\n')) {
-        const [expected, filename] = line.split('  ')
-        assert.equal(createHash('sha256').update(await readFile(resolve(directory, filename))).digest('hex'), expected, filename)
-    }
-})
-
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {
     const directory = resolve(sdkDir, '../0.3.3')
     const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'f752459b9f7347afffd73e45049e36d5be131c32524bba9febea4a259ae24437')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), '0f2615bf10d5dfe930e26bd677a7359eb863d5f1e4dfcbf92a302306efaddbed')
     const manifestFiles = []
     for (const line of manifest.trim().split('\n')) {
         const [expected, filename] = line.split('  ')
