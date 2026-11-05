@@ -242,7 +242,14 @@ export async function clickSyncAudioConnectRidingHelloDeadline(page) {
     for (let attempt = 0; ; attempt++) {
         await page.click('[data-id=sync-audio-connect]')
         try {
-            await expect(page.locator('[data-id=sync-audio-status]')).toHaveText('Select a Sync input, then enable audio.')
+            // The ready status waits for the browser's first cold device
+            // enumeration, which the browser starts inside the click handler
+            // and which measured 2.3-4.5 s on an idle machine — past the 5 s
+            // default this assertion would otherwise use. The SDK's own
+            // connect timeout is 15 s; wait that long for the same text. A
+            // product that never reaches the ready status still fails here.
+            await expect(page.locator('[data-id=sync-audio-status]')).toHaveText(
+                'Select a Sync input, then enable audio.', { timeout: 15_000 })
             break
         } catch (error) {
             const status = await page.locator('[data-id=sync-audio-status]').textContent()
