@@ -27,6 +27,7 @@
         "perlin",
         "polygon",
         "reactionDiffusion",
+        "remap",
         "sacredGeometry",
         "shape",
         "solid",
@@ -15360,1895 +15361,21 @@
       ]
     },
     {
-      "id": "synth/sacredGeometry",
-      "chapter": "synth",
-      "slug": "sacredGeometry",
-      "func": "sacredGeometry",
-      "title": "SacredGeometry",
-      "description": "Flower-of-life and related sacred-geometry lattices",
-      "tags": [
-        "geometric",
-        "pattern"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth\n\nsacredGeometry()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "geometry",
-          "label": "geometry",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "borromean",
-            "flower",
-            "fruit",
-            "metatron",
-            "seed",
-            "starPolygon",
-            "triquetra",
-            "vesica"
-          ]
-        },
-        {
-          "name": "scale",
-          "label": "scale",
-          "type": "float",
-          "control": "slider",
-          "default": 10,
-          "min": 1,
-          "max": 20,
-          "choices": null
-        },
-        {
-          "name": "rings",
-          "label": "rings",
-          "type": "int",
-          "control": "slider",
-          "default": 3,
-          "min": 1,
-          "max": 6,
-          "choices": null
-        },
-        {
-          "name": "starPoints",
-          "label": "points",
-          "type": "int",
-          "control": "slider",
-          "default": 5,
-          "min": 5,
-          "max": 12,
-          "choices": null
-        },
-        {
-          "name": "rotation",
-          "label": "rotation",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -180,
-          "max": 180,
-          "choices": null
-        },
-        {
-          "name": "thickness",
-          "label": "thickness",
-          "type": "float",
-          "control": "slider",
-          "default": 0.2,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "smoothness",
-          "label": "smoothness",
-          "type": "float",
-          "control": "slider",
-          "default": 0.02,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "fgColor",
-          "label": "fg color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "bgColor",
-          "label": "bg color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0,
-            0,
-            0
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "animation",
-          "label": "animation",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "none",
-            "pulse",
-            "ripple",
-            "rotate",
-            "unfold"
-          ]
-        },
-        {
-          "name": "speed",
-          "label": "speed",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        },
-        {
-          "name": "pulseDepth",
-          "label": "depth",
-          "type": "float",
-          "control": "slider",
-          "default": 0.15,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth/shape",
-      "chapter": "synth",
-      "slug": "shape",
-      "func": "shape",
-      "title": "Shape",
-      "description": "Interference patterns from geometric shapes",
-      "tags": [
-        "geometric"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth\n\nshape()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "loopAOffset",
-          "label": "loop a",
-          "type": "int",
-          "control": "dropdown",
-          "default": 40,
-          "min": null,
-          "max": null,
-          "choices": [
-            "Shapes:",
-            "circle",
-            "triangle",
-            "diamond",
-            "square",
-            "pentagon",
-            "hexagon",
-            "heptagon",
-            "octagon",
-            "nonagon",
-            "decagon",
-            "hendecagon",
-            "dodecagon",
-            "Directional:",
-            "horizontalScan",
-            "verticalScan",
-            "Noise:",
-            "noiseConstant",
-            "noiseLinear",
-            "noiseHermite",
-            "noiseCatmullRom3x3",
-            "noiseCatmullRom4x4",
-            "noiseBSpline3x3",
-            "noiseBSpline4x4",
-            "noiseSimplex",
-            "noiseSine",
-            "Misc:",
-            "rings",
-            "sine"
-          ]
-        },
-        {
-          "name": "loopBOffset",
-          "label": "loop b",
-          "type": "int",
-          "control": "dropdown",
-          "default": 30,
-          "min": null,
-          "max": null,
-          "choices": [
-            "Shapes:",
-            "circle",
-            "triangle",
-            "diamond",
-            "square",
-            "pentagon",
-            "hexagon",
-            "heptagon",
-            "octagon",
-            "nonagon",
-            "decagon",
-            "hendecagon",
-            "dodecagon",
-            "Directional:",
-            "horizontalScan",
-            "verticalScan",
-            "Noise:",
-            "noiseConstant",
-            "noiseLinear",
-            "noiseHermite",
-            "noiseCatmullRom3x3",
-            "noiseCatmullRom4x4",
-            "noiseBSpline3x3",
-            "noiseBSpline4x4",
-            "noiseSimplex",
-            "noiseSine",
-            "Misc:",
-            "rings",
-            "sine"
-          ]
-        },
-        {
-          "name": "loopAScale",
-          "label": "a scale",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "loopBScale",
-          "label": "b scale",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "speedA",
-          "label": "speed a",
-          "type": "int",
-          "control": "slider",
-          "default": 50,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "speedB",
-          "label": "speed b",
-          "type": "int",
-          "control": "slider",
-          "default": 50,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "seed",
-          "label": "noise seed",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "wrap",
-          "label": "wrap",
-          "type": "boolean",
-          "control": "checkbox",
-          "default": true,
-          "min": null,
-          "max": null,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth/solid",
-      "chapter": "synth",
-      "slug": "solid",
-      "func": "solid",
-      "title": "Solid",
-      "description": "Solid color fill",
-      "tags": [
-        "color"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth\n\nsolid()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "color",
-          "label": "color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "alpha",
-          "label": "opacity",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth/subdivide",
-      "chapter": "synth",
-      "slug": "subdivide",
-      "func": "subdivide",
-      "title": "Subdivide",
-      "description": "Recursive grid subdivision with shapes",
-      "tags": [
-        "geometric",
-        "pattern"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": true,
-      "curatedWhy": "the input texture only shows through in proportion to inputMix, and the derived program leaves it at 0; wrap only shows where a cell's shape differs from the frame's, which needs binary splits",
-      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\nsubdivide(tex: read(o0), mode: binary, inputMix: 50)\n  .write(o1)\n\nrender(o1)\n",
-      "params": [
-        {
-          "name": "tex",
-          "label": "texture",
-          "type": "surface",
-          "control": null,
-          "default": "none",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "mode",
-          "label": "mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 1,
-          "min": null,
-          "max": null,
-          "choices": [
-            "binary",
-            "quad"
-          ]
-        },
-        {
-          "name": "depth",
-          "label": "depth",
-          "type": "int",
-          "control": "slider",
-          "default": 5,
-          "min": 1,
-          "max": 6,
-          "choices": null
-        },
-        {
-          "name": "density",
-          "label": "density",
-          "type": "float",
-          "control": "slider",
-          "default": 75,
-          "min": 30,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": "slider",
-          "default": 69,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "fill",
-          "label": "fill",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "solid",
-            "circle",
-            "diamond",
-            "square",
-            "arc",
-            "mixed"
-          ]
-        },
-        {
-          "name": "outline",
-          "label": "outline",
-          "type": "float",
-          "control": "slider",
-          "default": 3,
-          "min": 0,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "inputMix",
-          "label": "input mix",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "speed",
-          "label": "speed",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": 0,
-          "max": 20,
-          "choices": null
-        },
-        {
-          "name": "wrap",
-          "label": "wrap",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mirror",
-            "repeat",
-            "clamp"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "synth/testPattern",
-      "chapter": "synth",
-      "slug": "testPattern",
-      "func": "testPattern",
-      "title": "Test Pattern",
-      "description": "Test patterns for debugging and calibration",
-      "tags": [
-        "util"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth\n\ntestPattern()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "pattern",
-          "label": "pattern",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "checkerboard",
-            "colorBars",
-            "gradient",
-            "uvMap",
-            "gridLines",
-            "colorGrid",
-            "dotGrid"
-          ]
-        },
-        {
-          "name": "gridSize",
-          "label": "grid size",
-          "type": "int",
-          "control": "slider",
-          "default": 4,
-          "min": 1,
-          "max": 16,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/cell3d",
-      "chapter": "synth3d",
-      "slug": "cell3d",
-      "func": "cell3d",
-      "title": "Cell3D",
-      "description": "3D cellular/Voronoi noise volume",
-      "tags": [
-        "3d",
-        "noise"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\ncell3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "metric",
-          "label": "cell shape",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "sphere",
-            "octahedron",
-            "cube"
-          ]
-        },
-        {
-          "name": "scale",
-          "label": "cell scale",
-          "type": "float",
-          "control": null,
-          "default": 10,
-          "min": 1,
-          "max": 15,
-          "choices": null
-        },
-        {
-          "name": "variation",
-          "label": "cell variation",
-          "type": "float",
-          "control": null,
-          "default": 100,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": null,
-          "default": 1,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 1,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "rgb"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "synth3d/cellularAutomata3d",
-      "chapter": "synth3d",
-      "slug": "cellularAutomata3d",
-      "func": "cellularAutomata3d",
-      "title": "Cellular Automata 3D",
-      "description": "3D cellular automata simulation",
-      "tags": [
-        "3d",
-        "sim"
-      ],
-      "starter": true,
-      "explicit": true,
-      "curated": true,
-      "curatedWhy": "the derived program gives the automaton no source volume and a weight of 0, so choosing a source volume or geometry changed nothing",
-      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\ncellularAutomata3d(ruleIndex: diamoeba, source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 32,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": null,
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "ruleIndex",
-          "label": "rules",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "rule445M",
-            "rule678",
-            "amoeba",
-            "builder1",
-            "builder2",
-            "clouds",
-            "crystalGrowth",
-            "diamoeba",
-            "pyroclastic",
-            "slowDecay",
-            "spikeyGrowth"
-          ]
-        },
-        {
-          "name": "neighborMode",
-          "label": "neighborhood",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "moore",
-            "vonNeumann"
-          ]
-        },
-        {
-          "name": "speed",
-          "label": "sim speed",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": 0,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "density",
-          "label": "density",
-          "type": "float",
-          "control": "slider",
-          "default": 50,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "age"
-          ]
-        },
-        {
-          "name": "resetState",
-          "label": "reset",
-          "type": "boolean",
-          "control": "button",
-          "default": false,
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "source",
-          "label": "source vol",
-          "type": "volume",
-          "control": null,
-          "default": "vol0",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "geoSource",
-          "label": "source geo",
-          "type": "geometry",
-          "control": null,
-          "default": "geo0",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "weight",
-          "label": "input weight",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/flythrough3d",
-      "chapter": "synth3d",
-      "slug": "flythrough3d",
-      "func": "flythrough3d",
-      "title": "Flythrough3D",
-      "description": "3D fractal flythrough with camera-relative volume",
-      "tags": [
-        "3d",
-        "fractal"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\nflythrough3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "type",
-          "label": "fractal type",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mandelbulb",
-            "mandelbox"
-          ]
-        },
-        {
-          "name": "power",
-          "label": "power/scale",
-          "type": "float",
-          "control": "slider",
-          "default": 8,
-          "min": -3,
-          "max": 16,
-          "choices": null
-        },
-        {
-          "name": "iterations",
-          "label": "iterations",
-          "type": "int",
-          "control": "slider",
-          "default": 12,
-          "min": 4,
-          "max": 24,
-          "choices": null
-        },
-        {
-          "name": "bailout",
-          "label": "bailout",
-          "type": "float",
-          "control": "slider",
-          "default": 4,
-          "min": 1,
-          "max": 16,
-          "choices": null
-        },
-        {
-          "name": "speed",
-          "label": "speed",
-          "type": "float",
-          "control": "slider",
-          "default": 0.2,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "voiSize",
-          "label": "view size",
-          "type": "float",
-          "control": "slider",
-          "default": 0.5,
-          "min": 0.1,
-          "max": 2,
-          "choices": null
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": null,
-          "default": 0,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/fractal3d",
-      "chapter": "synth3d",
-      "slug": "fractal3d",
-      "func": "fractal3d",
-      "title": "Fractal3D",
-      "description": "3D Mandelbulb/Mandelcube fractals",
-      "tags": [
-        "3d"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\nfractal3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "type",
-          "label": "type",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mandelbulb",
-            "mandelcube",
-            "juliaBulb",
-            "juliaCube"
-          ]
-        },
-        {
-          "name": "power",
-          "label": "power",
-          "type": "float",
-          "control": "slider",
-          "default": 8,
-          "min": 2,
-          "max": 16,
-          "choices": null
-        },
-        {
-          "name": "iterations",
-          "label": "iterations",
-          "type": "int",
-          "control": "slider",
-          "default": 10,
-          "min": 1,
-          "max": 20,
-          "choices": null
-        },
-        {
-          "name": "bailout",
-          "label": "bailout",
-          "type": "float",
-          "control": "slider",
-          "default": 2,
-          "min": 1,
-          "max": 8,
-          "choices": null
-        },
-        {
-          "name": "juliaX",
-          "label": "julia x",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "juliaY",
-          "label": "julia y",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "juliaZ",
-          "label": "julia z",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "orbitTrap",
-            "iteration"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "synth3d/heightmap3d",
-      "chapter": "synth3d",
-      "slug": "heightmap3d",
-      "func": "heightmap3d",
-      "title": "Heightmap 3D",
-      "description": "Voxel heightfield from separate 2D height and color surfaces",
-      "tags": [
-        "3d"
-      ],
-      "starter": true,
-      "explicit": true,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth, synth3d, render\n\nnoise(scaleX: 90, scaleY: 90, colorMode: mono, speed: 0).write(o1)\ngradient(type: fourCorners, color1: #006e94, color2: #24e4ff, color3: #bcff46, color4: #efffff).write(o2)\nheightmap3d(heightTex: read(o1), tex: read(o2)).renderLandscape3d(panY: -0.18).write(o0)\nrender(o0)",
-      "params": [
-        {
-          "name": "heightTex",
-          "label": "height image",
-          "type": "surface",
-          "control": null,
-          "default": "none",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "tex",
-          "label": "color image",
-          "type": "surface",
-          "control": null,
-          "default": "none",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "heightScale",
-          "label": "height scale",
-          "type": "float",
-          "control": "slider",
-          "default": 0.35,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "baseHeight",
-          "label": "base height",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/noise3d",
-      "chapter": "synth3d",
-      "slug": "noise3d",
-      "func": "noise3d",
-      "title": "Noise3D",
-      "description": "3D simplex noise volume",
-      "tags": [
-        "3d",
-        "noise"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\nnoise3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "scale",
-          "label": "scale",
-          "type": "float",
-          "control": null,
-          "default": 3,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "octaves",
-          "label": "octaves",
-          "type": "int",
-          "control": null,
-          "default": 1,
-          "min": 1,
-          "max": 6,
-          "choices": null
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "rgb"
-          ]
-        },
-        {
-          "name": "ridges",
-          "label": "ridges",
-          "type": "boolean",
-          "control": null,
-          "default": false,
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": null,
-          "default": 0,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "speed",
-          "label": "speed",
-          "type": "int",
-          "control": null,
-          "default": 1,
-          "min": 0,
-          "max": 5,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/reactionDiffusion3d",
-      "chapter": "synth3d",
-      "slug": "reactionDiffusion3d",
-      "func": "reactionDiffusion3d",
-      "title": "Reaction-Diffusion 3D",
-      "description": "3D reaction-diffusion simulation",
-      "tags": [
-        "3d",
-        "sim"
-      ],
-      "starter": true,
-      "explicit": false,
-      "curated": true,
-      "curatedWhy": "the source volume only steers the reaction in proportion to its weight, and the derived program leaves the weight at 0, so choosing a source volume or geometry changed nothing",
-      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\nreactionDiffusion3d(source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 32,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "seed",
-          "label": "seed",
-          "type": "int",
-          "control": null,
-          "default": 1,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "iterations",
-          "label": "iterations",
-          "type": "int",
-          "control": "slider",
-          "default": 8,
-          "min": 1,
-          "max": 32,
-          "choices": null
-        },
-        {
-          "name": "feed",
-          "label": "feed rate",
-          "type": "float",
-          "control": "slider",
-          "default": 110,
-          "min": 10,
-          "max": 110,
-          "choices": null
-        },
-        {
-          "name": "kill",
-          "label": "kill rate",
-          "type": "float",
-          "control": "slider",
-          "default": 62,
-          "min": 45,
-          "max": 70,
-          "choices": null
-        },
-        {
-          "name": "rate1",
-          "label": "diffuse rate a",
-          "type": "float",
-          "control": "slider",
-          "default": 120,
-          "min": 50,
-          "max": 120,
-          "choices": null
-        },
-        {
-          "name": "rate2",
-          "label": "diffuse rate b",
-          "type": "float",
-          "control": "slider",
-          "default": 30,
-          "min": 20,
-          "max": 80,
-          "choices": null
-        },
-        {
-          "name": "speed",
-          "label": "sim speed",
-          "type": "int",
-          "control": "slider",
-          "default": 100,
-          "min": 10,
-          "max": 200,
-          "choices": null
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "gradient"
-          ]
-        },
-        {
-          "name": "resetState",
-          "label": "reset",
-          "type": "boolean",
-          "control": "button",
-          "default": false,
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "source",
-          "label": "source vol",
-          "type": "volume",
-          "control": null,
-          "default": "vol0",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "geoSource",
-          "label": "source geo",
-          "type": "geometry",
-          "control": null,
-          "default": "geo0",
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "weight",
-          "label": "input weight",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": 0,
-          "max": 100,
-          "choices": null
-        }
-      ]
-    },
-    {
-      "id": "synth3d/shape3d",
-      "chapter": "synth3d",
-      "slug": "shape3d",
-      "func": "shape3d",
-      "title": "Shape3D",
-      "description": "3D polyhedral shape generator",
-      "tags": [
-        "3d",
-        "geometric"
-      ],
-      "starter": true,
-      "explicit": true,
-      "curated": false,
-      "curatedWhy": null,
-      "program": "search synth3d, filter3d, render\n\nshape3d(speedA: -2, speedB: 2)\n.render3d(threshold: 0.75)\n.write(o0)\nrender(o0)",
-      "params": [
-        {
-          "name": "volumeSize",
-          "label": "volume size",
-          "type": "int",
-          "control": "dropdown",
-          "default": 64,
-          "min": null,
-          "max": null,
-          "choices": [
-            "x16",
-            "x32",
-            "x64",
-            "x128"
-          ]
-        },
-        {
-          "name": "colorMode",
-          "label": "color mode",
-          "type": "int",
-          "control": null,
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "mono",
-            "rgb"
-          ]
-        },
-        {
-          "name": "loopAOffset",
-          "label": "loop a",
-          "type": "int",
-          "control": "dropdown",
-          "default": 40,
-          "min": null,
-          "max": null,
-          "choices": [
-            "Platonic Solids:",
-            "tetrahedron",
-            "cube",
-            "octahedron",
-            "dodecahedron",
-            "icosahedron",
-            "Other Primitives:",
-            "sphere",
-            "torus",
-            "cylinder",
-            "cone",
-            "capsule"
-          ]
-        },
-        {
-          "name": "loopBOffset",
-          "label": "loop b",
-          "type": "int",
-          "control": "dropdown",
-          "default": 30,
-          "min": null,
-          "max": null,
-          "choices": [
-            "Platonic Solids:",
-            "tetrahedron",
-            "cube",
-            "octahedron",
-            "dodecahedron",
-            "icosahedron",
-            "Other Primitives:",
-            "sphere",
-            "torus",
-            "cylinder",
-            "cone",
-            "capsule"
-          ]
-        },
-        {
-          "name": "loopAScale",
-          "label": "a scale",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "loopBScale",
-          "label": "b scale",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 1,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "speedA",
-          "label": "speed a",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        },
-        {
-          "name": "speedB",
-          "label": "speed b",
-          "type": "int",
-          "control": "slider",
-          "default": 1,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        }
-      ]
-    }
-  ],
-  "excludedEffects": [
-    {
-      "id": "render/meshLoader",
-      "func": "meshLoader",
-      "params": [],
-      "aliases": null
-    },
-    {
-      "id": "render/meshRender",
-      "func": "meshRender",
-      "params": [
-        {
-          "name": "scale",
-          "label": "mesh scale",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 0.01,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "offsetX",
-          "label": "mesh offset x",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        },
-        {
-          "name": "offsetY",
-          "label": "mesh offset y",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        },
-        {
-          "name": "offsetZ",
-          "label": "mesh offset z",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -5,
-          "max": 5,
-          "choices": null
-        },
-        {
-          "name": "rotateX",
-          "label": "rotate x",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -180,
-          "max": 180,
-          "choices": null
-        },
-        {
-          "name": "rotateY",
-          "label": "rotate y",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -180,
-          "max": 180,
-          "choices": null
-        },
-        {
-          "name": "rotateZ",
-          "label": "rotate z",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -180,
-          "max": 180,
-          "choices": null
-        },
-        {
-          "name": "viewScale",
-          "label": "zoom",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 0.1,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "posX",
-          "label": "position x",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -10,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "posY",
-          "label": "position y",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -10,
-          "max": 10,
-          "choices": null
-        },
-        {
-          "name": "lightDirection",
-          "label": "direction",
-          "type": "vec3",
-          "control": "vector3",
-          "default": [
-            0.5,
-            0.7,
-            0.5
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "diffuseColor",
-          "label": "color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "diffuseIntensity",
-          "label": "intensity",
-          "type": "float",
-          "control": "slider",
-          "default": 0.7,
-          "min": 0,
-          "max": 2,
-          "choices": null
-        },
-        {
-          "name": "specularColor",
-          "label": "color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            1,
-            1,
-            1
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "specularIntensity",
-          "label": "intensity",
-          "type": "float",
-          "control": "slider",
-          "default": 0.3,
-          "min": 0,
-          "max": 2,
-          "choices": null
-        },
-        {
-          "name": "shininess",
-          "label": "shininess",
-          "type": "float",
-          "control": "slider",
-          "default": 32,
-          "min": 1,
-          "max": 256,
-          "choices": null
-        },
-        {
-          "name": "ambientColor",
-          "label": "ambient color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0.1,
-            0.1,
-            0.1
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "rimIntensity",
-          "label": "rim intensity",
-          "type": "float",
-          "control": "slider",
-          "default": 0.15,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "rimPower",
-          "label": "rim power",
-          "type": "float",
-          "control": "slider",
-          "default": 3,
-          "min": 0.5,
-          "max": 8,
-          "choices": null
-        },
-        {
-          "name": "meshColor",
-          "label": "base color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0.8,
-            0.8,
-            0.8
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "bgColor",
-          "label": "bg color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0.1,
-            0.1,
-            0.15
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "bgAlpha",
-          "label": "bg opacity",
-          "type": "float",
-          "control": "slider",
-          "default": 1,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "wireframe",
-          "label": "render mode",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "solid",
-            "wireframe"
-          ]
-        }
-      ],
-      "aliases": null
-    },
-    {
-      "id": "synth/media",
-      "func": "media",
-      "params": [
-        {
-          "name": "position",
-          "label": "position",
-          "type": "int",
-          "control": "dropdown",
-          "default": 4,
-          "min": null,
-          "max": null,
-          "choices": [
-            "topLeft",
-            "topCenter",
-            "topRight",
-            "midLeft",
-            "midCenter",
-            "midRight",
-            "bottomLeft",
-            "bottomCenter",
-            "bottomRight"
-          ]
-        },
-        {
-          "name": "tiling",
-          "label": "tiling",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "none",
-            "horizAndVert",
-            "horizOnly",
-            "vertOnly"
-          ]
-        },
-        {
-          "name": "flip",
-          "label": "flip/mirror",
-          "type": "int",
-          "control": "dropdown",
-          "default": 0,
-          "min": null,
-          "max": null,
-          "choices": [
-            "none",
-            "all",
-            "horizontal",
-            "vertical",
-            "mirrorLtoR",
-            "mirrorRtoL",
-            "mirrorUtoD",
-            "mirrorDtoU",
-            "mirrorLtoRUtoD",
-            "mirrorLtoRDtoU",
-            "mirrorRtoLUtoD",
-            "mirrorRtoLDtoU"
-          ]
-        },
-        {
-          "name": "scaleAmt",
-          "label": "scale %",
-          "type": "float",
-          "control": "slider",
-          "default": 100,
-          "min": 25,
-          "max": 400,
-          "choices": null
-        },
-        {
-          "name": "rotation",
-          "label": "rotate",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -180,
-          "max": 180,
-          "choices": null
-        },
-        {
-          "name": "offsetX",
-          "label": "offset x",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "offsetY",
-          "label": "offset y",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": -100,
-          "max": 100,
-          "choices": null
-        },
-        {
-          "name": "bgColor",
-          "label": "bg color",
-          "type": "color",
-          "control": "color",
-          "default": [
-            0,
-            0,
-            0
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        },
-        {
-          "name": "bgAlpha",
-          "label": "bg opacity",
-          "type": "float",
-          "control": "slider",
-          "default": 0,
-          "min": 0,
-          "max": 1,
-          "choices": null
-        },
-        {
-          "name": "imageSize",
-          "label": "imageSize",
-          "type": "vec2",
-          "control": null,
-          "default": [
-            1024,
-            1024
-          ],
-          "min": null,
-          "max": null,
-          "choices": null
-        }
-      ],
-      "aliases": null
-    },
-    {
       "id": "synth/remap",
+      "chapter": "synth",
+      "slug": "remap",
       "func": "remap",
+      "title": "Remap",
+      "description": "Polygon zones routed to engine surfaces (companion to the Remap zone-editor app)",
+      "tags": [
+        "geometric",
+        "blend"
+      ],
+      "starter": true,
+      "explicit": true,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth\n\nnoise(ridges: true).write(o1)\nperlin(scale: 50).write(o2)\n\nremap(bgColor: #336699, bgAlpha: 1, zoneCount: 8, smoothEdge: 0.1,\n  zone0_tex: read(o1), zone0_count: 4, zone0_v0: [0.2, 0.44, 0.04, 0.46], zone0_v1: [0.06, 0.06, 0.22, 0.04],\n  zone1_tex: read(o2), zone1_count: 4, zone1_v0: [0.46, 0.44, 0.28, 0.44], zone1_v1: [0.28, 0.06, 0.46, 0.06],\n  zone2_tex: read(o1), zone2_count: 4, zone2_v0: [0.72, 0.44, 0.52, 0.42], zone2_v1: [0.5, 0.06, 0.7, 0.08],\n  zone3_tex: read(o2), zone3_count: 4, zone3_v0: [0.92, 0.44, 0.76, 0.46], zone3_v1: [0.78, 0.06, 0.94, 0.04],\n  zone4_tex: read(o1), zone4_count: 4, zone4_v0: [0.22, 0.94, 0.04, 0.94], zone4_v1: [0.04, 0.56, 0.22, 0.56],\n  zone5_tex: read(o2), zone5_count: 4, zone5_v0: [0.48, 0.94, 0.28, 0.92], zone5_v1: [0.26, 0.56, 0.46, 0.58],\n  zone6_tex: read(o1), zone6_count: 4, zone6_v0: [0.68, 0.94, 0.52, 0.96], zone6_v1: [0.54, 0.56, 0.7, 0.54],\n  zone7_tex: read(o2), zone7_count: 4, zone7_v0: [0.94, 0.94, 0.76, 0.94], zone7_v1: [0.76, 0.56, 0.94, 0.56]\n).write(o0)\nrender(o0)",
       "params": [
         {
           "name": "zoneCount",
@@ -21489,6 +19616,1892 @@
             0,
             0,
             0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth/sacredGeometry",
+      "chapter": "synth",
+      "slug": "sacredGeometry",
+      "func": "sacredGeometry",
+      "title": "SacredGeometry",
+      "description": "Flower-of-life and related sacred-geometry lattices",
+      "tags": [
+        "geometric",
+        "pattern"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth\n\nsacredGeometry()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "geometry",
+          "label": "geometry",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "borromean",
+            "flower",
+            "fruit",
+            "metatron",
+            "seed",
+            "starPolygon",
+            "triquetra",
+            "vesica"
+          ]
+        },
+        {
+          "name": "scale",
+          "label": "scale",
+          "type": "float",
+          "control": "slider",
+          "default": 10,
+          "min": 1,
+          "max": 20,
+          "choices": null
+        },
+        {
+          "name": "rings",
+          "label": "rings",
+          "type": "int",
+          "control": "slider",
+          "default": 3,
+          "min": 1,
+          "max": 6,
+          "choices": null
+        },
+        {
+          "name": "starPoints",
+          "label": "points",
+          "type": "int",
+          "control": "slider",
+          "default": 5,
+          "min": 5,
+          "max": 12,
+          "choices": null
+        },
+        {
+          "name": "rotation",
+          "label": "rotation",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "thickness",
+          "label": "thickness",
+          "type": "float",
+          "control": "slider",
+          "default": 0.2,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "smoothness",
+          "label": "smoothness",
+          "type": "float",
+          "control": "slider",
+          "default": 0.02,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "fgColor",
+          "label": "fg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "bg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "animation",
+          "label": "animation",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "none",
+            "pulse",
+            "ripple",
+            "rotate",
+            "unfold"
+          ]
+        },
+        {
+          "name": "speed",
+          "label": "speed",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "pulseDepth",
+          "label": "depth",
+          "type": "float",
+          "control": "slider",
+          "default": 0.15,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth/shape",
+      "chapter": "synth",
+      "slug": "shape",
+      "func": "shape",
+      "title": "Shape",
+      "description": "Interference patterns from geometric shapes",
+      "tags": [
+        "geometric"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth\n\nshape()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "loopAOffset",
+          "label": "loop a",
+          "type": "int",
+          "control": "dropdown",
+          "default": 40,
+          "min": null,
+          "max": null,
+          "choices": [
+            "Shapes:",
+            "circle",
+            "triangle",
+            "diamond",
+            "square",
+            "pentagon",
+            "hexagon",
+            "heptagon",
+            "octagon",
+            "nonagon",
+            "decagon",
+            "hendecagon",
+            "dodecagon",
+            "Directional:",
+            "horizontalScan",
+            "verticalScan",
+            "Noise:",
+            "noiseConstant",
+            "noiseLinear",
+            "noiseHermite",
+            "noiseCatmullRom3x3",
+            "noiseCatmullRom4x4",
+            "noiseBSpline3x3",
+            "noiseBSpline4x4",
+            "noiseSimplex",
+            "noiseSine",
+            "Misc:",
+            "rings",
+            "sine"
+          ]
+        },
+        {
+          "name": "loopBOffset",
+          "label": "loop b",
+          "type": "int",
+          "control": "dropdown",
+          "default": 30,
+          "min": null,
+          "max": null,
+          "choices": [
+            "Shapes:",
+            "circle",
+            "triangle",
+            "diamond",
+            "square",
+            "pentagon",
+            "hexagon",
+            "heptagon",
+            "octagon",
+            "nonagon",
+            "decagon",
+            "hendecagon",
+            "dodecagon",
+            "Directional:",
+            "horizontalScan",
+            "verticalScan",
+            "Noise:",
+            "noiseConstant",
+            "noiseLinear",
+            "noiseHermite",
+            "noiseCatmullRom3x3",
+            "noiseCatmullRom4x4",
+            "noiseBSpline3x3",
+            "noiseBSpline4x4",
+            "noiseSimplex",
+            "noiseSine",
+            "Misc:",
+            "rings",
+            "sine"
+          ]
+        },
+        {
+          "name": "loopAScale",
+          "label": "a scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "loopBScale",
+          "label": "b scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "speedA",
+          "label": "speed a",
+          "type": "int",
+          "control": "slider",
+          "default": 50,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "speedB",
+          "label": "speed b",
+          "type": "int",
+          "control": "slider",
+          "default": 50,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "seed",
+          "label": "noise seed",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "wrap",
+          "label": "wrap",
+          "type": "boolean",
+          "control": "checkbox",
+          "default": true,
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth/solid",
+      "chapter": "synth",
+      "slug": "solid",
+      "func": "solid",
+      "title": "Solid",
+      "description": "Solid color fill",
+      "tags": [
+        "color"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth\n\nsolid()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "color",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "alpha",
+          "label": "opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth/subdivide",
+      "chapter": "synth",
+      "slug": "subdivide",
+      "func": "subdivide",
+      "title": "Subdivide",
+      "description": "Recursive grid subdivision with shapes",
+      "tags": [
+        "geometric",
+        "pattern"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": true,
+      "curatedWhy": "the input texture only shows through in proportion to inputMix, and the derived program leaves it at 0; wrap only shows where a cell's shape differs from the frame's, which needs binary splits",
+      "program": "search synth\n\nnoise(seed: 1, ridges: true)\n  .write(o0)\n\nsubdivide(tex: read(o0), mode: binary, inputMix: 50)\n  .write(o1)\n\nrender(o1)\n",
+      "params": [
+        {
+          "name": "tex",
+          "label": "texture",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "mode",
+          "label": "mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "choices": [
+            "binary",
+            "quad"
+          ]
+        },
+        {
+          "name": "depth",
+          "label": "depth",
+          "type": "int",
+          "control": "slider",
+          "default": 5,
+          "min": 1,
+          "max": 6,
+          "choices": null
+        },
+        {
+          "name": "density",
+          "label": "density",
+          "type": "float",
+          "control": "slider",
+          "default": 75,
+          "min": 30,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": "slider",
+          "default": 69,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "fill",
+          "label": "fill",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "solid",
+            "circle",
+            "diamond",
+            "square",
+            "arc",
+            "mixed"
+          ]
+        },
+        {
+          "name": "outline",
+          "label": "outline",
+          "type": "float",
+          "control": "slider",
+          "default": 3,
+          "min": 0,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "inputMix",
+          "label": "input mix",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "speed",
+          "label": "speed",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 20,
+          "choices": null
+        },
+        {
+          "name": "wrap",
+          "label": "wrap",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mirror",
+            "repeat",
+            "clamp"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synth/testPattern",
+      "chapter": "synth",
+      "slug": "testPattern",
+      "func": "testPattern",
+      "title": "Test Pattern",
+      "description": "Test patterns for debugging and calibration",
+      "tags": [
+        "util"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth\n\ntestPattern()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "pattern",
+          "label": "pattern",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "checkerboard",
+            "colorBars",
+            "gradient",
+            "uvMap",
+            "gridLines",
+            "colorGrid",
+            "dotGrid"
+          ]
+        },
+        {
+          "name": "gridSize",
+          "label": "grid size",
+          "type": "int",
+          "control": "slider",
+          "default": 4,
+          "min": 1,
+          "max": 16,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/cell3d",
+      "chapter": "synth3d",
+      "slug": "cell3d",
+      "func": "cell3d",
+      "title": "Cell3D",
+      "description": "3D cellular/Voronoi noise volume",
+      "tags": [
+        "3d",
+        "noise"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth3d, filter3d, render\n\ncell3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "metric",
+          "label": "cell shape",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "sphere",
+            "octahedron",
+            "cube"
+          ]
+        },
+        {
+          "name": "scale",
+          "label": "cell scale",
+          "type": "float",
+          "control": null,
+          "default": 10,
+          "min": 1,
+          "max": 15,
+          "choices": null
+        },
+        {
+          "name": "variation",
+          "label": "cell variation",
+          "type": "float",
+          "control": null,
+          "default": 100,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": null,
+          "default": 1,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "rgb"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synth3d/cellularAutomata3d",
+      "chapter": "synth3d",
+      "slug": "cellularAutomata3d",
+      "func": "cellularAutomata3d",
+      "title": "Cellular Automata 3D",
+      "description": "3D cellular automata simulation",
+      "tags": [
+        "3d",
+        "sim"
+      ],
+      "starter": true,
+      "explicit": true,
+      "curated": true,
+      "curatedWhy": "the derived program gives the automaton no source volume and a weight of 0, so choosing a source volume or geometry changed nothing",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\ncellularAutomata3d(ruleIndex: diamoeba, source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 32,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": null,
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "ruleIndex",
+          "label": "rules",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "rule445M",
+            "rule678",
+            "amoeba",
+            "builder1",
+            "builder2",
+            "clouds",
+            "crystalGrowth",
+            "diamoeba",
+            "pyroclastic",
+            "slowDecay",
+            "spikeyGrowth"
+          ]
+        },
+        {
+          "name": "neighborMode",
+          "label": "neighborhood",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "moore",
+            "vonNeumann"
+          ]
+        },
+        {
+          "name": "speed",
+          "label": "sim speed",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "density",
+          "label": "density",
+          "type": "float",
+          "control": "slider",
+          "default": 50,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "age"
+          ]
+        },
+        {
+          "name": "resetState",
+          "label": "reset",
+          "type": "boolean",
+          "control": "button",
+          "default": false,
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "source",
+          "label": "source vol",
+          "type": "volume",
+          "control": null,
+          "default": "vol0",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "geoSource",
+          "label": "source geo",
+          "type": "geometry",
+          "control": null,
+          "default": "geo0",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "weight",
+          "label": "input weight",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/flythrough3d",
+      "chapter": "synth3d",
+      "slug": "flythrough3d",
+      "func": "flythrough3d",
+      "title": "Flythrough3D",
+      "description": "3D fractal flythrough with camera-relative volume",
+      "tags": [
+        "3d",
+        "fractal"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth3d, filter3d, render\n\nflythrough3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "type",
+          "label": "fractal type",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mandelbulb",
+            "mandelbox"
+          ]
+        },
+        {
+          "name": "power",
+          "label": "power/scale",
+          "type": "float",
+          "control": "slider",
+          "default": 8,
+          "min": -3,
+          "max": 16,
+          "choices": null
+        },
+        {
+          "name": "iterations",
+          "label": "iterations",
+          "type": "int",
+          "control": "slider",
+          "default": 12,
+          "min": 4,
+          "max": 24,
+          "choices": null
+        },
+        {
+          "name": "bailout",
+          "label": "bailout",
+          "type": "float",
+          "control": "slider",
+          "default": 4,
+          "min": 1,
+          "max": 16,
+          "choices": null
+        },
+        {
+          "name": "speed",
+          "label": "speed",
+          "type": "float",
+          "control": "slider",
+          "default": 0.2,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "voiSize",
+          "label": "view size",
+          "type": "float",
+          "control": "slider",
+          "default": 0.5,
+          "min": 0.1,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": null,
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/fractal3d",
+      "chapter": "synth3d",
+      "slug": "fractal3d",
+      "func": "fractal3d",
+      "title": "Fractal3D",
+      "description": "3D Mandelbulb/Mandelcube fractals",
+      "tags": [
+        "3d"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth3d, filter3d, render\n\nfractal3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "type",
+          "label": "type",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mandelbulb",
+            "mandelcube",
+            "juliaBulb",
+            "juliaCube"
+          ]
+        },
+        {
+          "name": "power",
+          "label": "power",
+          "type": "float",
+          "control": "slider",
+          "default": 8,
+          "min": 2,
+          "max": 16,
+          "choices": null
+        },
+        {
+          "name": "iterations",
+          "label": "iterations",
+          "type": "int",
+          "control": "slider",
+          "default": 10,
+          "min": 1,
+          "max": 20,
+          "choices": null
+        },
+        {
+          "name": "bailout",
+          "label": "bailout",
+          "type": "float",
+          "control": "slider",
+          "default": 2,
+          "min": 1,
+          "max": 8,
+          "choices": null
+        },
+        {
+          "name": "juliaX",
+          "label": "julia x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "juliaY",
+          "label": "julia y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "juliaZ",
+          "label": "julia z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "orbitTrap",
+            "iteration"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synth3d/heightmap3d",
+      "chapter": "synth3d",
+      "slug": "heightmap3d",
+      "func": "heightmap3d",
+      "title": "Heightmap 3D",
+      "description": "Voxel heightfield from separate 2D height and color surfaces",
+      "tags": [
+        "3d"
+      ],
+      "starter": true,
+      "explicit": true,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth, synth3d, render\n\nnoise(scaleX: 90, scaleY: 90, colorMode: mono, speed: 0).write(o1)\ngradient(type: fourCorners, color1: #006e94, color2: #24e4ff, color3: #bcff46, color4: #efffff).write(o2)\nheightmap3d(heightTex: read(o1), tex: read(o2)).renderLandscape3d(panY: -0.18).write(o0)\nrender(o0)",
+      "params": [
+        {
+          "name": "heightTex",
+          "label": "height image",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "tex",
+          "label": "color image",
+          "type": "surface",
+          "control": null,
+          "default": "none",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "heightScale",
+          "label": "height scale",
+          "type": "float",
+          "control": "slider",
+          "default": 0.35,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "baseHeight",
+          "label": "base height",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/noise3d",
+      "chapter": "synth3d",
+      "slug": "noise3d",
+      "func": "noise3d",
+      "title": "Noise3D",
+      "description": "3D simplex noise volume",
+      "tags": [
+        "3d",
+        "noise"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth3d, filter3d, render\n\nnoise3d()\n  .render3d()\n  .write(o0)\n\nrender(o0)",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "scale",
+          "label": "scale",
+          "type": "float",
+          "control": null,
+          "default": 3,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "octaves",
+          "label": "octaves",
+          "type": "int",
+          "control": null,
+          "default": 1,
+          "min": 1,
+          "max": 6,
+          "choices": null
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "rgb"
+          ]
+        },
+        {
+          "name": "ridges",
+          "label": "ridges",
+          "type": "boolean",
+          "control": null,
+          "default": false,
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": null,
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "speed",
+          "label": "speed",
+          "type": "int",
+          "control": null,
+          "default": 1,
+          "min": 0,
+          "max": 5,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/reactionDiffusion3d",
+      "chapter": "synth3d",
+      "slug": "reactionDiffusion3d",
+      "func": "reactionDiffusion3d",
+      "title": "Reaction-Diffusion 3D",
+      "description": "3D reaction-diffusion simulation",
+      "tags": [
+        "3d",
+        "sim"
+      ],
+      "starter": true,
+      "explicit": false,
+      "curated": true,
+      "curatedWhy": "the source volume only steers the reaction in proportion to its weight, and the derived program leaves the weight at 0, so choosing a source volume or geometry changed nothing",
+      "program": "search synth3d, render\n\nnoise3d(volumeSize: x32)\n  .write3d(vol0, geo0)\n\nreactionDiffusion3d(source: read3d(vol0), geoSource: read3d(geo0), weight: 50)\n  .render3d()\n  .write(o0)\n\nrender(o0)\n",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 32,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "seed",
+          "label": "seed",
+          "type": "int",
+          "control": null,
+          "default": 1,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "iterations",
+          "label": "iterations",
+          "type": "int",
+          "control": "slider",
+          "default": 8,
+          "min": 1,
+          "max": 32,
+          "choices": null
+        },
+        {
+          "name": "feed",
+          "label": "feed rate",
+          "type": "float",
+          "control": "slider",
+          "default": 110,
+          "min": 10,
+          "max": 110,
+          "choices": null
+        },
+        {
+          "name": "kill",
+          "label": "kill rate",
+          "type": "float",
+          "control": "slider",
+          "default": 62,
+          "min": 45,
+          "max": 70,
+          "choices": null
+        },
+        {
+          "name": "rate1",
+          "label": "diffuse rate a",
+          "type": "float",
+          "control": "slider",
+          "default": 120,
+          "min": 50,
+          "max": 120,
+          "choices": null
+        },
+        {
+          "name": "rate2",
+          "label": "diffuse rate b",
+          "type": "float",
+          "control": "slider",
+          "default": 30,
+          "min": 20,
+          "max": 80,
+          "choices": null
+        },
+        {
+          "name": "speed",
+          "label": "sim speed",
+          "type": "int",
+          "control": "slider",
+          "default": 100,
+          "min": 10,
+          "max": 200,
+          "choices": null
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "gradient"
+          ]
+        },
+        {
+          "name": "resetState",
+          "label": "reset",
+          "type": "boolean",
+          "control": "button",
+          "default": false,
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "source",
+          "label": "source vol",
+          "type": "volume",
+          "control": null,
+          "default": "vol0",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "geoSource",
+          "label": "source geo",
+          "type": "geometry",
+          "control": null,
+          "default": "geo0",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "weight",
+          "label": "input weight",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 100,
+          "choices": null
+        }
+      ]
+    },
+    {
+      "id": "synth3d/shape3d",
+      "chapter": "synth3d",
+      "slug": "shape3d",
+      "func": "shape3d",
+      "title": "Shape3D",
+      "description": "3D polyhedral shape generator",
+      "tags": [
+        "3d",
+        "geometric"
+      ],
+      "starter": true,
+      "explicit": true,
+      "curated": false,
+      "curatedWhy": null,
+      "program": "search synth3d, filter3d, render\n\nshape3d(speedA: -2, speedB: 2)\n.render3d(threshold: 0.75)\n.write(o0)\nrender(o0)",
+      "params": [
+        {
+          "name": "volumeSize",
+          "label": "volume size",
+          "type": "int",
+          "control": "dropdown",
+          "default": 64,
+          "min": null,
+          "max": null,
+          "choices": [
+            "x16",
+            "x32",
+            "x64",
+            "x128"
+          ]
+        },
+        {
+          "name": "colorMode",
+          "label": "color mode",
+          "type": "int",
+          "control": null,
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "mono",
+            "rgb"
+          ]
+        },
+        {
+          "name": "loopAOffset",
+          "label": "loop a",
+          "type": "int",
+          "control": "dropdown",
+          "default": 40,
+          "min": null,
+          "max": null,
+          "choices": [
+            "Platonic Solids:",
+            "tetrahedron",
+            "cube",
+            "octahedron",
+            "dodecahedron",
+            "icosahedron",
+            "Other Primitives:",
+            "sphere",
+            "torus",
+            "cylinder",
+            "cone",
+            "capsule"
+          ]
+        },
+        {
+          "name": "loopBOffset",
+          "label": "loop b",
+          "type": "int",
+          "control": "dropdown",
+          "default": 30,
+          "min": null,
+          "max": null,
+          "choices": [
+            "Platonic Solids:",
+            "tetrahedron",
+            "cube",
+            "octahedron",
+            "dodecahedron",
+            "icosahedron",
+            "Other Primitives:",
+            "sphere",
+            "torus",
+            "cylinder",
+            "cone",
+            "capsule"
+          ]
+        },
+        {
+          "name": "loopAScale",
+          "label": "a scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "loopBScale",
+          "label": "b scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 1,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "speedA",
+          "label": "speed a",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "speedB",
+          "label": "speed b",
+          "type": "int",
+          "control": "slider",
+          "default": 1,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        }
+      ]
+    }
+  ],
+  "excludedEffects": [
+    {
+      "id": "render/meshLoader",
+      "func": "meshLoader",
+      "params": [],
+      "aliases": null
+    },
+    {
+      "id": "render/meshRender",
+      "func": "meshRender",
+      "params": [
+        {
+          "name": "scale",
+          "label": "mesh scale",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.01,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "offsetX",
+          "label": "mesh offset x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "offsetY",
+          "label": "mesh offset y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "offsetZ",
+          "label": "mesh offset z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -5,
+          "max": 5,
+          "choices": null
+        },
+        {
+          "name": "rotateX",
+          "label": "rotate x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "rotateY",
+          "label": "rotate y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "rotateZ",
+          "label": "rotate z",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "viewScale",
+          "label": "zoom",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0.1,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "posX",
+          "label": "position x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -10,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "posY",
+          "label": "position y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -10,
+          "max": 10,
+          "choices": null
+        },
+        {
+          "name": "lightDirection",
+          "label": "direction",
+          "type": "vec3",
+          "control": "vector3",
+          "default": [
+            0.5,
+            0.7,
+            0.5
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "diffuseColor",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "diffuseIntensity",
+          "label": "intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.7,
+          "min": 0,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "specularColor",
+          "label": "color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            1,
+            1,
+            1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "specularIntensity",
+          "label": "intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.3,
+          "min": 0,
+          "max": 2,
+          "choices": null
+        },
+        {
+          "name": "shininess",
+          "label": "shininess",
+          "type": "float",
+          "control": "slider",
+          "default": 32,
+          "min": 1,
+          "max": 256,
+          "choices": null
+        },
+        {
+          "name": "ambientColor",
+          "label": "ambient color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "rimIntensity",
+          "label": "rim intensity",
+          "type": "float",
+          "control": "slider",
+          "default": 0.15,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "rimPower",
+          "label": "rim power",
+          "type": "float",
+          "control": "slider",
+          "default": 3,
+          "min": 0.5,
+          "max": 8,
+          "choices": null
+        },
+        {
+          "name": "meshColor",
+          "label": "base color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "bg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0.1,
+            0.1,
+            0.15
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "bg opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "wireframe",
+          "label": "render mode",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "solid",
+            "wireframe"
+          ]
+        }
+      ],
+      "aliases": null
+    },
+    {
+      "id": "synth/media",
+      "func": "media",
+      "params": [
+        {
+          "name": "position",
+          "label": "position",
+          "type": "int",
+          "control": "dropdown",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "choices": [
+            "topLeft",
+            "topCenter",
+            "topRight",
+            "midLeft",
+            "midCenter",
+            "midRight",
+            "bottomLeft",
+            "bottomCenter",
+            "bottomRight"
+          ]
+        },
+        {
+          "name": "tiling",
+          "label": "tiling",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "none",
+            "horizAndVert",
+            "horizOnly",
+            "vertOnly"
+          ]
+        },
+        {
+          "name": "flip",
+          "label": "flip/mirror",
+          "type": "int",
+          "control": "dropdown",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "choices": [
+            "none",
+            "all",
+            "horizontal",
+            "vertical",
+            "mirrorLtoR",
+            "mirrorRtoL",
+            "mirrorUtoD",
+            "mirrorDtoU",
+            "mirrorLtoRUtoD",
+            "mirrorLtoRDtoU",
+            "mirrorRtoLUtoD",
+            "mirrorRtoLDtoU"
+          ]
+        },
+        {
+          "name": "scaleAmt",
+          "label": "scale %",
+          "type": "float",
+          "control": "slider",
+          "default": 100,
+          "min": 25,
+          "max": 400,
+          "choices": null
+        },
+        {
+          "name": "rotation",
+          "label": "rotate",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -180,
+          "max": 180,
+          "choices": null
+        },
+        {
+          "name": "offsetX",
+          "label": "offset x",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "offsetY",
+          "label": "offset y",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": -100,
+          "max": 100,
+          "choices": null
+        },
+        {
+          "name": "bgColor",
+          "label": "bg color",
+          "type": "color",
+          "control": "color",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        {
+          "name": "bgAlpha",
+          "label": "bg opacity",
+          "type": "float",
+          "control": "slider",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "choices": null
+        },
+        {
+          "name": "imageSize",
+          "label": "imageSize",
+          "type": "vec2",
+          "control": null,
+          "default": [
+            1024,
+            1024
           ],
           "min": null,
           "max": null,

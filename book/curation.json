@@ -12,7 +12,6 @@
   ],
   "exclude": {
     "synth/media": "needs a file, a camera or a screen share to show anything; a book page has none of them",
-    "synth/remap": "the default program wires no zones, so the page would show a background colour and nothing else",
     "synth/roll": "needs a MIDI keyboard attached and someone playing it",
     "synth/scope": "needs microphone access, which a reader turning pages should not be asked for",
     "synth/spectrum": "needs microphone access, which a reader turning pages should not be asked for",
