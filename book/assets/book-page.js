@@ -342,6 +342,12 @@ function installKeyboardNav() {
  * ------------------------------------------------------------------ */
 
 async function main() {
+    // The editor sizes each line number to its line's rendered height, and
+    // measures again only when its value or its own box changes. A code font
+    // that lands later re-wraps the long lines and changes neither, which would
+    // leave the numbers beside the wrong rows.
+    document.fonts.addEventListener('loadingdone', () => editor.syncDisplay())
+
     editor.setTokenizer?.(dslTokenizer)
     editor.value = page.program
     sizeEditorToProgram()

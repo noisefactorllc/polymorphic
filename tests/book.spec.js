@@ -141,6 +141,48 @@ test.describe('The Book of Polymorphic DSL', () => {
         expect(edited.searchParams.get('dsl')).toContain('seed: 42')
     })
 
+    // A wrapped line's number has to sit beside that line. The editor sizes each
+    // number to its line's rendered height, and the code font changes how many
+    // rows a long line wraps to. The page's boot waits on document.fonts.ready,
+    // but that resolves at once when no font load has started yet, so a boot can
+    // finish before the font lands. That order depends on timing, so this makes
+    // it certain: the boot is let past the wait and both code fonts are held.
+    test('line numbers stay beside their lines when the code font lands after boot', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(document.fonts, 'ready', { get: () => Promise.resolve(document.fonts) })
+        })
+        let releaseFonts
+        const fontsHeld = new Promise(resolve => { releaseFonts = resolve })
+        await page.route(/noto-sans-mono\/NotoSansMono/, async route => {
+            await fontsHeld
+            await route.continue()
+        })
+
+        // Not 'load': the held fonts would keep the load event from firing.
+        await page.goto('/book/points/heightGrid/', { waitUntil: 'domcontentloaded' })
+        await page.waitForFunction(() => document.body.dataset.bookReady, null, { timeout: 45000 })
+
+        const rows = () => page.evaluate(() => {
+            const editor = document.getElementById('dsl-editor')
+            const numbers = [...editor.querySelectorAll('.code-editor-gutter .line-number')]
+            const lines = [...editor.querySelectorAll('.code-editor-display .code-line')]
+            return {
+                tallest: Math.max(...lines.map(line => line.getBoundingClientRect().height)),
+                drift: Math.max(...lines.map((line, i) => Math.abs(
+                    line.getBoundingClientRect().top - numbers[i].getBoundingClientRect().top,
+                ))),
+            }
+        })
+        const before = await rows()
+
+        releaseFonts()
+        await page.waitForFunction(() => document.fonts.check('14px "Noto Sans Mono"'))
+
+        // The font has to have changed the wrapping, or this proved nothing.
+        await expect.poll(async () => (await rows()).tallest).toBeGreaterThan(before.tallest)
+        await expect.poll(async () => (await rows()).drift).toBeLessThanOrEqual(1)
+    })
+
     test('a control moved in the panel writes back to the program', async ({ page }) => {
         // Round trip: the panel writes through ProgramState, which updates the
         // running pipeline directly, and the program text on the page has to
