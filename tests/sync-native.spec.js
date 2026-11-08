@@ -79,6 +79,21 @@ test('native receiver accepts odd webgl2 frame geometry through the fallback que
     await acceptNativeReceiverBytes(page)
 })
 
+// Two reactionDiffusion instances in one chain used to share one state
+// texture and one zoom size; the engine now gives each instance its own.
+// This leg drives the same native receiver with exactly that program, so
+// the receiver must accept the real rendered bytes that the per-instance
+// pipeline produces on WebGL2.
+const statefulDsl = 'search synth, mixer\nreactionDiffusion(zoom: x4).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)\nrender(o0)'
+const statefulSetup = (page, fullApp, backend) => setup(page, fullApp, backend, statefulDsl)
+const connectStatefulReceiver = createNativeReceiverConnect(statefulSetup, getEndpoint)
+
+test('native receiver accepts webgl2 stateful-instance bytes while audio and video share the grant', async ({ page }) => {
+    test.slow()
+    await connectStatefulReceiver(page, 'webgl2')
+    await acceptNativeReceiverBytes(page)
+})
+
 test('the receiver acceptance poll rides out a lifecycle close mid-poll', async ({ page }) => {
     test.slow()
     await connectNativeReceiver(page, 'webgl2')

@@ -31,3 +31,17 @@ test('native receiver accepts webgpu text-effect bytes while audio and video sha
     test.slow()
     await runTextReceiverTest(page, 'webgpu')
 })
+
+// Two reactionDiffusion instances in one chain used to share one state
+// texture and one zoom size; the engine now gives each instance its own.
+// This leg drives the same native receiver with exactly that program, so
+// the receiver must accept the real rendered bytes that the per-instance
+// pipeline produces on WebGPU.
+const statefulDsl = 'search synth, mixer\nreactionDiffusion(zoom: x4).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)\nrender(o0)'
+const statefulSetup = (page, fullApp, backend) => createSetup(getEndpoint)(page, fullApp, backend, statefulDsl)
+const runStatefulReceiverTest = createNativeReceiverTest(statefulSetup, getEndpoint)
+
+test('native receiver accepts webgpu stateful-instance bytes while audio and video share the grant', async ({ page }) => {
+    test.slow()
+    await runStatefulReceiverTest(page, 'webgpu')
+})
