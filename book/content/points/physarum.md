@@ -14,6 +14,11 @@ researchers laid out food in the shape of Tokyo's rail stations.
 The sensor angle is the main control. Narrow, and a particle only notices what
 is straight ahead, so the network runs tight and stringy. Wide, and it branches.
 
+A picture can take part too. `inputWeight` draws the particles toward its bright
+areas and slows them down there. That picture is the pipeline image unless
+`heightTex` names another, and `diffuseTex` colours each particle from the
+surface beneath it.
+
 Further reading:
 - Physarum polycephalum | https://en.wikipedia.org/wiki/Physarum_polycephalum
 - Sage Jenson, Physarum | https://cargocollective.com/sagejenson/physarum

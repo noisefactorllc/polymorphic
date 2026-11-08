@@ -15,6 +15,11 @@ removes particles evenly across the whole set rather than in blocks. The ortho
 view mode rotates and projects all three coordinates, which is how the same
 renderer handles the 3D behaviours.
 
+The `perspective` view mode adds a camera. Distant particles crowd toward the
+middle of the frame, `fieldOfView` sets the lens, and `posZ` moves through the
+scene. Each particle still lands as a single pixel however close it gets, since
+`pointsBillboardRender()` is the one that gives them a size.
+
 Further reading:
 - Particle system | https://en.wikipedia.org/wiki/Particle_system
 - Golden ratio | https://en.wikipedia.org/wiki/Golden_ratio

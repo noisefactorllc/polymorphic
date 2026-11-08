@@ -15,6 +15,10 @@ was directed.
 Each particle carries a small personal offset so that two in the same tone do
 not lie exactly on top of one another.
 
+The picture doing the steering is the one coming down the pipeline unless
+`heightTex` names another. `diffuseTex` colours each particle from the surface
+beneath it, so one image can direct the strokes while a second paints them.
+
 Further reading:
 - Vector field | https://en.wikipedia.org/wiki/Vector_field
 - Line integral convolution | https://en.wikipedia.org/wiki/Line_integral_convolution

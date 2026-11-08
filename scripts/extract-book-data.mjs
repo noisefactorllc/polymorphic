@@ -3,7 +3,7 @@
  * Extract the Book of Polymorphic DSL's effect data from the shipped engine.
  *
  * The book demonstrates one default program per effect. Those programs are not
- * a hand-maintained list: the engine derives them. 53 effects carry an explicit
+ * a hand-maintained list: the engine derives them. Some effects carry an explicit
  * `defaultProgram` string on their definition; the rest are derived from the
  * effect's shape (starter / tex param / vol+geo / points / 3D) by the same
  * routine Noisedeck uses in its effect browser. This script runs that routine
@@ -67,7 +67,7 @@ const CHAPTERS = [
         id: 'points',
         title: 'Points',
         subtitle: 'Agents and Particles',
-        blurb: 'State held in a texture and stepped every frame. Flocks, slime moulds, fluid, and life.',
+        blurb: 'State held in a texture and stepped every frame. Flocks, slime moulds, fluid, life, and landscapes.',
     },
     {
         id: 'render',

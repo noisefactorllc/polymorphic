@@ -15,6 +15,10 @@ The table comes from the seed, so a given seed always grows the same ecology and
 the seed next door grows a completely different one. Nothing here models
 chemistry. The resemblance to life comes from the asymmetry alone.
 
+`diffuseTex` swaps the type colours for whatever a surface holds beneath each
+particle. It changes nothing about how they behave, only whether you can tell
+who is who.
+
 Further reading:
 - Artificial life | https://en.wikipedia.org/wiki/Artificial_life
 - Emergence | https://en.wikipedia.org/wiki/Emergence

@@ -14,6 +14,9 @@ collapses to a dot. Too much shove and it disperses into nothing. In the narrow
 band between, the particles arrange themselves into membranes and rings that
 stay coherent while moving. Nothing in the rules describes an organism.
 
+`diffuseTex` colours each particle from the surface beneath it, so a drifting
+blob takes on the colours of whatever it passes over.
+
 Further reading:
 - Lenia | https://en.wikipedia.org/wiki/Lenia
 - Mordvintsev et al., Particle Lenia | https://google-research.github.io/self-organising-systems/particle-lenia/

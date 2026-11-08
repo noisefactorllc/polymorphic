@@ -1,5 +1,6 @@
 Turns a three-dimensional volume into a flat picture. This is the last stage of
-every program in the two 3D chapters.
+almost every program in the two 3D chapters; `heightmap3d()` goes to
+`renderLandscape3d()` instead.
 
 A ray is fired into the volume for each pixel on the screen and walked forward
 until it hits something. There are two modes, and they are genuinely different

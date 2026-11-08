@@ -15,6 +15,11 @@ chance of being reborn each frame, and because the timing is drawn from a
 continuous clock rather than a frame count, the respawns spread out evenly
 instead of arriving in visible waves.
 
+`layout` and `seed` are read only when a particle is born, so changing either
+leaves the current population alone until it respawns or `resetState` starts it
+over. The colour is only a beginning as well: every behaviour that follows can
+take a diffuse map and repaint its particles from it.
+
 Further reading:
 - Particle system | https://en.wikipedia.org/wiki/Particle_system
 - GPGPU | https://en.wikipedia.org/wiki/General-purpose_computing_on_graphics_processing_units

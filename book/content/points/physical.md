@@ -14,7 +14,9 @@ which is exactly what a falling raindrop or a snowflake does.
 Turn gravity negative and the same code becomes rising smoke or bubbles.
 
 The random wander is rolled fresh per particle per frame, so a stream spreads
-out as it travels instead of moving like a rigid sheet.
+out as it travels instead of moving like a rigid sheet. `diffuseTex` colours each
+particle from the surface beneath it, so a falling stream changes colour as it
+moves down through a picture.
 
 Further reading:
 - Newton's laws of motion | https://en.wikipedia.org/wiki/Newton%27s_laws_of_motion

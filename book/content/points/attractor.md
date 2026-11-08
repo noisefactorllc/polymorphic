@@ -17,6 +17,10 @@ same time, which is exactly what made these things famous.
 Particles start out in a small range and are scattered out to fit the
 attractor's much larger space on the first frame.
 
+`diffuseTex` colours the particles from a surface, read at each one's position
+and repeated across the attractor's much larger space, so the trails pick up its
+colours as they wander.
+
 Further reading:
 - Lorenz system | https://en.wikipedia.org/wiki/Lorenz_system
 - Attractor | https://en.wikipedia.org/wiki/Attractor

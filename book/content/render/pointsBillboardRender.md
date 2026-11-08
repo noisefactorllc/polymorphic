@@ -11,6 +11,13 @@ Each particle's size and rotation are worked out from its own index number, so
 the population looks varied while staying perfectly reproducible: the same seed
 gives the same arrangement every time, with nothing stored anywhere.
 
+`viewMode: perspective` stands the particles in front of a camera, so near ones
+draw larger than far ones, which is what `heightGrid()` needs. `sizeDistance` and
+`brightnessDistance` shrink and dim them away into the distance, and `aperture`
+blurs whatever sits off the plane set by `focalDistance`, the way a lens does.
+With `alpha` blending in a camera view the particles are sorted by depth every
+frame, so nearer sprites cover further ones.
+
 The demonstration draws a `polygon()` to a surface first and hands it in as the
 sprite.
 

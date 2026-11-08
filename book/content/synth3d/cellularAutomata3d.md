@@ -9,8 +9,9 @@ whole volume solid within a few steps or dies out immediately. The rules that
 produce anything interesting in three dimensions are a completely different set,
 found by search rather than by adapting the famous one.
 
-Alongside whether a cell is alive, its age is tracked, so the renderer can shade
-freshly born cells differently from settled ones.
+Alongside whether a cell is alive, its age is tracked. Set `colorMode` to `age`
+and the volume carries it as colour, with young cells red and older ones shading
+toward yellow.
 
 The first frame seeds itself, either at random or from an upstream volume.
 

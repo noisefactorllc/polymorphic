@@ -14,6 +14,11 @@ This process is called diffusion-limited aggregation, and it shows up in
 electrodeposits, mineral dendrites, lightning and frost on a window, for exactly
 the same reason.
 
+A picture can lean on the walkers. `inputWeight` steers each step along a
+direction read from the red and green of the pipeline image, or of `heightTex`
+if it names another. `diffuseTex` colours each particle from the surface beneath
+it.
+
 Further reading:
 - Diffusion-limited aggregation | https://en.wikipedia.org/wiki/Diffusion-limited_aggregation
 - Fractal | https://en.wikipedia.org/wiki/Fractal

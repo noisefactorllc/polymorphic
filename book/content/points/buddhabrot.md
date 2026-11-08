@@ -15,6 +15,9 @@ Points that never escape contribute nothing, so they are ruled out before any
 work is done. The image builds up gradually over many frames rather than
 arriving all at once.
 
+`diffuseTex` tints the deposits from a surface, read at each point a journey
+passes through, so the figure comes out in a picture's colours rather than white.
+
 Further reading:
 - Buddhabrot | https://en.wikipedia.org/wiki/Buddhabrot
 - Mandelbrot set | https://en.wikipedia.org/wiki/Mandelbrot_set

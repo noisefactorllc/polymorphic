@@ -10,7 +10,10 @@ into channels wherever neighbouring slopes point the same way, which is how real
 river systems form: not by anything digging a channel, but by many paths
 independently arriving at the same low ground.
 
-Setting `inverse` runs them uphill instead, which finds the ridgelines.
+Setting `inverse` runs them uphill instead, which finds the ridgelines. `heightTex`
+supplies the landscape as a surface of its own instead of the pipeline picture,
+and `diffuseTex` colours each particle from the surface beneath it, so the terrain
+and the paint need not be the same image.
 
 Because each particle only sees the ground directly under it, it can settle into
 any local dip and stay there, unaware of the deeper valley next door. The pools

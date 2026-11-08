@@ -14,6 +14,9 @@ These are Reynolds boids, from 1986, and they are the standard example of
 emergence: complicated group behaviour arising from simple individual rules and
 nothing else.
 
+`diffuseTex` colours each bird from the surface beneath it, so the flock picks up
+a picture's colours as it crosses it.
+
 Further reading:
 - Boids | https://en.wikipedia.org/wiki/Boids
 - Craig Reynolds, Boids | https://www.red3d.com/cwr/boids/
