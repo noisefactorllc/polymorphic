@@ -182,7 +182,7 @@ function validateSender(sender) {
     }
 }
 
-function createConfiguredSink(sender, onConfigured) {
+function createConfiguredSink(sender, onConfigured, onSinkError) {
     return Object.freeze({
         configure(descriptor) {
             const configuredDescriptor = validateDescriptor(descriptor)
@@ -198,6 +198,12 @@ function createConfiguredSink(sender, onConfigured) {
         },
         close(options) {
             return sender.close(options)
+        },
+        // The engine reports a sink's isolated failures here (a configure,
+        // submit or deferRender call it caught), so the output controller can
+        // end a session whose sink can no longer deliver frames.
+        onError(error) {
+            onSinkError?.(error)
         }
     })
 }
@@ -835,6 +841,10 @@ export class SyncOutputController {
                 if (sinkGeneration !== null) {
                     this._sinkConfigured(sender, sinkGeneration, nextDescriptor)
                 }
+            }, (error) => {
+                if (sinkGeneration !== null) {
+                    this._sinkFailed(sender, sinkGeneration, error)
+                }
             })
             resources.removeSink = this._renderer.addSink(sink)
             if (typeof resources.removeSink !== 'function') {
@@ -1013,6 +1023,44 @@ export class SyncOutputController {
         })
     }
 
+    /**
+     * End the sending session after an isolated sink failure.
+     *
+     * The engine keeps rendering past a sink's failed configure, submit or
+     * deferRender call, and a sender whose configure rejected a new size has
+     * already dropped its descriptor, so every later submit is rejected. The
+     * output must end with an error instead of staying live and silently
+     * dropping every frame.
+     */
+    _sinkFailed(sender, generation, sinkError) {
+        if (generation !== this._liveGeneration || sender !== this._sender ||
+            generation === this._stoppingGeneration || this._state.status !== 'sending') {
+            return
+        }
+
+        this._clearStatsTimer()
+        this._clearRecoveryProbationTimer()
+        const removeSink = this._removeSink
+        this._invalidateLiveSession(generation)
+        try { removeSink?.() } catch {
+            // The sink failure is already terminal for this live session.
+        }
+        this._releaseClient()
+
+        const code = typeof sinkError?.code === 'string' && sinkError.code.startsWith('SYNC_')
+            ? sinkError.code
+            : 'SYNC_OUTPUT_FAILED'
+        const message = typeof sinkError?.message === 'string' && sinkError.message
+            ? sinkError.message
+            : 'Sync output stopped after a renderer sink failure'
+        this._setState({
+            status: 'error',
+            connected: false,
+            senderName: null,
+            error: publicError(code, message)
+        })
+    }
+
     _monitorSenderClosed(sender, generation) {
         sender.closed.then(
             () => this._senderEnded(sender, generation),
@@ -1180,6 +1228,10 @@ export class SyncOutputController {
                 configuredDescriptor = descriptor
                 if (sinkGeneration !== null) {
                     this._sinkConfigured(sender, sinkGeneration, descriptor)
+                }
+            }, (error) => {
+                if (sinkGeneration !== null) {
+                    this._sinkFailed(sender, sinkGeneration, error)
                 }
             })
             resources.removeSink = this._renderer.addSink(sink)

@@ -256,3 +256,139 @@ test('stop still fails when the sender close never completed', async () => {
         assert.equal(controller.state.error.code, 'SYNC_STOP_FAILED')
     }
 })
+
+// The engine reports a sink's isolated failures to an optional onError(error)
+// method. A sender whose configure rejected a new size has already dropped
+// its descriptor, so every later submit is rejected too: the output must end
+// with an error instead of staying live and silently dropping every frame.
+async function startCapturingSinkOutput(syncModule, sender) {
+    const token = 'f'.repeat(64)
+    const clients = [
+        {
+            async pair() {
+                return { protocolVersion: 1, token }
+            },
+            close() {}
+        },
+        {
+            async connect() {
+                return {
+                    type: 'welcome',
+                    protocolVersion: 1,
+                    version: '0.2.19',
+                    instanceId: 'sync-test',
+                    capabilities: syncCapabilities()
+                }
+            },
+            async createSender() {
+                return sender
+            },
+            close() {}
+        }
+    ]
+    const queue = { close() {} }
+    let attachedSink = null
+    const renderer = {
+        pipeline: { backend: 'webgl2' },
+        createFrameExportQueue() {
+            return queue
+        },
+        addSink(sink) {
+            attachedSink = sink
+            return () => sink.close()
+        }
+    }
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncModule.SyncOutputController({
+        renderer,
+        getCanvas: () => canvas,
+        connectionProvider: {
+            createClient() {
+                return clients.shift()
+            }
+        },
+        clock: { timeOrigin: 1_700_000_000_000 },
+        setInterval: () => 1,
+        clearInterval: () => {},
+        setTimeout: () => 2,
+        clearTimeout: () => {}
+    })
+    await controller.connect()
+    await controller.start('Polymorphic')
+    return { controller, attachedSink }
+}
+
+test('a canvas resize the sender cannot configure ends the sending session', async () => {
+    const syncModule = await import('../../public/js/syncOutput.js').catch(() => null)
+    assert.ok(syncModule, 'Sync output target module must exist')
+
+    let closeCalls = 0
+    const sender = {
+        stats: { accepted: 1, droppedBusy: 0, droppedBackpressure: 0, sent: 1, failed: 0 },
+        closed: deferred().promise,
+        configure() {},
+        submit() { return true },
+        close() { closeCalls += 1 }
+    }
+    const { controller, attachedSink } = await startCapturingSinkOutput(syncModule, sender)
+    assert.equal(controller.state.status, 'sending')
+
+    // The canvas grew past the Sync v1 frame limits: the sink rejects the
+    // new size, and the engine catches the isolated error and reports it
+    // back to the sink's onError, exactly as SinkManager does.
+    const oversized = {
+        width: 8192,
+        height: 8192,
+        format: 'rgba8unorm',
+        colorSpace: 'srgb',
+        alphaMode: 'premultiplied',
+        fps: 60
+    }
+    let configureError = null
+    try {
+        attachedSink.configure(oversized)
+    } catch (error) {
+        configureError = error
+    }
+    assert.ok(configureError, 'the oversized resize must be rejected')
+    attachedSink.onError(configureError)
+    assert.equal(controller.state.status, 'error')
+    assert.equal(controller.state.error.code, 'SYNC_RENDERER_UNAVAILABLE')
+    assert.equal(controller.state.connected, false)
+    assert.equal(controller.state.senderName, null)
+    assert.equal(closeCalls, 1, 'ending the session must close the sender')
+
+    // A late duplicate report must not restart or re-error the ended session.
+    attachedSink.onError(outputError('SYNC_RENDERER_UNAVAILABLE', 'late report'))
+    assert.equal(controller.state.status, 'error')
+    assert.equal(controller.state.error.code, 'SYNC_RENDERER_UNAVAILABLE')
+})
+
+test('an isolated sink error reported to onError ends the sending session', async () => {
+    const syncModule = await import('../../public/js/syncOutput.js').catch(() => null)
+    assert.ok(syncModule, 'Sync output target module must exist')
+
+    let closeCalls = 0
+    const sender = {
+        stats: { accepted: 1, droppedBusy: 0, droppedBackpressure: 0, sent: 1, failed: 0 },
+        closed: deferred().promise,
+        configure() {},
+        submit() { return true },
+        close() { closeCalls += 1 }
+    }
+    const { controller, attachedSink } = await startCapturingSinkOutput(syncModule, sender)
+    assert.equal(controller.state.status, 'sending')
+
+    assert.equal(typeof attachedSink.onError, 'function', 'the output sink must accept isolated error reports')
+    attachedSink.onError(new Error('readback slot vanished'))
+    assert.equal(controller.state.status, 'error')
+    assert.equal(controller.state.error.code, 'SYNC_OUTPUT_FAILED')
+    assert.equal(controller.state.connected, false)
+    assert.equal(closeCalls, 1, 'ending the session must close the sender')
+})
+
+function outputError(code, message) {
+    const error = new Error(message)
+    error.code = code
+    return error
+}
