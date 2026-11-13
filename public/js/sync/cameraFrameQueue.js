@@ -10,11 +10,6 @@ export function canQueueSyncCamera(track) {
         (typeof globalThis.VideoFrame === 'function' || typeof globalThis.createImageBitmap === 'function')
 }
 
-// A desktop start can fail after isAvailable() read a live ring: the ring can
-// vanish between the check and the reader's open, and the start message has
-// no reply. Silence is then the only signal, so this is how long the native
-// path has to prove itself with one frame before the queue falls back to the
-// browser track.
 const SHM_STARTUP_TIMEOUT_MS = 2000
 
 /** Owns frame acquisition only; the media manager calls consume on its RAF. */
@@ -44,6 +39,7 @@ export class SyncCameraFrameQueue {
         this._useNativeShm = useNativeShm
         this._shmUnsubscribe = null
         this._shmStartupTimer = null
+        this._shmFrameSeen = false
         this._reader = null
         this._pumpDone = Promise.resolve()
 
@@ -81,14 +77,9 @@ export class SyncCameraFrameQueue {
         }
     }
 
-    /**
-     * Leave the silent native path for the browser track. The queue reaches
-     * this only when no native frame arrived in time, so the watermark holds
-     * no native frame yet and the browser timestamp watermark starts clean.
-     */
     _onShmStartupTimeout() {
         this._shmStartupTimer = null
-        if (!this.active || this._watermark.sequence > 0) return
+        if (!this.active || this._shmFrameSeen) return
         const unsubscribe = this._shmUnsubscribe
         this._shmUnsubscribe = null
         this._useNativeShm = false
@@ -107,8 +98,6 @@ export class SyncCameraFrameQueue {
             this.stop()
             return
         }
-        // A native frame can arrive after the browser fallback began; the
-        // browser path owns acquisition from then on, so ignore it.
         if (!this._useNativeShm) return
         let frame = null
         try {
@@ -118,6 +107,7 @@ export class SyncCameraFrameQueue {
             }
             if (sequence === this._watermark.sequence) return
             this._clearShmStartupTimer()
+            this._shmFrameSeen = true
             const timestamp = Number(presentationTimeUs)
             if (!Number.isSafeInteger(timestamp) || timestamp < this._watermark.timestamp) {
                 throw new Error('Camera frame timestamp is invalid or decreased')

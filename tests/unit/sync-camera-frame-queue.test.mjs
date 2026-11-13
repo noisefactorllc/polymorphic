@@ -210,9 +210,9 @@ test('useNativeShm falls back to the browser track when no native frame arrives'
             assert.equal(options.track, track)
             assert.equal(options.maxBufferSize, 4)
             const reader = {
-                pending: null,
+                pending: null, cancels: 0,
                 read() { return new Promise((resolve, reject) => { this.pending = { resolve, reject } }) },
-                cancel() { if (this.pending) { const { resolve } = this.pending; this.pending = null; resolve({ done: true }) } return Promise.resolve() },
+                cancel() { this.cancels++; if (this.pending) { const { resolve } = this.pending; this.pending = null; resolve({ done: true }) } return Promise.resolve() },
                 releaseLock() {},
             }
             readers.push(reader)
@@ -235,9 +235,6 @@ test('useNativeShm falls back to the browser track when no native frame arrives'
         onError: error => errors.push(error)
     })
 
-    // The desktop start failed after isAvailable() answered, so no native
-    // frame ever arrives. The queue must leave the silent native path and
-    // acquire frames from the browser track instead of stalling.
     t.mock.timers.tick(2000)
     await flush()
     assert.equal(readers.length, 1, 'the browser processor must take over the queue')
@@ -256,8 +253,6 @@ test('useNativeShm falls back to the browser track when no native frame arrives'
     assert.equal(uploads.length, 1)
     assert.equal(uploads[0], bitmaps[0])
 
-    // A native frame that arrives after the fallback must be ignored, not
-    // queued next to browser frames and not treated as a failure.
     subscriber({ sequence: 1, presentationTimeUs: 5000, width: 1920, height: 1080, buffer: new ArrayBuffer(8) })
     await flush()
     assert.equal(uploads.length, 1)
@@ -265,7 +260,94 @@ test('useNativeShm falls back to the browser track when no native frame arrives'
     assert.equal(owner.active, true)
 
     await owner.stop()
-    assert.equal(readers[0].cancels ?? 1, 1)
+    assert.equal(readers[0].cancels, 1)
+})
+
+test('useNativeShm falls back on a same-track restart even though the track keeps an earlier native sequence', bounded, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    class MockVideoFrame {
+        constructor(buffer, options) {
+            this.buffer = buffer
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+            this.timestamp = options.timestamp
+        }
+        close() {}
+    }
+    globalThis.VideoFrame = MockVideoFrame
+    const savedProcessor = Object.getOwnPropertyDescriptor(globalThis, 'MediaStreamTrackProcessor')
+    t.after(() => {
+        if (savedProcessor) Object.defineProperty(globalThis, 'MediaStreamTrackProcessor', savedProcessor)
+        else delete globalThis.MediaStreamTrackProcessor
+    })
+
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    const readers = [], bitmaps = [], uploads = [], errors = []
+    globalThis.MediaStreamTrackProcessor = class {
+        constructor(options) {
+            assert.equal(options.track, track)
+            const reader = {
+                pending: null, cancels: 0,
+                read() { return new Promise((resolve, reject) => { this.pending = { resolve, reject } }) },
+                cancel() { this.cancels++; if (this.pending) { const { resolve } = this.pending; this.pending = null; resolve({ done: true }) } return Promise.resolve() },
+                releaseLock() {},
+            }
+            readers.push(reader)
+            this.readable = { getReader: () => reader }
+        }
+    }
+    globalThis.createImageBitmap = frame => {
+        const bitmap = { width: frame.width, height: frame.height, close() {} }
+        bitmaps.push(bitmap)
+        return Promise.resolve(bitmap)
+    }
+
+    const nativeFrame = (sequence, presentationTimeUs) => ({
+        sequence, presentationTimeUs, width: 1920, height: 1080, buffer: new ArrayBuffer(8)
+    })
+
+    let deliverNative = null
+    let unsubscribes = 0
+    const first = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { deliverNative = callback; return () => { unsubscribes++ } },
+        isCurrent: () => true,
+        upload: bitmap => { uploads.push(bitmap); return { width: bitmap.width, height: bitmap.height } },
+        onError: error => errors.push(error)
+    })
+    deliverNative(nativeFrame(1, 1000))
+    deliverNative(nativeFrame(2, 2000))
+    first.consume()
+    assert.equal(uploads.length, 1)
+    await first.stop()
+
+    const second = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { deliverNative = callback; return () => { unsubscribes++ } },
+        isCurrent: () => true,
+        upload: bitmap => { uploads.push(bitmap); return { width: bitmap.width, height: bitmap.height } },
+        onError: error => errors.push(error)
+    })
+    t.mock.timers.tick(2000)
+    await flush()
+    assert.equal(readers.length, 1, 'the restart must leave the silent native path')
+    assert.equal(unsubscribes, 2)
+    assert.deepEqual(errors, [])
+
+    for (const timestamp of [3000, 4000]) {
+        const frame = { timestamp, width: 1920, height: 1080, close() {} }
+        const reader = readers.at(-1), { resolve } = reader.pending
+        reader.pending = null
+        resolve({ done: false, value: frame })
+        await flush()
+    }
+    second.consume()
+    assert.equal(uploads.length, 2)
+    assert.equal(uploads[1], bitmaps[0])
+    assert.deepEqual(errors, [])
+
+    await second.stop()
+    assert.equal(readers[0].cancels, 1)
 })
 
 test('useNativeShm keeps the native path when frames arrive before the startup timeout', bounded, async t => {
