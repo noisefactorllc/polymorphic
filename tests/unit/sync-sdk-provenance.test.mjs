@@ -8,35 +8,34 @@ import { test } from 'node:test'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const read = relative => readFile(resolve(root, relative), 'utf8')
 
-// Both integrations pin the same 0.3.4 snapshot captured from Sync's browser
-// sources (the modules Sync itself labels 0.3.4; the earlier 0.3.3 directory
-// stays as the historical snapshot it names). The audio integration keeps its
-// own import so a future edit cannot silently repoint a production module at
-// an unverified snapshot, and each snapshot keeps an immutable SHA256SUMS
-// manifest that the suite verifies byte for byte.
+// Both integrations pin the same 0.3.3 snapshot captured from Sync's browser
+// sources. The audio integration keeps its own import so a future edit cannot
+// silently repoint a production module at an unverified snapshot, and each
+// snapshot keeps an immutable SHA256SUMS manifest that the suite verifies
+// byte for byte.
 const PINNED_SNAPSHOTS = Object.freeze({
-    audio: '0.3.4',
-    output: '0.3.4'
+    audio: '0.3.3',
+    output: '0.3.3'
 })
 
 test('the audio integration imports the pinned audio SDK snapshot', async () => {
     const audioModule = await read('public/js/sync/audio.js')
     assert.match(audioModule,
-        /export \{ SyncBridgeClient \} from '\.\/sdk\/0\.3\.4\/browser\/index\.js'/,
-        'audio.js must re-export SyncBridgeClient from the pinned 0.3.4 snapshot')
+        /export \{ SyncBridgeClient \} from '\.\/sdk\/0\.3\.3\/browser\/index\.js'/,
+        'audio.js must re-export SyncBridgeClient from the pinned 0.3.3 snapshot')
     const audioClient = await import('../../public/js/sync/audio.js')
-    const pinnedClient = await import('../../public/js/sync/sdk/0.3.4/browser/index.js')
+    const pinnedClient = await import('../../public/js/sync/sdk/0.3.3/browser/index.js')
     assert.equal(audioClient.SyncBridgeClient, pinnedClient.SyncBridgeClient)
 })
 
 test('the shared sync bundle exports the pinned output SDK snapshot at runtime', async () => {
     const bundleModule = await read('public/js/sync/bundle.js')
     assert.match(bundleModule,
-        /export \* from '\.\/sdk\/0\.3\.4\/browser\/index\.js'/,
-        'bundle.js must re-export the pinned 0.3.4 snapshot')
+        /export \* from '\.\/sdk\/0\.3\.3\/browser\/index\.js'/,
+        'bundle.js must re-export the pinned 0.3.3 snapshot')
     const bundle = await import('../../public/js/sync/bundle.js')
-    const pinned = await import('../../public/js/sync/sdk/0.3.4/browser/index.js')
-    assert.equal(bundle.SYNC_SDK_VERSION, '0.3.4')
+    const pinned = await import('../../public/js/sync/sdk/0.3.3/browser/index.js')
+    assert.equal(bundle.SYNC_SDK_VERSION, '0.3.3')
     assert.equal(bundle.SYNC_SDK_VERSION, pinned.SYNC_SDK_VERSION)
     assert.equal(bundle.SyncBridgeClient, pinned.SyncBridgeClient)
 })

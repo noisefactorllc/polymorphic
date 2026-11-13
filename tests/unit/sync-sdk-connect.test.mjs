@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import {
     SyncBridgeClient,
     SyncPermissionRequiredError
-} from '../../public/js/sync/sdk/0.3.4/browser/index.js'
+} from '../../public/js/sync/sdk/0.3.3/browser/index.js'
 
 // Sync's connect() must open the control socket before it reads the loopback
 // permission state, so a browser that reports `prompt` until a network request
