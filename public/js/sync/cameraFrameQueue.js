@@ -10,6 +10,13 @@ export function canQueueSyncCamera(track) {
         (typeof globalThis.VideoFrame === 'function' || typeof globalThis.createImageBitmap === 'function')
 }
 
+// A desktop start can fail after isAvailable() read a live ring: the ring can
+// vanish between the check and the reader's open, and the start message has
+// no reply. Silence is then the only signal, so this is how long the native
+// path has to prove itself with one frame before the queue falls back to the
+// browser track.
+const SHM_STARTUP_TIMEOUT_MS = 2000
+
 /** Owns frame acquisition only; the media manager calls consume on its RAF. */
 export class SyncCameraFrameQueue {
     constructor(track, { isCurrent, upload, onError, useNativeShm = false, shmSubscriber = null }) {
@@ -36,6 +43,7 @@ export class SyncCameraFrameQueue {
 
         this._useNativeShm = useNativeShm
         this._shmUnsubscribe = null
+        this._shmStartupTimer = null
         this._reader = null
         this._pumpDone = Promise.resolve()
 
@@ -43,6 +51,7 @@ export class SyncCameraFrameQueue {
             const subscribe = shmSubscriber || globalThis.electronAPI?.syncCamera?.subscribe
             if (typeof subscribe === 'function') {
                 this._shmUnsubscribe = subscribe(frameData => this._onShmFrame(frameData))
+                this._shmStartupTimer = setTimeout(() => this._onShmStartupTimeout(), SHM_STARTUP_TIMEOUT_MS)
             } else {
                 this._fail(new Error('Native shared memory camera subscriber unavailable'))
             }
@@ -65,11 +74,42 @@ export class SyncCameraFrameQueue {
         try { resource.close() } catch (error) { this._fail(error) }
     }
 
+    _clearShmStartupTimer() {
+        if (this._shmStartupTimer) {
+            clearTimeout(this._shmStartupTimer)
+            this._shmStartupTimer = null
+        }
+    }
+
+    /**
+     * Leave the silent native path for the browser track. The queue reaches
+     * this only when no native frame arrived in time, so the watermark holds
+     * no native frame yet and the browser timestamp watermark starts clean.
+     */
+    _onShmStartupTimeout() {
+        this._shmStartupTimer = null
+        if (!this.active || this._watermark.sequence > 0) return
+        const unsubscribe = this._shmUnsubscribe
+        this._shmUnsubscribe = null
+        this._useNativeShm = false
+        try { unsubscribe?.() } catch (error) { this._fail(error); return }
+        try {
+            const processor = new globalThis.MediaStreamTrackProcessor({ track: this.track, maxBufferSize: 4 })
+            this._reader = processor.readable.getReader()
+            this._pumpDone = this._readFrames()
+        } catch (error) {
+            this._fail(error)
+        }
+    }
+
     _onShmFrame(frameData) {
         if (!this.active || !this._isCurrent()) {
             this.stop()
             return
         }
+        // A native frame can arrive after the browser fallback began; the
+        // browser path owns acquisition from then on, so ignore it.
+        if (!this._useNativeShm) return
         let frame = null
         try {
             const { sequence, presentationTimeUs, width, height, buffer } = frameData
@@ -77,6 +117,7 @@ export class SyncCameraFrameQueue {
                 throw new Error('Camera frame sequence is invalid or decreased')
             }
             if (sequence === this._watermark.sequence) return
+            this._clearShmStartupTimer()
             const timestamp = Number(presentationTimeUs)
             if (!Number.isSafeInteger(timestamp) || timestamp < this._watermark.timestamp) {
                 throw new Error('Camera frame timestamp is invalid or decreased')
@@ -186,6 +227,7 @@ export class SyncCameraFrameQueue {
     stop() {
         if (this._stopped) return this._stopped
         this.active = false
+        this._clearShmStartupTimer()
         if (this._shmUnsubscribe) {
             try { this._shmUnsubscribe() } catch (error) { this._fail(error) }
             this._shmUnsubscribe = null

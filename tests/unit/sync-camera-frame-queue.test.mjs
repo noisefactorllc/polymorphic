@@ -184,6 +184,133 @@ test('VideoFrame instances bypass createImageBitmap and queue directly to upload
     assert.equal(f2.closes, 1)
 })
 
+test('useNativeShm falls back to the browser track when no native frame arrives', bounded, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    class MockVideoFrame {
+        constructor(buffer, options) {
+            this.buffer = buffer
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+            this.timestamp = options.timestamp
+            this.closes = 0
+        }
+        close() { this.closes++ }
+    }
+    globalThis.VideoFrame = MockVideoFrame
+    const savedProcessor = Object.getOwnPropertyDescriptor(globalThis, 'MediaStreamTrackProcessor')
+    t.after(() => {
+        if (savedProcessor) Object.defineProperty(globalThis, 'MediaStreamTrackProcessor', savedProcessor)
+        else delete globalThis.MediaStreamTrackProcessor
+    })
+
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    const readers = [], bitmaps = [], uploads = [], errors = [], frames = []
+    globalThis.MediaStreamTrackProcessor = class {
+        constructor(options) {
+            assert.equal(options.track, track)
+            assert.equal(options.maxBufferSize, 4)
+            const reader = {
+                pending: null,
+                read() { return new Promise((resolve, reject) => { this.pending = { resolve, reject } }) },
+                cancel() { if (this.pending) { const { resolve } = this.pending; this.pending = null; resolve({ done: true }) } return Promise.resolve() },
+                releaseLock() {},
+            }
+            readers.push(reader)
+            this.readable = { getReader: () => reader }
+        }
+    }
+    globalThis.createImageBitmap = frame => {
+        const bitmap = { width: frame.width, height: frame.height, closes: 0, close() { this.closes++ } }
+        bitmaps.push(bitmap)
+        return Promise.resolve(bitmap)
+    }
+
+    let subscriber = null
+    let unsubscribes = 0
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { subscriber = callback; return () => { unsubscribes++ } },
+        isCurrent: () => true,
+        upload: bitmap => { uploads.push(bitmap); return { width: bitmap.width, height: bitmap.height } },
+        onError: error => errors.push(error)
+    })
+
+    // The desktop start failed after isAvailable() answered, so no native
+    // frame ever arrives. The queue must leave the silent native path and
+    // acquire frames from the browser track instead of stalling.
+    t.mock.timers.tick(2000)
+    await flush()
+    assert.equal(readers.length, 1, 'the browser processor must take over the queue')
+    assert.equal(unsubscribes, 1, 'the native subscription must be released')
+    assert.deepEqual(errors, [], 'a silent native start must fall back instead of failing')
+
+    for (const timestamp of [1000, 2000]) {
+        const frame = { timestamp, width: 1920, height: 1080, closes: 0, close() { this.closes++ } }
+        frames.push(frame)
+        const reader = readers.at(-1), { resolve } = reader.pending
+        reader.pending = null
+        resolve({ done: false, value: frame })
+        await flush()
+    }
+    owner.consume()
+    assert.equal(uploads.length, 1)
+    assert.equal(uploads[0], bitmaps[0])
+
+    // A native frame that arrives after the fallback must be ignored, not
+    // queued next to browser frames and not treated as a failure.
+    subscriber({ sequence: 1, presentationTimeUs: 5000, width: 1920, height: 1080, buffer: new ArrayBuffer(8) })
+    await flush()
+    assert.equal(uploads.length, 1)
+    assert.deepEqual(errors, [])
+    assert.equal(owner.active, true)
+
+    await owner.stop()
+    assert.equal(readers[0].cancels ?? 1, 1)
+})
+
+test('useNativeShm keeps the native path when frames arrive before the startup timeout', bounded, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    class MockVideoFrame {
+        constructor(buffer, options) {
+            this.buffer = buffer
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+            this.timestamp = options.timestamp
+        }
+        close() {}
+    }
+    globalThis.VideoFrame = MockVideoFrame
+    const savedProcessor = Object.getOwnPropertyDescriptor(globalThis, 'MediaStreamTrackProcessor')
+    t.after(() => {
+        if (savedProcessor) Object.defineProperty(globalThis, 'MediaStreamTrackProcessor', savedProcessor)
+        else delete globalThis.MediaStreamTrackProcessor
+    })
+
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    let processorCount = 0
+    globalThis.MediaStreamTrackProcessor = class { constructor() { processorCount++ } }
+    globalThis.createImageBitmap = () => Promise.resolve({ width: 2, height: 2, close() {} })
+
+    let deliver
+    const uploads = [], errors = []
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: callback => { deliver = callback; return () => {} },
+        isCurrent: () => true,
+        upload: frame => { uploads.push(frame.buffer); return { width: frame.width, height: frame.height } },
+        onError: error => errors.push(error)
+    })
+    deliver({ sequence: 1, presentationTimeUs: 1000, width: 2, height: 2, buffer: new ArrayBuffer(8) })
+    deliver({ sequence: 2, presentationTimeUs: 2000, width: 2, height: 2, buffer: new ArrayBuffer(8) })
+    t.mock.timers.tick(2000)
+    await flush()
+    assert.equal(processorCount, 0, 'flowing native frames must not trigger the browser fallback')
+    owner.consume()
+    assert.equal(uploads.length, 1)
+    assert.deepEqual(errors, [])
+    await owner.stop()
+})
+
 test('useNativeShm streams frames via subscriber without MediaStreamTrackProcessor', bounded, async () => {
     class MockVideoFrame {
         constructor(buffer, options) {
