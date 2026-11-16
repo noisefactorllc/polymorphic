@@ -238,6 +238,26 @@
     opacity: 0.56;
 }
 
+/* Buttons that connect to Sync lead with Sync's mark, sized and spaced like
+   the app's other icon buttons. The mark is a mask over currentColor, so it
+   takes the button's text colour in every theme and state. */
+.sync-mark-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.sync-mark {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    -webkit-mask: url(../img/sync-mark.svg) center / contain no-repeat;
+    mask: url(../img/sync-mark.svg) center / contain no-repeat;
+}
+
 @media (max-width: 600px) {
     .sync-output-dialog {
         width: calc(100vw - 1rem);

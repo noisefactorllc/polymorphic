@@ -497,7 +497,7 @@ class LiveInputsPanel {
                             <option value="">default</option>
                         </select>
                     </div>
-                    <button class="live-input-toggle" data-id="sync-audio-connect">Connect Sync audio</button>
+                    <button class="live-input-toggle sync-mark-button" data-id="sync-audio-connect"><span class="sync-mark" aria-hidden="true"></span>Connect Sync audio</button>
                     <div class="live-input-status" data-id="sync-audio-status" role="status"></div>
                     <div class="live-input-device-current" data-id="audio-current"></div>
                     <div class="level-bars"><span>low</span><div class="level-bar-track"><div class="level-bar-fill" data-id="lowFill"></div></div><span class="level-bar-value" data-id="lowVal">0.00</span></div>

@@ -241,6 +241,8 @@ export function createSyncOutputDialog({
     const recoveryText = requireElement(documentObject, 'syncOutputRecovery')
     const connectNotice = requireElement(documentObject, 'syncOutputConnectNotice')
     const actionButton = requireElement(documentObject, 'syncOutputAction')
+    const actionMark = actionButton.querySelector('.sync-mark')
+    if (!actionMark) throw new Error('Sync output dialog is missing the #syncOutputAction Sync mark')
 
     let state = controller.state || {}
     let policy = Object.freeze({ status: 'unknown', feature: null })
@@ -272,7 +274,7 @@ export function createSyncOutputDialog({
         nameInput.setAttribute('aria-invalid', state.error?.code === 'SYNC_INVALID_SENDER_NAME' ? 'true' : 'false')
         recoveryText.textContent = view.recovery
         connectNotice.hidden = !connectNoticeVisible
-        actionButton.textContent = action.label
+        actionButton.replaceChildren(actionMark, action.label)
         actionButton.disabled = action.disabled
         actionButton.dataset.action = action.kind
     }
