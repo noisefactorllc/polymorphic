@@ -269,6 +269,8 @@
             opacity: 0;
             transition: opacity 500ms ease;
         }
+        /* Fullscreen shows the canvas with no pointer at all, so no dot. */
+        :fullscreen body.performance-mode .cursor-fade-dot { display: none; }
 
         /* Embed mode — same effect as performance mode but applied via ?embed=1 */
         body.embed-mode #menu,

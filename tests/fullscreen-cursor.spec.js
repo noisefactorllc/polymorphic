@@ -4,7 +4,9 @@
 // fullscreen (entered from the toolbar, menu or palette, or by the agent's
 // setFullscreen command), and the viewport popup (its F key). In both, the
 // computed cursor is none across the whole screen, including the corners,
-// and leaving fullscreen restores the cursor the view had before.
+// and leaving fullscreen restores the cursor the view had before. The dot
+// that stands in for the pointer in performance mode is not drawn while the
+// page is fullscreen, and it comes back when fullscreen ends.
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
 
@@ -83,6 +85,15 @@ const HIDDEN = {
     everywhere: ['none']
 }
 
+// The performance-mode cursor dot: absent, present but not drawn, or drawn.
+function dot(page) {
+    return page.evaluate(() => {
+        const element = document.querySelector('body > .cursor-fade-dot')
+        if (!element) return 'absent'
+        return getComputedStyle(element).display !== 'none' && element.offsetWidth > 0 ? 'drawn' : 'hidden'
+    })
+}
+
 for (const [entry, enter, leave] of [
     ['toolbar button',
         page => page.locator('#fullscreen-btn-menu').click(),
@@ -103,21 +114,45 @@ for (const [entry, enter, leave] of [
         await expect(page.locator('body')).toHaveClass(/performance-mode/)
         expect(await cursors(page)).toEqual(HIDDEN)
 
-        // Moving the mouse does not bring the pointer back.
+        // Moving the mouse does not bring the pointer or its dot back.
         await page.mouse.move(200, 150)
         await page.mouse.move(640, 360, { steps: 4 })
         expect(await cursors(page)).toEqual(HIDDEN)
+        expect(await dot(page)).toBe('hidden')
 
-        // Leaving fullscreen keeps performance mode's own hidden pointer;
-        // leaving performance mode then restores the windowed cursor.
+        // Leaving fullscreen keeps performance mode's own hidden pointer and
+        // draws its dot again; leaving performance mode then restores the
+        // windowed cursor.
         await leave(page)
         await page.waitForFunction(() => !document.fullscreenElement)
         expect(await cursors(page)).toEqual(HIDDEN)
+        await page.mouse.move(400, 300)
+        expect(await dot(page)).toBe('drawn')
         await page.evaluate(() => document.getElementById('viewMenuItem-performance-mode').click())
         await expect(page.locator('body')).not.toHaveClass(/performance-mode/)
         expect(await cursors(page)).toEqual(windowed)
     })
 }
+
+test('going fullscreen in performance mode stops drawing the cursor dot until fullscreen ends', async ({ page }) => {
+    await boot(page)
+    await page.evaluate(() => document.getElementById('viewMenuItem-performance-mode').click())
+    await expect(page.locator('body')).toHaveClass(/performance-mode/)
+    await page.mouse.move(400, 300)
+    expect(await dot(page)).toBe('drawn')
+
+    await page.evaluate(() => document.getElementById('viewMenuItem-fullscreen').click())
+    await page.waitForFunction(() => !!document.fullscreenElement)
+    expect(await dot(page)).toBe('hidden')
+    await page.mouse.move(640, 360, { steps: 4 })
+    expect(await dot(page)).toBe('hidden')
+    expect(await cursors(page)).toEqual(HIDDEN)
+
+    await page.evaluate(() => document.getElementById('viewMenuItem-fullscreen').click())
+    await page.waitForFunction(() => !document.fullscreenElement)
+    expect(await dot(page)).toBe('drawn')
+    expect(await cursors(page)).toEqual(HIDDEN)
+})
 
 test('the viewport popup hides the pointer over the whole screen in fullscreen', async ({ page }) => {
     await boot(page)
