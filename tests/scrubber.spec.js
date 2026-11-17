@@ -489,27 +489,40 @@ test('scrubber tooltip stays inside the viewport when dragged to its edges', asy
     await page.mouse.down()
     await expect(page.locator('.scrubber-tooltip')).toBeVisible()
 
-    for (const point of [{ x: 898, y: 548 }, { x: 2, y: 2 }]) {
+    for (const point of [{ x: 898, y: 548 }, { x: 898, y: 275 }, { x: 2, y: 2 }]) {
         await page.mouse.move(point.x, point.y)
         const bounds = await page.locator('.scrubber-tooltip').evaluate(el => {
+            // Its natural width: the same readout unconstrained by the viewport edge.
+            const probe = el.cloneNode(true)
+            Object.assign(probe.style, { left: '0px', top: '0px', visibility: 'hidden' })
+            document.body.appendChild(probe)
+            const natural = probe.getBoundingClientRect().width
+            probe.remove()
             const rect = el.getBoundingClientRect()
-            return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight }
+            return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight, boxWidth: rect.width, natural }
         })
         expect(bounds.left, JSON.stringify(point)).toBeGreaterThanOrEqual(0)
         expect(bounds.top, JSON.stringify(point)).toBeGreaterThanOrEqual(0)
         expect(bounds.right, JSON.stringify(point)).toBeLessThanOrEqual(bounds.width)
         expect(bounds.bottom, JSON.stringify(point)).toBeLessThanOrEqual(bounds.height)
+        expect(Math.abs(bounds.boxWidth - bounds.natural), `${JSON.stringify(point)}: width ${bounds.boxWidth} vs natural ${bounds.natural}`).toBeLessThan(1)
     }
 
     await page.setViewportSize({ width: 320, height: 240 })
     const resizedBounds = await page.locator('.scrubber-tooltip').evaluate(el => {
+        const probe = el.cloneNode(true)
+        Object.assign(probe.style, { left: '0px', top: '0px', visibility: 'hidden' })
+        document.body.appendChild(probe)
+        const natural = probe.getBoundingClientRect().width
+        probe.remove()
         const rect = el.getBoundingClientRect()
-        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight }
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight, boxWidth: rect.width, natural }
     })
     expect(resizedBounds.left).toBeGreaterThanOrEqual(0)
     expect(resizedBounds.top).toBeGreaterThanOrEqual(0)
     expect(resizedBounds.right).toBeLessThanOrEqual(resizedBounds.width)
     expect(resizedBounds.bottom).toBeLessThanOrEqual(resizedBounds.height)
+    expect(Math.abs(resizedBounds.boxWidth - resizedBounds.natural), `width ${resizedBounds.boxWidth} vs natural ${resizedBounds.natural}`).toBeLessThan(1)
 
     await page.mouse.up()
     await page.keyboard.up('Alt')

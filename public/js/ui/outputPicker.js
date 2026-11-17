@@ -1,4 +1,5 @@
 import { stripMediaUrlArg } from '../noisemaker/dslSanitize.js'
+import { setTooltip } from './tooltips.js'
 
 export function surfacesWrittenInDsl(dsl) {
     if (!dsl) return []
@@ -285,7 +286,7 @@ class OutputPicker {
         pip.dataset.surface = String(idx)
         pip.setAttribute('role', 'button')
         pip.tabIndex = 0
-        pip.title = `Switch to o${idx} (Shift+click to reset feedback)`
+        setTooltip(pip, `Switch to o${idx} (Shift+click to reset feedback)`)
         pip.setAttribute('aria-label', `Surface o${idx}` + (idx === this._activeSurface ? ' (active)' : ''))
         const canvas = document.createElement('canvas')
         canvas.width = 192

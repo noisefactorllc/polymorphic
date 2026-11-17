@@ -3,6 +3,7 @@ import { connectSyncAudio, refreshSyncAudioDevices, isSyncAudioSource } from '..
 import { createSyncCameraSession } from '../sync/cameraSession.js'
 import { watchCameraReturn } from './cameraReopen.js'
 import { storeImageFile } from '../programImages.js'
+import { setTooltip } from './tooltips.js'
 
 /**
  * Live Inputs Panel
@@ -1151,7 +1152,7 @@ class LiveInputsPanel {
             const pill = document.createElement('span')
             pill.className = 'midi-cc-pill'
             pill.textContent = `ch${m.ch}.cc${m.cc}=${typeof m.value === 'number' ? m.value.toFixed(2) : m.value}`
-            pill.title = 'Click to insert midi() snippet'
+            setTooltip(pill, 'Click to insert midi() snippet')
             pill.addEventListener('click', () => {
                 const snippet = `midi(channel: ${m.ch}, controller: ${m.cc}, min: 0, max: 1)`
                 this._onInsert(snippet)

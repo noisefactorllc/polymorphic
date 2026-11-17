@@ -34,6 +34,7 @@ import { buildPaletteActions } from './ui/paletteActions.js'
 import { formatDsl } from './ui/formatter.js'
 import { insertAtCursor, getSelectionOrBlock, blockRangeAt, installUndoTransparency, noteProgrammaticWrite, clearProgrammaticWrites, runAsTrackedWrite, patchProgramText } from './ui/editorActions.js'
 import { attachScrubber } from './ui/scrubber.js'
+import { setTooltip } from './ui/tooltips.js'
 import { getCursorIdleHider } from './ui/cursorIdle.js'
 import { liveInputsPanel } from './ui/liveInputsPanel.js'
 import { recorder } from './ui/recorder.js'
@@ -740,10 +741,10 @@ function showCompilerError(errorText) {
     compilerErrorEl.innerHTML = `<span>${escaped}</span>`
     compilerErrorEl.classList.add('visible')
     if (loc) {
-        compilerErrorEl.title = `Click to jump to line ${loc.line}, column ${loc.col}`
+        setTooltip(compilerErrorEl, `Click to jump to line ${loc.line}, column ${loc.col}`)
         setErrorLineMarker(loc)
     } else {
-        compilerErrorEl.removeAttribute('title')
+        setTooltip(compilerErrorEl, '')
         clearErrorLineMarker()
     }
 }
@@ -754,7 +755,7 @@ function showCompilerError(errorText) {
 function hideCompilerError() {
     if (compilerErrorEl) {
         compilerErrorEl.classList.remove('visible')
-        compilerErrorEl.removeAttribute('title')
+        setTooltip(compilerErrorEl, '')
     }
     clearErrorLineMarker()
 }
