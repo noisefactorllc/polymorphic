@@ -98,6 +98,30 @@ test('a changed app source selects specs whose text names it', () => {
         ['gallery.spec.js'])
 })
 
+test('a basename shared with another module selects only the specs that name its directory', () => {
+    // Two modules named bundle.js live under different directories. A spec
+    // that imports the Noisemaker bundle does not exercise the Sync bundle,
+    // and a bare basename match pulled it into focused runs that then failed
+    // on legs the change cannot affect.
+    const specText = "const { parse, lex } = await import('/js/noisemaker/bundle.js')"
+    assert.deepEqual(
+        selectSpecs(['public/js/sync/bundle.js'], ['live-input-image.spec.js'], () => specText),
+        [])
+    assert.deepEqual(
+        selectSpecs(['public/js/noisemaker/bundle.js'], ['live-input-image.spec.js'], () => specText),
+        ['live-input-image.spec.js'])
+    const syncSpecText = "const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.3/browser/client.js')"
+    assert.deepEqual(
+        selectSpecs(['public/js/sync/sdk/0.3.5/browser/client.js'], ['sync-native.spec.js'], () => syncSpecText),
+        ['sync-native.spec.js'])
+})
+
+test('a changed tests/ helper keeps the basename fallback that relative imports need', () => {
+    assert.deepEqual(
+        selectTests(['tests/agentJoin.mjs'], ['agentJoin.test.mjs'], () => "import ... from './agentJoin.mjs'"),
+        ['agentJoin.test.mjs'])
+})
+
 test('specCommand builds the browser entrypoint argv', () => {
     assert.deepEqual(
         specCommand(['tests/context-loss.spec.js']),

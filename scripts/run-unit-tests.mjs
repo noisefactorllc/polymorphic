@@ -3,12 +3,12 @@
  *
  * With NM_CHANGED_FILES unset this runs the whole unit suite, exactly as the
  * previous `node --test tests/unit/*.test.mjs` invocation did. With
- * NM_CHANGED_FILES set (one changed repository path per line, provided by the
+ * With NM_CHANGED_FILES set (one changed repository path per line, provided by the
  * changed-paths harness) it runs only the tests that exercise those paths: the changed
  * unit tests themselves, every unit test whose source names a changed file by
- * repository path or module basename, and every Playwright spec that is
- * changed or whose source names a changed path or module basename, run
- * through the repository's browser entrypoint.
+ * repository path or by the path's directory-qualified reference, and every
+ * Playwright spec that is changed or whose source names a changed path the same
+ * way, run through the repository's browser entrypoint.
  */
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
@@ -19,6 +19,24 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const unitDir = path.join(root, 'tests', 'unit')
 const testsDir = path.join(root, 'tests')
+
+/**
+ * The references a source text can use for one changed path. A spec or test
+ * names a module by its repository path, its served URL, or a relative import,
+ * so the full path or the path's last two segments match every real spelling.
+ * A bare basename does not: two modules named `bundle.js` live under different
+ * directories, and a basename match would pull in specs that exercise the
+ * other module. Test files under `tests/` keep the basename fallback, because
+ * specs import their helpers with relative specifiers that carry no directory.
+ * @param {string} file - One changed repository path
+ * @returns {string[]} Text fragments that prove the file is exercised
+ */
+export function pathReferences(file) {
+    const segments = file.split('/')
+    if (segments[0] === 'tests') return [file, segments[segments.length - 1]]
+    if (segments.length < 2) return [file]
+    return [file, segments.slice(-2).join('/')]
+}
 
 /**
  * Select the unit test files that exercise the changed paths.
@@ -39,17 +57,17 @@ export function selectTests(changed, all, readTest) {
         if (changedTests.has(name)) return true
         const text = readTest(name)
         return sources.some(file =>
-            text.includes(file) || text.includes(path.basename(file)))
+            pathReferences(file).some(reference => text.includes(reference)))
     })
 }
 
 /**
  * Select the Playwright specs that exercise the changed paths, mirroring
  * selectTests: the changed spec files themselves, plus every spec whose
- * source names a changed file by repository path or module basename (this
- * covers spec-support helpers and app sources that only specs exercise).
- * With no changed paths the whole-suite behavior stays unit-only, exactly as
- * before the focused mode existed.
+ * source names a changed file by repository path or directory-qualified
+ * reference (this covers spec-support helpers and app sources that only
+ * specs exercise). With no changed paths the whole-suite behavior stays
+ * unit-only, exactly as before the focused mode existed.
  * @param {string[]} changed - Changed repository paths, one per entry
  * @param {string[]} all - Every Playwright spec file name
  * @param {(name: string) => string} readSpec - Reads one spec file's text
@@ -67,7 +85,7 @@ export function selectSpecs(changed, all, readSpec) {
         if (changedSpecs.has(name)) return true
         const text = readSpec(name)
         return sources.some(file =>
-            text.includes(file) || text.includes(path.basename(file)))
+            pathReferences(file).some(reference => text.includes(reference)))
     })
 }
 

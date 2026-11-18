@@ -50,9 +50,9 @@ test('vendored Sync browser SDK matches its pinned checksums', async () => {
 
 
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {
-    const directory = resolve(sdkDir, '../0.3.4')
+    const directory = resolve(sdkDir, '../0.3.5')
     const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'f7c09fd12bbc224b2c66003dfdbc5ba17e3fb40a8e5d6451c546eb27afd9a6ed')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), '35744d3af0126cd8d8658df0a7196881da6a37e7ef8571d9aedf46283fec6ae4')
     const manifestFiles = []
     for (const line of manifest.trim().split('\n')) {
         const [expected, filename] = line.split('  ')

@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
     SyncBridgeClient,
-    SyncPermissionRequiredError
-} from '../../public/js/sync/sdk/0.3.4/browser/index.js'
+    SyncPermissionRequiredError,
+    SyncUnavailableError
+} from '../../public/js/sync/sdk/0.3.5/browser/index.js'
 
 // Sync's connect() must open the control socket before it reads the loopback
 // permission state, so a browser that reports `prompt` until a network request
@@ -126,6 +127,47 @@ test('a failed control open explains itself with the loopback permission state',
         })
         assert.equal(FakeControlSocket.instances.length, 1)
         assert.equal(queries, 1, 'only a failed open reads the permission state')
+    } finally {
+        bridge.close()
+    }
+})
+
+test('a busy credential worker answers hello as unavailable, not lifecycle', async () => {
+    // Sync 0.3.5: when the daemon's bounded credential worker cannot accept a
+    // hello, it answers authority_saturated. The token was never checked, so
+    // the SDK classifies it as SyncUnavailableError and the application keeps
+    // its token and connects again later. On the 0.3.4 snapshot this daemon
+    // answer reached the application as SyncLifecycleError instead.
+    FakeControlSocket.instances.length = 0
+    FakeControlSocket.onConstruct = socket => {
+        socket.readyState = 1
+        socket.onSend = text => {
+            const message = JSON.parse(text)
+            if (message.type === 'hello') {
+                socket.emit('message', { data: JSON.stringify({
+                    type: 'error', code: 'authority_saturated',
+                    message: 'Credential worker is busy'
+                }) })
+            }
+        }
+        socket.emit('open', {})
+    }
+    let queries = 0
+    const bridge = new SyncBridgeClient({
+        endpoint: ENDPOINT,
+        token: TOKEN,
+        WebSocket: FakeControlSocket,
+        permissions: { query: async () => { queries += 1; return { state: 'prompt' } } },
+        timeoutMs: 5000
+    })
+    try {
+        await assert.rejects(bridge.connect(), error => {
+            assert.ok(error instanceof SyncUnavailableError)
+            assert.equal(error.code, 'SYNC_UNAVAILABLE')
+            assert.equal(error.daemonCode, 'authority_saturated')
+            return true
+        })
+        assert.equal(queries, 0, 'a failed hello never reads the permission state')
     } finally {
         bridge.close()
     }
