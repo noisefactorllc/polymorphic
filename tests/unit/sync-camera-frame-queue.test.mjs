@@ -509,7 +509,7 @@ test('native sequence regression fails instead of replaying an older frame', bou
     await owner.stop()
 })
 
-test('useNativeShm enforces timestamp watermark and reports error on regression', bounded, async () => {
+test('useNativeShm follows the sequence watermark across a replacement ring and accepts its fresh timestamp', bounded, async () => {
     class MockVideoFrame {
         constructor(buffer, options) {
             this.buffer = buffer
@@ -539,9 +539,24 @@ test('useNativeShm enforces timestamp watermark and reports error on regression'
         onError: (err) => errors.push(err)
     })
 
+    // The old ring's last frame.
     subscriber({ sequence: 1, presentationTimeUs: 5000, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
+    // Sync's camera restarted: the shell re-bases the new ring onto the
+    // delivered sequence, and the fresh ring restarts Sync's capture clock,
+    // so the rising sequence carries a lower timestamp. The queue must
+    // accept it and follow the new clock instead of failing the camera.
     subscriber({ sequence: 2, presentationTimeUs: 4000, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
+    owner.consume()
+    owner.consume()
 
+    assert.equal(errors.length, 0)
+    assert.equal(owner.active, true)
+    assert.equal(uploads.length, 2)
+    assert.equal(uploads[0].timestamp, 5000)
+    assert.equal(uploads[1].timestamp, 4000)
+
+    // A non-integer timestamp is still invalid.
+    subscriber({ sequence: 3, presentationTimeUs: Number.NaN, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
     assert.equal(errors.length, 1)
     assert.match(errors[0].message, /timestamp/)
     assert.equal(owner.active, false)

@@ -462,9 +462,11 @@ test('a shared reader that follows a replaced ring keeps one product consumer up
 
         // Sync's camera starts again: a new ring counts from one again, and
         // the shell delivers its frame above the watermark the product
-        // already holds (2) by continuing the delivered sequence.
+        // already holds (2) by continuing the delivered sequence. A fresh
+        // ring also restarts Sync's capture clock, so its frame carries a
+        // fresh, lower timestamp than the one the product retained.
         fixture.recreate()
-        fixture.writeFrame(fs, 1n, 3000n)
+        fixture.writeFrame(fs, 1n, 1000n)
         t.mock.timers.tick(300)
         reader._poll()
         assert.deepEqual(delivered, [1, 2, 3])
@@ -475,7 +477,7 @@ test('a shared reader that follows a replaced ring keeps one product consumer up
         assert.equal(uploads[1].timestamp, 2000)
         queue.consume()
         assert.equal(uploads.length, 3)
-        assert.equal(uploads[2].timestamp, 3000)
+        assert.equal(uploads[2].timestamp, 1000)
         assert.deepEqual(errors, [])
         assert.equal(queue.active, true)
     } finally {
@@ -520,25 +522,27 @@ test('a product restart across a replaced ring continues above the retained wate
 
         // Sync's camera restarts with a fresh ring while no one reads it.
         fixture.recreate()
-        fixture.writeFrame(fs, 1n, 3000n)
+        fixture.writeFrame(fs, 1n, 500n)
 
         // The same track's queue returns. The track keeps its earlier
         // watermark (sequence 2, timestamp 2000), so the restarted queue
         // accepts only a sequence above 2 — the shell's start-time rebase
-        // delivers the new ring's frame 1 as sequence 3.
+        // delivers the new ring's frame 1 as sequence 3. The replacement
+        // ring restarts Sync's capture clock, so its frames carry fresh,
+        // lower timestamps than the retained watermark.
         second = startQueue(track, reader)
         t.mock.timers.tick(300)
         reader._poll()
         assert.deepEqual(second.delivered, [3])
         // The queue buffers two frames before its first upload, so the new
         // ring's second frame arrives too — still above the watermark.
-        fixture.writeFrame(fs, 2n, 4000n)
+        fixture.writeFrame(fs, 2n, 600n)
         t.mock.timers.tick(300)
         reader._poll()
         assert.deepEqual(second.delivered, [3, 4])
         second.queue.consume()
         assert.equal(second.uploads.length, 1)
-        assert.equal(second.uploads[0].timestamp, 3000)
+        assert.equal(second.uploads[0].timestamp, 500)
         assert.deepEqual(first.errors, [])
         assert.deepEqual(second.errors, [])
         assert.equal(second.queue.active, true)
