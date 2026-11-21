@@ -530,8 +530,8 @@ test('a product restart across a replaced ring continues above the retained wate
         t.mock.timers.tick(300)
         reader._poll()
         assert.deepEqual(second.delivered, [3])
-        // The queue buffers two frames before its first upload, so the new
-        // ring's second frame arrives too — still above the watermark.
+        // The queue holds buffered frames before its first upload, so the new
+        // ring's next frame arrives too — still above the watermark.
         fixture.writeFrame(fs, 2n, 4000n)
         t.mock.timers.tick(300)
         reader._poll()
