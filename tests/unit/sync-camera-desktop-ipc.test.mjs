@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { SyncCameraFrameQueue } from '../../public/js/sync/cameraFrameQueue.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 // The desktop-shell IPC and shared-memory reader are owned by a private
@@ -345,6 +346,206 @@ test('a destroyed renderer drops the shell stop listener without disturbing the 
         assert.equal(reader.active, false)
         assert.equal(reader.fd, null)
     } finally {
+        if (reader) {
+            try { reader.subscribers.clear() } catch {}
+            try { reader.stop() } catch {}
+        }
+        fixture.cleanup()
+    }
+})
+
+// The product side of the shell's replaced-ring contract. Sync removes its
+// camera ring when its camera closes and creates a new file when the camera
+// starts again. A new ring counts from one again, and this product drops a
+// frame whose sequence is not above the last one it saw, so the shell's
+// delivered sequence must keep rising across a replacement — a restart at one
+// would fail this product's camera on its retained watermark.
+const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }
+
+function installBrowserGlobals(t) {
+    const saved = new Map(['MediaStreamTrackProcessor', 'createImageBitmap', 'VideoFrame']
+        .map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
+    // The native shared-memory path must never reach for the browser fallback.
+    globalThis.MediaStreamTrackProcessor = class {
+        constructor() { throw new Error('the browser fallback must not start while the native path runs') }
+    }
+    globalThis.createImageBitmap = () => {
+        throw new Error('the native path never converts frames through createImageBitmap')
+    }
+    globalThis.VideoFrame = class MockVideoFrame {
+        constructor(buffer, options) {
+            this.buffer = buffer
+            this.timestamp = options.timestamp
+            this.width = options.codedWidth
+            this.height = options.codedHeight
+            this.closes = 0
+        }
+        close() { this.closes++ }
+    }
+    t.after(() => {
+        for (const [key, descriptor] of saved) {
+            if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+            else delete globalThis[key]
+        }
+    })
+}
+
+function makeTrack() {
+    return Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+}
+
+// Subscribes the queue through the reader's own subscriber contract, the one
+// the shell's IPC wiring drives: start(onFrame) registers, stop(onFrame)
+// leaves, and the last subscriber leaving stops the shared reader.
+function subscribeThroughReader(reader, delivered) {
+    return callback => {
+        const onFrame = frame => {
+            delivered.push(frame.sequence)
+            callback(frame)
+        }
+        assert.equal(reader.start(onFrame), true)
+        return () => reader.stop(onFrame)
+    }
+}
+
+function startQueue(track, reader) {
+    const uploads = [], errors = [], delivered = []
+    const queue = new SyncCameraFrameQueue(track, {
+        isCurrent: () => true,
+        upload: bitmap => {
+            uploads.push(bitmap)
+            return { width: bitmap.width, height: bitmap.height }
+        },
+        onError: error => errors.push(error),
+        useNativeShm: true,
+        shmSubscriber: subscribeThroughReader(reader, delivered),
+    })
+    return { queue, uploads, errors, delivered }
+}
+
+test('a shared reader that follows a replaced ring keeps one product consumer uploading',
+    { skip: skipReason || false }, async t => {
+    if (!mod) return // Skipped through the option above with its reason.
+    // The reader checks its ring four times a second against Date.now(); mock
+    // timers make those checks and its poll tails deterministic. The queue's
+    // 2000 ms startup fallback never comes due: the ticks stay below it.
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1_000_000 })
+    installBrowserGlobals(t)
+    const fs = require('node:fs')
+    const os = require('node:os')
+    const path = require('node:path')
+    const fixture = makeTempRingFile(fs, os, path)
+    const reader = new SyncCameraShmReader({ ringPath: fixture.ringPath })
+    let queue = null
+    try {
+        const { queue: owned, uploads, errors, delivered } = startQueue(makeTrack(), reader)
+        queue = owned
+
+        fixture.writeFrame(fs, 1n, 1000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        fixture.writeFrame(fs, 2n, 2000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        queue.consume()
+        assert.equal(uploads.length, 1)
+        assert.deepEqual(delivered, [1, 2])
+
+        // Sync's camera closed: the ring file is gone. The reader must let go
+        // of the removed ring, keep its subscriber, and raise no product
+        // error — a missing ring is a restart, not a camera failure.
+        fs.unlinkSync(fixture.ringPath)
+        t.mock.timers.tick(300)
+        reader._poll()
+        assert.equal(reader.fd, null)
+        assert.equal(queue.active, true, 'a replaced ring is not a camera error')
+
+        // Sync's camera starts again: a new ring counts from one again, and
+        // the shell delivers its frame above the watermark the product
+        // already holds (2) by continuing the delivered sequence.
+        fixture.recreate()
+        fixture.writeFrame(fs, 1n, 3000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        assert.deepEqual(delivered, [1, 2, 3])
+        // The FIFO first releases the frame the old ring delivered last, then
+        // the replacement ring's frame under its continued sequence.
+        queue.consume()
+        assert.equal(uploads.length, 2)
+        assert.equal(uploads[1].timestamp, 2000)
+        queue.consume()
+        assert.equal(uploads.length, 3)
+        assert.equal(uploads[2].timestamp, 3000)
+        assert.deepEqual(errors, [])
+        assert.equal(queue.active, true)
+    } finally {
+        if (queue) { try { await queue.stop() } catch {} }
+        if (reader) {
+            try { reader.subscribers.clear() } catch {}
+            try { reader.stop() } catch {}
+        }
+        fixture.cleanup()
+    }
+})
+
+test('a product restart across a replaced ring continues above the retained watermark',
+    { skip: skipReason || false }, async t => {
+    if (!mod) return
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 2_000_000 })
+    installBrowserGlobals(t)
+    const fs = require('node:fs')
+    const os = require('node:os')
+    const path = require('node:path')
+    const fixture = makeTempRingFile(fs, os, path)
+    const reader = new SyncCameraShmReader({ ringPath: fixture.ringPath })
+    let first = null, second = null
+    try {
+        const track = makeTrack()
+        first = startQueue(track, reader)
+        fixture.writeFrame(fs, 1n, 1000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        fixture.writeFrame(fs, 2n, 2000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        first.queue.consume()
+        assert.equal(first.uploads.length, 1)
+        assert.deepEqual(first.delivered, [1, 2])
+
+        // The deck's source ends: the queue unsubscribes, and the last
+        // consumer leaving stops the shared reader entirely.
+        await first.queue.stop()
+        assert.equal(reader.active, false)
+        assert.equal(reader.fd, null)
+
+        // Sync's camera restarts with a fresh ring while no one reads it.
+        fixture.recreate()
+        fixture.writeFrame(fs, 1n, 3000n)
+
+        // The same track's queue returns. The track keeps its earlier
+        // watermark (sequence 2, timestamp 2000), so the restarted queue
+        // accepts only a sequence above 2 — the shell's start-time rebase
+        // delivers the new ring's frame 1 as sequence 3.
+        second = startQueue(track, reader)
+        t.mock.timers.tick(300)
+        reader._poll()
+        assert.deepEqual(second.delivered, [3])
+        // The queue buffers two frames before its first upload, so the new
+        // ring's second frame arrives too — still above the watermark.
+        fixture.writeFrame(fs, 2n, 4000n)
+        t.mock.timers.tick(300)
+        reader._poll()
+        assert.deepEqual(second.delivered, [3, 4])
+        second.queue.consume()
+        assert.equal(second.uploads.length, 1)
+        assert.equal(second.uploads[0].timestamp, 3000)
+        assert.deepEqual(first.errors, [])
+        assert.deepEqual(second.errors, [])
+        assert.equal(second.queue.active, true)
+    } finally {
+        for (const owned of [first, second]) {
+            if (owned) { try { await owned.queue.stop() } catch {} }
+        }
         if (reader) {
             try { reader.subscribers.clear() } catch {}
             try { reader.stop() } catch {}
