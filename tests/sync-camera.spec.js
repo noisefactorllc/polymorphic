@@ -81,9 +81,18 @@ test('selected Sync camera reaches a nonzero media step, auto-reopens after a fa
     await page.evaluate(() => { window.cameraTest.frame(1000, 'red'); window.cameraTest.frame(1000, 'green') })
     await expect.poll(() => page.evaluate(() => window.cameraTest.uploads)).toEqual([[0, 0, 255, 255], [0, 255, 0, 255]])
     await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
-    // A stale frame fails the session; its device is still enumerated, so the
-    // source retires and reopens on its own — no manual reselect.
+    // A replacement ring restarts Sync's capture clock: the shell re-bases
+    // the ring onto the delivered sequence, so a rising sequence carries a
+    // fresh, lower timestamp. The queue follows the new clock instead of
+    // failing the camera.
     await page.evaluate(() => window.cameraTest.frame(100))
+    await expect(page.locator('[data-id=source-status]')).toContainText('Sync Camera streaming')
+    await expect.poll(() => page.evaluate(() => window.cameraTest.uploads[2])).toEqual([0, 0, 255, 255])
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([255, 0, 0, 255])
+    // A non-integer timestamp is invalid: the session fails, and its device
+    // is still enumerated, so the source retires and reopens on its own —
+    // no manual reselect.
+    await page.evaluate(() => window.cameraTest.frame(Number.NaN))
     await expect(page.locator('[data-id=source-status]')).toContainText('Reconnecting when the camera returns')
     expect(await page.evaluate(() => window.cameraTest.tracks[0].readyState)).toBe('ended')
     await expect.poll(() => page.evaluate(() => window.cameraTest.starts), { timeout: 15000 }).toBe(2)
