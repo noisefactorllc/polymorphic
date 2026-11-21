@@ -221,3 +221,36 @@ test('SnapshotHistory writes after a hold whose promise rejects', async () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     assert.deepStrictEqual(storedHistory(storage).entries.map(entry => entry.dsl), ['a'])
 })
+
+
+test('SnapshotHistory replaces future entries after an edit and restores that branch on reload', () => {
+    const storage = historyStorage([])
+    const history = new SnapshotHistory(storage)
+    history.push('first')
+    history.push('second')
+    history.push('discarded future')
+    assert.strictEqual(history.back(), 'second')
+    history.push('replacement')
+    assert.strictEqual(history.canForward(), false)
+    assert.strictEqual(history.forward(), null)
+
+    const restored = new SnapshotHistory(storage)
+    assert.strictEqual(restored.back(), 'second')
+    assert.strictEqual(restored.back(), 'first')
+    assert.strictEqual(restored.back(), null)
+    assert.strictEqual(restored.forward(), 'second')
+    assert.strictEqual(restored.forward(), 'replacement')
+    assert.strictEqual(restored.forward(), null)
+})
+
+test('SnapshotHistory keeps the latest bounded history across reloads', () => {
+    const storage = historyStorage([])
+    const history = new SnapshotHistory(storage)
+    for (let i = 0; i < 55; i++) history.push(`program ${i}`)
+    const restored = new SnapshotHistory(storage)
+    assert.strictEqual(restored.forward(), null)
+    const previous = []
+    while (restored.canBack()) previous.push(restored.back())
+    assert.deepStrictEqual(previous, Array.from({ length: 49 }, (_, i) => `program ${53 - i}`))
+    assert.strictEqual(restored.back(), null)
+})
