@@ -164,6 +164,32 @@ test('statesPinnedVersion matches the alias series and an exact release', () => 
     assert.equal(statesPinnedVersion(undefined, '1'), false)
 })
 
+test('a release pin is stated exactly, not by prefix', () => {
+    assert.equal(statesPinnedVersion('1.0.353.1', '1.0.353'), false)
+    assert.equal(statesPinnedVersion('1.0.3530', '1.0.353'), false)
+})
+
+test('a patch release under the name of a release pin is refused', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'fetch-noisemaker-'))
+    try {
+        const pinPath = join(repoRoot, 'pin.json')
+        await writeFile(pinPath, JSON.stringify({ version: '1.0.353', baseUrl: 'https://cdn.test' }))
+        const base = 'https://cdn.test/1.0.353'
+        const files = {
+            [`${base}/noisemaker-shaders-core.esm.min.js`]: CORE_BYTES,
+            [`${base}/effects/manifest.json`]: MANIFEST_JSON,
+            [`${base}/effects/blur.js`]: EFFECT_BYTES,
+            [`${base}/deployment-meta.json`]: JSON.stringify({ version: '1.0.353.1' }),
+        }
+        await assert.rejects(
+            vendorNoisemaker({ pinPath, repoRoot, fetchImpl: stubFetch(files), log: () => {} }),
+            /one release under the name of another/
+        )
+    } finally {
+        await rm(repoRoot, { recursive: true, force: true })
+    }
+})
+
 test('statedVersion reads the stated version and none when unparsable', () => {
     assert.equal(statedVersion(META_JSON), '1.0.353')
     assert.equal(statedVersion('{}'), undefined)

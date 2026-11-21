@@ -8,11 +8,14 @@ const PIN_PATH = path.join(REPO_ROOT, 'desktop', 'noisemaker.version.json')
 
 /**
  * True when a bundle that states `stated` as its version is what `pin` names.
- * The checked-in pin names a channel alias, such as `1`, which a release of
- * its series serves. A pin that names one release is stated exactly.
+ * A pin without a dot names a channel alias, such as `1`, which a release of
+ * its series serves, so the stated version may carry the alias as its major.
+ * A pin that names one release is stated exactly.
  */
 function statesPinnedVersion(stated, pin) {
-    return typeof stated === 'string' && (stated === pin || stated.startsWith(`${pin}.`))
+    if (typeof stated !== 'string') return false
+    if (stated === pin) return true
+    return !pin.includes('.') && stated.startsWith(`${pin}.`)
 }
 
 /** The version that a deployment-meta.json states, or undefined when it states none. */
