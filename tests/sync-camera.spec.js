@@ -84,8 +84,7 @@ test('selected Sync camera reaches a nonzero media step, auto-reopens after a fa
     // A replacement ring restarts Sync's capture clock: the shell re-bases
     // the ring onto the delivered sequence, so a rising sequence carries a
     // fresh, lower timestamp. The queue follows the new clock instead of
-    // failing the camera. Two frames are needed because the FIFO re-buffers
-    // after sustained starvation and waits for two before its next upload.
+    // failing the camera.
     await page.evaluate(() => { window.cameraTest.frame(100); window.cameraTest.frame(200, 'green') })
     await expect(page.locator('[data-id=source-status]')).toContainText('Sync Camera streaming')
     await expect.poll(() => page.evaluate(() => window.cameraTest.uploads[2])).toEqual([0, 0, 255, 255])
