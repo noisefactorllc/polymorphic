@@ -81,7 +81,12 @@ jobs:
         run: |
           tests=()
           for test in tests/unit/*.test.mjs; do
-            [[ "$test" == 'tests/unit/book-data.test.mjs' ]] || tests+=("$test")
+            case "$test" in
+              tests/unit/book-data.test.mjs) ;;
+              # The desktop integration runs in the full local suite.
+              tests/unit/sync-camera-desktop-ipc.test.mjs) ;;
+              *) tests+=("$test") ;;
+            esac
           done
           node --test --test-reporter=./scripts/strict-reporter.mjs "${tests[@]}"
 
