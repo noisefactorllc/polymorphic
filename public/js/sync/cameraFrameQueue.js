@@ -108,11 +108,6 @@ export class SyncCameraFrameQueue {
             if (sequence === this._watermark.sequence) return
             this._clearShmStartupTimer()
             this._shmFrameSeen = true
-            // The sequence is the native path's order authority: the shell
-            // re-bases a replacement ring onto the delivered sequence, and
-            // that fresh ring restarts Sync's capture clock, so a rising
-            // sequence may carry a lower timestamp than the watermark. Only
-            // a non-integer timestamp is invalid.
             const timestamp = Number(presentationTimeUs)
             if (!Number.isSafeInteger(timestamp)) {
                 throw new Error('Camera frame timestamp is invalid')
