@@ -84,11 +84,13 @@ test('selected Sync camera reaches a nonzero media step, auto-reopens after a fa
     // A replacement ring restarts Sync's capture clock: the shell re-bases
     // the ring onto the delivered sequence, so a rising sequence carries a
     // fresh, lower timestamp. The queue follows the new clock instead of
-    // failing the camera.
-    await page.evaluate(() => window.cameraTest.frame(100))
+    // failing the camera. Two frames are needed because the FIFO re-buffers
+    // after sustained starvation and waits for two before its next upload.
+    await page.evaluate(() => { window.cameraTest.frame(100); window.cameraTest.frame(200, 'green') })
     await expect(page.locator('[data-id=source-status]')).toContainText('Sync Camera streaming')
     await expect.poll(() => page.evaluate(() => window.cameraTest.uploads[2])).toEqual([0, 0, 255, 255])
-    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([255, 0, 0, 255])
+    await expect.poll(() => page.evaluate(() => window.cameraTest.uploads[3])).toEqual([0, 255, 0, 255])
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample())).toEqual([0, 255, 0, 255])
     // A non-integer timestamp is invalid: the session fails, and its device
     // is still enumerated, so the source retires and reopens on its own —
     // no manual reselect.
