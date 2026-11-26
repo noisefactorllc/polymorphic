@@ -3,7 +3,11 @@ import { setTooltip } from './tooltips.js'
 
 export function surfacesWrittenInDsl(dsl) {
     if (!dsl) return []
-    const matches = [...dsl.matchAll(/\.write\s*\(\s*o([0-7])\s*\)/g)]
+    // The 1.x engine writes back a chain element id on a write step, in the
+    // form `.write(o0, _id: "w1")` (noisemaker 5d5122e5, served release 1.5.7).
+    // The optional tail stays short of any paren so a nested call never joins
+    // the match.
+    const matches = [...dsl.matchAll(/\.write\s*\(\s*o([0-7])\s*(?:,[^()]*)?\)/g)]
     const ids = new Set(matches.map(m => parseInt(m[1], 10)))
     return [...ids].sort((a, b) => a - b)
 }

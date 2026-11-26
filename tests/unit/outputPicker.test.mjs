@@ -14,6 +14,19 @@ test('surfacesWrittenInDsl tolerates whitespace', () => {
     assert.deepStrictEqual(surfacesWrittenInDsl(dsl), [7])
 })
 
+test('surfacesWrittenInDsl reads the engine id-carrying write form', () => {
+    // The 1.x engine writes back a chain element id on a write step, in the
+    // form `.write(o0, _id: "w1")` (noisemaker 5d5122e5, served release 1.5.7).
+    const dsl = 'search synth, filter\nnoise(_id: "a").write(o0, _id: "w1")\nrender(o0)'
+    assert.deepStrictEqual(surfacesWrittenInDsl(dsl), [0])
+    assert.strictEqual(effectiveRenderTarget(dsl), 0)
+})
+
+test('surfacesWrittenInDsl keeps the plain write form and pairs ids across surfaces', () => {
+    const dsl = 'search synth, filter\nnoise().write(o0)\nread(o0, _id: "r").write(o2, _id: "w")\nrender(o0)'
+    assert.deepStrictEqual(surfacesWrittenInDsl(dsl), [0, 2])
+})
+
 test('surfacesWrittenInDsl returns empty array for empty or missing input', () => {
     assert.deepStrictEqual(surfacesWrittenInDsl(''), [])
     assert.deepStrictEqual(surfacesWrittenInDsl(null), [])
