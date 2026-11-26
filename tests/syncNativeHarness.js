@@ -469,7 +469,7 @@ export function createStorageWriteFixtures() {
 precision highp float;
 out vec4 outputBuffer;
 void main() { outputBuffer = vec4(1.0, 0.5, 0.25, 1.0); }`
-    const fillWgsl = `@group(0) @binding(0) var outputBuffer: texture_storage_2d<rgba8unorm, write>;
+    const fillWgsl = `@group(0) @binding(0) var outputBuffer: texture_storage_2d<rgba16float, write>;
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(outputBuffer, vec2<i32>(gid.xy), vec4<f32>(1.0, 0.5, 0.25, 1.0));
