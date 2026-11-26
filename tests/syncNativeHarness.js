@@ -8,6 +8,37 @@ import http from 'node:http'
 import net from 'node:net'
 import path from 'node:path'
 
+// A sandbox whose filtering proxy denies the first-party handfish and font
+// CDNs serves those hosts from a local mirror instead: POLY_CDN_MIRROR names a
+// directory that keeps the real hosts' path layout, so the page receives the
+// same bytes production would serve. Unmirrored paths abort, which the boot
+// reports like any other failed fetch.
+async function mirrorFirstPartyCdn(page) {
+    const mirror = process.env.POLY_CDN_MIRROR
+    if (!mirror) return
+    await page.route('**/handfish.noisefactor.io/**', route => {
+        const file = path.join(mirror, 'handfish', new URL(route.request().url()).pathname)
+        if (!fs.existsSync(file)) return route.abort()
+        return route.fulfill({
+            path: file,
+            contentType: file.endsWith('.css') ? 'text/css' : 'text/javascript',
+        })
+    })
+    await page.route('**/fonts.noisefactor.io/**', route => {
+        const file = path.join(mirror, 'fonts', new URL(route.request().url()).pathname)
+        if (!fs.existsSync(file)) return route.abort()
+        return route.fulfill({ path: file, contentType: 'font/woff2' })
+    })
+    await page.route('**/shaders.noisedeck.app/**', route => {
+        const file = path.join(mirror, 'shaders', new URL(route.request().url()).pathname)
+        if (!fs.existsSync(file)) return route.abort()
+        return route.fulfill({
+            path: file,
+            contentType: file.endsWith('.json') ? 'application/json' : 'text/javascript',
+        })
+    })
+}
+
 const defaultDaemon = path.resolve(__dirname, '../../sync/build/sync_audio_test_server')
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
 // All default to the standard local serve-book endpoint; overrides exist for
@@ -68,6 +99,7 @@ export function installNativeAudioDaemon() {
 
 export function createSetup(getEndpoint) {
     return async function setup(page, fullApp = false, backend = 'webgl2', dsl = 'search synth\nperlin().write(o0)\nrender(o0)') {
+        await mirrorFirstPartyCdn(page)
         await page.route('**/js/sync/audio.js', route => route.fulfill({
             contentType: 'text/javascript',
             body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.5/browser/index.js';
