@@ -7,6 +7,10 @@ installHandfishLocal(test)
 // per written surface (o0 and o1).
 const DSL = 'search synth, render\n\nnoise(scaleX: 80, scaleY: 80).write(o0)\nnoise(scaleX: 40, scaleY: 40).write(o1)\n\nrender(o0)'
 
+// The same two-surface program in the engine's id-carrying write form: each
+// chain element and write step carries an element id.
+const ID_DSL = 'search synth, render\n\nnoise(scaleX: 80, scaleY: 80, _id: "a").write(o0, _id: "w1")\nnoise(scaleX: 40, scaleY: 40, _id: "b").write(o1, _id: "w2")\n\nrender(o0)'
+
 // The hidden preview renderers' live state, read through the app's own debug
 // surface (`window.__poly.outputPicker`): one entry per written surface whose
 // renderer reports whether its render loop still runs.
@@ -163,4 +167,34 @@ test('with the pips off from boot, no hidden preview renderer is ever built', as
     await page.waitForTimeout(1000)
     expect(await pipStates(page)).toEqual([])
     await expect(page.locator('.output-pip')).toHaveCount(0)
+})
+
+test('an id-carrying write program boots, builds its pips and renders real pixels on WebGL2', async ({ page }) => {
+    test.slow() // software-GL shader compiles for the app and both pips
+
+    await page.addInitScript(() => localStorage.setItem('polymorphic-output-picker', '1'))
+    await page.goto('/?dsl=' + encodeURIComponent(ID_DSL))
+    await waitForBooted(page)
+    expect(await page.evaluate(() => window.__poly.backend)).toBe('webgl2')
+
+    // The picker builds one live preview per written surface despite the ids.
+    await page.waitForFunction(() => window.__poly.outputPicker?._previews?.size === 2, null, { timeout: 30000 })
+    await expect(page.locator('.output-picker.visible .output-pip')).toHaveCount(2)
+
+    const colors = await page.evaluate(() => {
+        const distinct = canvas => {
+            const gl = canvas.getContext('webgl2')
+            const buf = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4)
+            gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+            const set = new Set()
+            for (let i = 0; i < buf.length; i += 4) set.add((buf[i] << 16) | (buf[i + 1] << 8) | buf[i + 2])
+            return set.size
+        }
+        return {
+            main: distinct(document.getElementById('canvas')),
+            pip: distinct(window.__poly.outputPicker._previews.get(0).canvas),
+        }
+    })
+    expect(colors.main, 'the main canvas renders varied pixels for the id-carrying program').toBeGreaterThan(1)
+    expect(colors.pip, 'the pip preview renders varied pixels for the id-carrying program').toBeGreaterThan(1)
 })
