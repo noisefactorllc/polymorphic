@@ -110,7 +110,7 @@ test('a basename shared with another module selects only the specs that name its
     assert.deepEqual(
         selectSpecs(['public/js/noisemaker/bundle.js'], ['live-input-image.spec.js'], () => specText),
         ['live-input-image.spec.js'])
-    const syncSpecText = "const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.3/browser/client.js')"
+    const syncSpecText = "const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.5/browser/client.js')"
     assert.deepEqual(
         selectSpecs(['public/js/sync/sdk/0.3.5/browser/client.js'], ['sync-native.spec.js'], () => syncSpecText),
         ['sync-native.spec.js'])
