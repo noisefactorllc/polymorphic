@@ -120,7 +120,7 @@ test('the receiver acceptance poll rides out a lifecycle close mid-poll', async 
     // must ride it out inside its window, and the acceptance itself (receiver
     // checksum match, zero rejects, zero failures) is unchanged.
     await page.evaluate(async () => {
-        const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.3/browser/client.js')
+        const { SyncLifecycleError } = await import('/js/sync/sdk/0.3.5/browser/client.js')
         const client = window.__poly.syncOutputController._client
         const exchange = client._exchange.bind(client)
         let injected = false
