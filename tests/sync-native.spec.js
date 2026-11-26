@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, createNativeOutputDialogDrive, acceptNativeReceiverBytes, pollReceiverAccepted, installSenderTransportCut, clickSyncAudioConnectRidingHelloDeadline, clickSyncAudioEnableRidingHelloDeadline, enableSyncAudioInputRidingHelloDeadline } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverConnect, createNativeOutputDialogDrive, acceptNativeReceiverBytes, pollReceiverAccepted, installSenderTransportCut, clickSyncAudioConnectRidingHelloDeadline, clickSyncAudioEnableRidingHelloDeadline, enableSyncAudioInputRidingHelloDeadline, createStorageWriteFixtures } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const cut = installSenderTransportCut(getEndpoint)
@@ -288,4 +288,41 @@ test('the Sync output dialog drives connect, start, stop, and reconnect against 
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
     await expect.poll(() => page.evaluate(() => window.__poly.liveInputsPanel._audioMgr.enabled)).toBe(false)
     await expect.poll(() => page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
+})
+
+// A portable effect can write through a declared storage texture, and a chain
+// can continue past that write. This leg registers such an effect in the
+// product, recompiles onto its chain while the output runs, and requires the
+// native receiver to accept the real rendered bytes on WebGL2: the stored
+// orange must reach the canvas and the receiver, not the grey a lost write
+// leaves behind.
+const storageFixtures = createStorageWriteFixtures()
+
+test('native receiver accepts webgl2 bytes rendered past a storage-texture write', async ({ page }) => {
+    test.slow()
+    await connectNativeReceiver(page, 'webgl2')
+    const before = await page.evaluate(() => window.nativeFrameChecksums.size)
+    await page.evaluate(async ({ direct, filter, dsl }) => {
+        const { registerPortableEffect } = await import('/js/sharingLoader.js')
+        await registerPortableEffect(direct)
+        await registerPortableEffect(filter)
+        await window.PolymorphicAgent.setProgram({ dsl })
+    }, { direct: storageFixtures.direct, filter: storageFixtures.copyFilter, dsl: storageFixtures.dsl })
+    await page.waitForFunction(() => {
+        const dsl = document.getElementById('dsl-editor')?.querySelector('textarea')?.value
+        return dsl && dsl.includes('storageDirectProbe')
+    }, null, { timeout: 30_000 })
+    // The fill pass stores its orange through the storage texture and the copy
+    // pass reads it from the node's own output texture, so the canvas must
+    // show the stored color.
+    await expect.poll(() => page.evaluate(() => {
+        window.__poly.renderer.canvasRenderer.render(1 / 60)
+        const gl = document.getElementById('canvas').getContext('webgl2')
+        const pixel = new Uint8Array(4)
+        gl.readPixels(gl.drawingBufferWidth - 1, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
+        return `${pixel[0]},${pixel[1]},${pixel[2]}`
+    })).toBe('255,128,64')
+    await expect.poll(() => page.evaluate(() => window.nativeFrameChecksums.size))
+        .toBeGreaterThan(before)
+    await acceptNativeReceiverBytes(page)
 })

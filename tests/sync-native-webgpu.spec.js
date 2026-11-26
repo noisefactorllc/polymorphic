@@ -3,7 +3,7 @@
 // to them alone, and so their daemon is fresh instead of inheriting the state
 // an earlier spec left behind.
 import { test, expect } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverTest, createNativeReceiverConnect, acceptNativeReceiverBytes } from './syncNativeHarness.js'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverTest, createNativeReceiverConnect, acceptNativeReceiverBytes, createStorageWriteFixtures } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const setup = createSetup(getEndpoint)
@@ -83,6 +83,38 @@ test('native receiver keeps accepting webgpu bytes through a usage-changing reco
     await page.waitForFunction(() => {
         const dsl = document.getElementById('dsl-editor')?.querySelector('textarea')?.value
         return dsl && dsl.includes('renderLandscape3d')
+    }, null, { timeout: 30_000 })
+    // The recompiled program must actually reach the receiver: fresh frames
+    // after the switch, then the full acceptance poll with zero rejects and
+    // zero failures.
+    await expect.poll(async () => page.evaluate(() => window.nativeFrameChecksums.size))
+        .toBeGreaterThan(before)
+    await acceptNativeReceiverBytes(page)
+})
+
+// A portable effect can write through a declared storage texture, and a chain
+// can continue past that write. On the broken engine the storage binding
+// failed ("Storage texture not found") and the output stopped delivering
+// frames. This leg registers such an effect in the product, recompiles onto
+// its chain while the output runs, and requires the receiver to keep
+// accepting the real rendered bytes on WebGPU.
+const storageFixtures = createStorageWriteFixtures()
+const storageSetup = (page, fullApp, backend) => setup(page, fullApp, backend)
+const connectStorageReceiver = createNativeReceiverConnect(storageSetup, getEndpoint)
+
+test('native receiver keeps accepting webgpu bytes rendered past a storage-texture write', async ({ page }) => {
+    test.slow()
+    await connectStorageReceiver(page, 'webgpu')
+    const before = await page.evaluate(() => window.nativeFrameChecksums.size)
+    await page.evaluate(async ({ direct, filter, dsl }) => {
+        const { registerPortableEffect } = await import('/js/sharingLoader.js')
+        await registerPortableEffect(direct)
+        await registerPortableEffect(filter)
+        await window.PolymorphicAgent.setProgram({ dsl })
+    }, { direct: storageFixtures.direct, filter: storageFixtures.copyFilter, dsl: storageFixtures.dsl })
+    await page.waitForFunction(() => {
+        const dsl = document.getElementById('dsl-editor')?.querySelector('textarea')?.value
+        return dsl && dsl.includes('storageDirectProbe')
     }, null, { timeout: 30_000 })
     // The recompiled program must actually reach the receiver: fresh frames
     // after the switch, then the full acceptance poll with zero rejects and

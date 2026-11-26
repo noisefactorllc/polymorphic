@@ -456,6 +456,50 @@ export async function acceptNativeReceiverBytes(page, { stop } = {}) {
     expect(await page.evaluate(() => window.__poly.syncOutputController.state.status)).toBe('idle')
 }
 
+// A declared storage-texture target, and a chain that continues past the
+// storage write. A portable effect's compute pass stores a fixed orange
+// through a storage texture, and the copy filter that follows reads the
+// node's own output texture. The engine allocates a declared storage target
+// with storage usage and keeps that output readable, so the stored color
+// reaches the next step and the output; on the broken engine the copy read
+// grey (WebGL2 "FBO not found") or the storage binding failed (WebGPU
+// "Storage texture not found").
+export function createStorageWriteFixtures() {
+    const fillGlsl = `#version 300 es
+precision highp float;
+out vec4 outputBuffer;
+void main() { outputBuffer = vec4(1.0, 0.5, 0.25, 1.0); }`
+    const fillWgsl = `@group(0) @binding(0) var outputBuffer: texture_storage_2d<rgba8unorm, write>;
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    textureStore(outputBuffer, vec2<i32>(gid.xy), vec4<f32>(1.0, 0.5, 0.25, 1.0));
+}`
+    const copyGlsl = `#version 300 es
+precision highp float;
+uniform sampler2D workTex;
+out vec4 fragColor;
+void main() { fragColor = texelFetch(workTex, ivec2(gl_FragCoord.xy), 0); }`
+    const copyWgsl = `@group(0) @binding(0) var workTex: texture_2d<f32>;
+@fragment fn main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return textureLoad(workTex, vec2<i32>(pos.xy), 0);
+}`
+    const direct = {
+        namespace: 'user', name: 'storageDirectProbe', func: 'storageDirectProbe', globals: {},
+        shaders: { fill: { glsl: fillGlsl, wgsl: fillWgsl } },
+        passes: [{ name: 'fill', type: 'compute', program: 'fill', workgroups: [8, 8, 1],
+            storageTextures: { outputBuffer: 'outputTex' } }]
+    }
+    const copyFilter = {
+        namespace: 'user', name: 'storageCopyFilter', func: 'storageCopyFilter', globals: {},
+        shaders: { copy: { glsl: copyGlsl, wgsl: copyWgsl } },
+        passes: [{ name: 'copy', program: 'copy', inputs: { workTex: 'inputTex' }, outputs: { fragColor: 'outputTex' } }]
+    }
+    return {
+        direct, copyFilter,
+        dsl: 'search user, synth\nstorageDirectProbe().storageCopyFilter().write(o0)\nrender(o0)'
+    }
+}
+
 export function createNativeReceiverTest(setup, getEndpoint) {
     const connectNativeReceiver = createNativeReceiverConnect(setup, getEndpoint)
     return async function runNativeReceiverTest(page, backend, viewport = null) {
