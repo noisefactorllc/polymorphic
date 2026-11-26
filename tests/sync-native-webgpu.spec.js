@@ -106,6 +106,20 @@ const connectStorageReceiver = createNativeReceiverConnect(storageSetup, getEndp
 test('native receiver keeps accepting webgpu bytes rendered past a storage-texture write', async ({ page }) => {
     test.slow()
     await connectStorageReceiver(page, 'webgpu')
+    // The write's dispatch covers the texture origin, so the stored color
+    // shows at the bottom-left corner of the product's flipped capture. The
+    // stored values 1.0, 0.5, 0.25, 1.0 map exactly, on every adapter. The
+    // engine reports a storage binding it cannot resolve on its console
+    // rather than on the device, so the leg collects both channels from
+    // before the recompile.
+    const storageFailures = []
+    const onConsole = message => {
+        const text = message.text()
+        if (message.type() === 'error' || /uncaptured|not found|invalid/i.test(text)) {
+            storageFailures.push(text)
+        }
+    }
+    page.on('console', onConsole)
     const before = await page.evaluate(() => window.nativeFrameChecksums.size)
     await page.evaluate(async ({ direct, filter, dsl }) => {
         const { registerPortableEffect } = await import('/js/sharingLoader.js')
@@ -124,28 +138,28 @@ test('native receiver keeps accepting webgpu bytes rendered past a storage-textu
         const dsl = document.getElementById('dsl-editor')?.querySelector('textarea')?.value
         return dsl && dsl.includes('storageDirectProbe')
     }, null, { timeout: 30_000 })
-    // The engine's own WebGPU output for a storage write does not deliver the
-    // stored color through the presented texture on any adapter (observed on
-    // a software adapter and on a physical GPU alike), so the visible stored
-    // color is asserted on the WebGL2 leg, whose readback is exact. What the
-    // WebGPU leg can pin is the write's validity: the engine before the
-    // declared-storage-target fix rejected the storage bind group and every
-    // later command buffer with uncaptured errors, so the leg collects the
-    // device's uncaptured errors from the recompile through the receiver
-    // poll and requires none.
-    await page.evaluate(() => {
-        const device = window.__poly.renderer.inner.pipeline.backend.device
-        window.__storageUncapturedErrors = []
-        device.addEventListener('uncapturederror', event => {
-            window.__storageUncapturedErrors.push(String(event.error?.message ?? event.error ?? 'unknown'))
-        })
-    })
     // The recompiled program must actually reach the receiver: fresh frames
     // after the switch, then the full acceptance poll with zero rejects and
     // zero failures.
     await expect.poll(async () => page.evaluate(() => window.nativeFrameChecksums.size))
         .toBeGreaterThan(before)
+    await expect.poll(async () => page.evaluate(async () => {
+        const agent = window.PolymorphicAgent
+        await agent.pause()
+        await agent.play()
+        await agent.pause()
+        const env = await agent.getThumbnail({ maxDimension: 64, format: 'png' })
+        const bytes = Uint8Array.from(atob(env.result.bytes), charCode => charCode.charCodeAt(0))
+        const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+        const canvas = document.createElement('canvas')
+        canvas.width = image.width
+        canvas.height = image.height
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        context.drawImage(image, 0, 0)
+        return Array.from(context.getImageData(1, image.height - 2, 1, 1).data)
+    }), { timeout: 15_000 }).toStrictEqual([255, 128, 64, 255])
     await acceptNativeReceiverBytes(page)
     const storageErrors = await page.evaluate(() => window.__storageUncapturedErrors)
-    expect(storageErrors, `uncaptured WebGPU errors: ${storageErrors.join(' | ')}`).toEqual([])
+    const failures = [...storageErrors, ...storageFailures]
+    expect(failures, `storage failures: ${failures.join(' | ')}`).toEqual([])
 })
