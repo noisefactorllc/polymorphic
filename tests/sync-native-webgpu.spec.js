@@ -108,7 +108,8 @@ test('native receiver keeps accepting webgpu bytes rendered past a storage-textu
     await connectStorageReceiver(page, 'webgpu')
     // The write's dispatch covers the texture origin, so the stored color
     // shows at the bottom-left corner of the product's flipped capture. The
-    // stored values 1.0, 0.5, 0.25, 1.0 map exactly, on every adapter. The
+    // stored values 1.0, 0.5, 0.25, 1.0 map exactly, verified on the tested
+    // software Vulkan adapter and a physical Apple GPU. The
     // engine reports a storage binding it cannot resolve on its console
     // rather than on the device, so the leg collects both channels from
     // before the recompile.
@@ -158,6 +159,9 @@ test('native receiver keeps accepting webgpu bytes rendered past a storage-textu
         context.drawImage(image, 0, 0)
         return Array.from(context.getImageData(1, image.height - 2, 1, 1).data)
     }), { timeout: 15_000 }).toStrictEqual([255, 128, 64, 255])
+    // The capture poll leaves the program paused; resume it so the
+    // receiver's acceptance poll sees fresh frames again.
+    await page.evaluate(() => window.PolymorphicAgent.play())
     await acceptNativeReceiverBytes(page)
     const storageErrors = await page.evaluate(() => window.__storageUncapturedErrors)
     const failures = [...storageErrors, ...storageFailures]
