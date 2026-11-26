@@ -94,6 +94,21 @@ test('native receiver accepts webgl2 stateful-instance bytes while audio and vid
     await acceptNativeReceiverBytes(page)
 })
 
+// The engine renders scene programs into a scene color texture before the
+// pipeline's own output pass, so a scene's bytes reach the output sink the
+// same way any other program's do. This leg drives the same native receiver
+// with a scene program, so the receiver must accept those real rendered
+// bytes on WebGL2.
+const sceneDsl = 'search synth\nscene(camera(), mesh("box")).write(o0)\nrender(o0)'
+const sceneSetup = (page, fullApp, backend) => setup(page, fullApp, backend, sceneDsl)
+const connectSceneReceiver = createNativeReceiverConnect(sceneSetup, getEndpoint)
+
+test('native receiver accepts webgl2 scene bytes while audio and video share the grant', async ({ page }) => {
+    test.slow()
+    await connectSceneReceiver(page, 'webgl2')
+    await acceptNativeReceiverBytes(page)
+})
+
 test('the receiver acceptance poll rides out a lifecycle close mid-poll', async ({ page }) => {
     test.slow()
     await connectNativeReceiver(page, 'webgl2')

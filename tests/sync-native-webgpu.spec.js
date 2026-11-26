@@ -2,8 +2,8 @@
 // stack they need in GPU-less environments (see playwright.config.js) applies
 // to them alone, and so their daemon is fresh instead of inheriting the state
 // an earlier spec left behind.
-import { test } from '@playwright/test'
-import { installNativeAudioDaemon, createSetup, createNativeReceiverTest } from './syncNativeHarness.js'
+import { test, expect } from '@playwright/test'
+import { installNativeAudioDaemon, createSetup, createNativeReceiverTest, createNativeReceiverConnect, acceptNativeReceiverBytes } from './syncNativeHarness.js'
 
 const getEndpoint = installNativeAudioDaemon()
 const setup = createSetup(getEndpoint)
@@ -44,4 +44,50 @@ const runStatefulReceiverTest = createNativeReceiverTest(statefulSetup, getEndpo
 test('native receiver accepts webgpu stateful-instance bytes while audio and video share the grant', async ({ page }) => {
     test.slow()
     await runStatefulReceiverTest(page, 'webgpu')
+})
+
+// The engine renders scene programs into a scene color texture before the
+// pipeline's own output pass, so a scene's bytes reach the output sink the
+// same way any other program's do. This leg drives the same native receiver
+// with a scene program, so the receiver must accept those real rendered
+// bytes on WebGPU.
+const sceneDsl = 'search synth\nscene(camera(), mesh("box")).write(o0)\nrender(o0)'
+const sceneSetup = (page, fullApp, backend) => createSetup(getEndpoint)(page, fullApp, backend, sceneDsl)
+const connectSceneReceiver = createNativeReceiverConnect(sceneSetup, getEndpoint)
+
+test('native receiver accepts webgpu scene bytes while audio and video share the grant', async ({ page }) => {
+    test.slow()
+    await connectSceneReceiver(page, 'webgpu')
+    await acceptNativeReceiverBytes(page)
+})
+
+// A recompile can turn a node's output into a storage target at the same
+// size. The pipeline must then recreate the reused texture with the usage
+// the new spec needs; reusing the old texture without storage usage makes
+// WebGPU reject the storage binding and the output stop delivering frames.
+// This leg boots the native receiver on a plain program, recompiles the
+// same renderer to a chain whose final pass is a compute write at the same
+// size, and requires the receiver to keep accepting the real rendered bytes.
+const plainDsl = 'search synth\nnoise(scaleX: 60).write(o0)\nrender(o0)'
+const landscapeDsl = 'search synth, synth3d, render\nnoise3d().renderLandscape3d().write(o0)\nrender(o0)'
+const recompileSetup = (page, fullApp, backend) => createSetup(getEndpoint)(page, fullApp, backend, plainDsl)
+const connectRecompileReceiver = createNativeReceiverConnect(recompileSetup, getEndpoint)
+
+test('native receiver keeps accepting webgpu bytes through a usage-changing recompile', async ({ page }) => {
+    test.slow()
+    await connectRecompileReceiver(page, 'webgpu')
+    const before = await page.evaluate(() => window.nativeFrameChecksums.size)
+    await page.evaluate(async dsl => {
+        await window.PolymorphicAgent.setProgram({ dsl })
+    }, landscapeDsl)
+    await page.waitForFunction(() => {
+        const dsl = document.getElementById('dsl-editor')?.querySelector('textarea')?.value
+        return dsl && dsl.includes('renderLandscape3d')
+    }, null, { timeout: 30_000 })
+    // The recompiled program must actually reach the receiver: fresh frames
+    // after the switch, then the full acceptance poll with zero rejects and
+    // zero failures.
+    await expect.poll(async () => page.evaluate(() => window.nativeFrameChecksums.size))
+        .toBeGreaterThan(before)
+    await acceptNativeReceiverBytes(page)
 })
