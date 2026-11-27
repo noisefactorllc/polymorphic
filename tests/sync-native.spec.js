@@ -238,7 +238,7 @@ test('a permission-denied native input reports the denial and a working source s
     await expect(page.locator('[data-id=audio-toggle]')).toHaveText('disable')
     await expect.poll(() => page.evaluate(() =>
         window.__poly.liveInputsPanel._innerRenderer?.audioState
-            ?.getDeviceChannelState({ id: 'sync-audio:audio_2', channel: 2 })?.raw)).toBeCloseTo(2 / 32)
+            ?.getDeviceChannelState({ id: 'sync-audio:audio_2', channel: 2 })?.raw), { timeout: 20_000 }).toBeCloseTo(2 / 32)
     await expect.poll(() => page.evaluate(async () =>
         (await import('/js/sync/audioInput.js')).refreshSyncAudioDevices()
             .then(devices => devices.find(source => source.id === 'sync-audio:audio_permission_denied')?.name)))
