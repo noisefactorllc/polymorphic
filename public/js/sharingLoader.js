@@ -28,6 +28,7 @@ export function loadImageTools() {
  * @type {Map<string, object>}
  */
 const loadedPortableEffects = new Map()
+const loadedPortableEffectsListeners = new Set()
 
 /**
  * Get all loaded portable effects
@@ -38,10 +39,32 @@ export function getLoadedPortableEffects() {
 }
 
 /**
+ * Listen for changes to the loaded portable effects: an effect registered,
+ * replaced or dropped, or all of them cleared.
+ * @param {() => void} listener
+ * @returns {() => void} Stops listening
+ */
+export function onLoadedPortableEffectsChange(listener) {
+    loadedPortableEffectsListeners.add(listener)
+    return () => loadedPortableEffectsListeners.delete(listener)
+}
+
+function loadedPortableEffectsChanged() {
+    for (const listener of [...loadedPortableEffectsListeners]) {
+        try {
+            listener()
+        } catch (error) {
+            console.error('[sharingLoader] A loaded portable effects listener failed:', error)
+        }
+    }
+}
+
+/**
  * Clear all loaded portable effects
  */
 export function clearLoadedPortableEffects() {
     loadedPortableEffects.clear()
+    loadedPortableEffectsChanged()
 }
 
 /**
@@ -243,6 +266,7 @@ export async function registerPortableEffect(effectData) {
             registered = await register()
         } catch (retryError) {
             loadedPortableEffects.delete(effectId)
+            loadedPortableEffectsChanged()
             throw retryError
         }
     }
@@ -265,6 +289,7 @@ export async function registerPortableEffect(effectData) {
     // Retain the complete declarative contract for re-sharing (only after a
     // successful registration so rejected definitions are not kept).
     loadedPortableEffects.set(effectId, { ...definition, shaders })
+    loadedPortableEffectsChanged()
 
     console.log(`[sharingLoader] Registered portable effect: ${func}`)
 

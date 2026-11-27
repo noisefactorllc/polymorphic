@@ -1,7 +1,7 @@
 // Share modal for Polymorphic
 // Posts to sharing.noisedeck.app API
 
-import { getLoadedPortableEffects, portableDefinition, uploadProgramImages, uploadScreenshot, loadImageTools } from './sharingLoader.js'
+import { getLoadedPortableEffects, onLoadedPortableEffectsChange, portableDefinition, uploadProgramImages, uploadScreenshot, loadImageTools } from './sharingLoader.js'
 let registerEscapeable = (el, cb) => {}, unregisterEscapeable = (el) => {}
 try {
     const hf = await import('handfish')
@@ -82,11 +82,38 @@ function getUsedPortableEffects(dsl) {
     return usedEffects
 }
 
+/**
+ * What a share of this program carries besides the program, decided as the
+ * share decides it: the original images only when the program text names a
+ * url, and custom shader code only when it names a loaded portable effect.
+ * @param {string} dsl - The program the share sends
+ * @param {object[]} [usedEffects] - The portable effects the share packages
+ * @returns {{images: boolean, shaders: boolean}}
+ */
+function shareKinds(dsl, usedEffects = getUsedPortableEffects(dsl)) {
+    return { images: /\burl\b/.test(dsl), shaders: usedEffects.length > 0 }
+}
+
+/**
+ * The sentence beside Share. It leaves out the original images or custom
+ * shader code only when the share does not carry them.
+ * @param {{images?: boolean, shaders?: boolean}} [kinds] - Both by default
+ * @returns {string}
+ */
+function shareExposureText({ images = true, shaders = true } = {}) {
+    const carried = images && shaders ? ', including the original images and custom shader code it uses'
+        : images ? ', including the original images it uses'
+        : shaders ? ', including custom shader code it uses'
+        : ''
+    return `Anyone with the link can open the editable program${carried}. This link doesn't expire automatically. To share only the finished result, export an image or video.`
+}
+
 class ShareModal {
     constructor() {
         this.overlay = null;
         this.isOpen = false;
         this.isSharing = false;
+        this.openId = 0;
     }
 
     open(options = {}) {
@@ -95,6 +122,7 @@ class ShareModal {
         const { dsl = '', canvas = null } = options;
 
         this.isOpen = true;
+        this.openId++;
         this.dsl = dsl;
         this.images = options.images || [];
         this.hasLiveMedia = options.hasLiveMedia;
@@ -103,6 +131,15 @@ class ShareModal {
 
         this.overlay = document.getElementById('share-modal');
         if (!this.overlay) return;
+
+        this._resetForm();
+
+        // The sentence follows the loaded portable effects while the dialog is
+        // open, and keeps what a running share carries until it ends.
+        this._showExposure(shareKinds(this.dsl));
+        this._stopFollowingEffects = onLoadedPortableEffectsChange(() => {
+            if (!this.isSharing) this._showExposure(shareKinds(this.dsl));
+        });
 
         // Capture screenshot
         if (canvas) {
@@ -130,8 +167,36 @@ class ShareModal {
             this.overlay.style.display = 'none';
         }
 
+        this._stopFollowingEffects?.();
+        this._stopFollowingEffects = null;
+
         // Clean up
         this._cleanupEventHandlers();
+    }
+
+    // Each open starts at the form with Share enabled, as after a failed
+    // share, so a link from an earlier open is not shown again.
+    _resetForm() {
+        const formSection = document.getElementById('share-form');
+        const resultSection = document.getElementById('share-result');
+        const urlInput = document.getElementById('share-url');
+        const expiresSpan = document.getElementById('share-expires');
+        const shareBtn = document.getElementById('share-submit-btn');
+
+        if (formSection) formSection.style.display = '';
+        if (resultSection) resultSection.style.display = 'none';
+        if (urlInput) urlInput.value = '';
+        if (expiresSpan) expiresSpan.textContent = '';
+        if (shareBtn) {
+            shareBtn.disabled = false;
+            shareBtn.textContent = 'Share';
+        }
+        this.sharedUrl = null;
+    }
+
+    _showExposure(kinds) {
+        const exposure = document.getElementById('share-exposure');
+        if (exposure) exposure.textContent = shareExposureText(kinds);
     }
 
     _setupEventHandlers() {
@@ -256,15 +321,24 @@ class ShareModal {
         }
 
         this.isSharing = true;
+        const openId = this.openId;
+        // The program of this open, kept for the whole share: a later open of
+        // the dialog replaces this.dsl while this share waits.
+        const dsl = this.dsl;
 
         if (this.shareBtn) {
             this.shareBtn.disabled = true;
             this.shareBtn.textContent = 'Sharing...';
         }
 
+        // What this share carries, read once at the click: the sentence keeps
+        // it while the share runs.
+        const usedEffects = getUsedPortableEffects(dsl)
+        const kinds = shareKinds(dsl, usedEffects)
+        this._showExposure(kinds);
+
         try {
             // Build effect ZIPs for any portable effects used in the DSL
-            const usedEffects = getUsedPortableEffects(this.dsl)
             const effectZips = []
             for (const effectData of usedEffects) {
                 try {
@@ -277,7 +351,7 @@ class ShareModal {
             }
 
             const payload = {
-                dsl: this.dsl,
+                dsl,
                 title: title || 'Untitled',
                 description: description || '',
                 screenshot: '',
@@ -285,7 +359,7 @@ class ShareModal {
             };
 
             if (this.hasLiveMedia) throw new Error('Only image sources can be shared; stop the camera or video first');
-            if (/\burl\b/.test(payload.dsl)) {
+            if (kinds.images) {
                 const tools = await loadImageTools();
                 const prepared = await tools.prepareImagesForShare(payload.dsl, tools.getReferencedImages(payload.dsl, this.images), { files: true });
                 // Images go to the sharing service as files, named by the ids it returns.
@@ -311,6 +385,9 @@ class ShareModal {
                 throw new Error('No URL returned from share API');
             }
 
+            // A share from an earlier open of the dialog does not change this one.
+            if (openId !== this.openId) return;
+
             // Show result
             this._showResult(result.shortUrl, result.expiresAt);
 
@@ -318,12 +395,15 @@ class ShareModal {
             console.error('Share error:', error);
             this._onError('Failed to share program. Please try again.');
 
+            if (openId !== this.openId) return;
+
             if (this.shareBtn) {
                 this.shareBtn.disabled = false;
                 this.shareBtn.textContent = 'Share';
             }
 
             this.isSharing = false;
+            this._showExposure(shareKinds(this.dsl));
         }
     }
 
